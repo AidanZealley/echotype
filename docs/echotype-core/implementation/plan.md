@@ -1,21 +1,21 @@
 # EchoTypeCore implementation plan
 
-Status: approved; implementation has not started.
+Status: approved; implementation in progress.
 
 ## Orchestration record
 
 - Runs on: the remote Linux machine.
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `feat/echotype-core`
+- Starting commit: `2c57765`
 - Review command: `lead subagents`
 - Specification approved at commit: `bbb5f41`
-- Started: `TBD`
+- Started: `2026-09-21`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Package skeleton and audio converter](01-package-and-audio-converter.md) | Approved spec | Not started |
+| 1 | [Package skeleton and audio converter](01-package-and-audio-converter.md) | Approved spec | Accepted |
 | 2 | [STT client and transcript assembler](02-stt-client.md) | Workstream 1 | Not started |
 | 3 | [Live protocol validation](03-live-protocol-validation.md) | Workstream 2 | Not started |
 | 4 | [Session machine](04-session-machine.md) | Workstreams 2, 3 | Not started |
@@ -129,3 +129,4 @@ Empty until a lead blocks.
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
 | 2026-09-21 | Manifest declares EchoTypeCore only, with no conditional macOS app target | The app target does not exist on this branch; the specification's snippet describes the merged manifest | Aidan | 1 |
+| 2026-09-21 | The roughly 100ms chunk cadence is the macOS capture layer's obligation, not `AudioConverter`'s | The specification assigns chunking to the `AVAudioEngine` tap; the converter returns what is ready for the buffer it is handed, and `installTap` treats buffer size as a hint | Lead, workstream 1 | 1, and the later macOS capture milestone |
