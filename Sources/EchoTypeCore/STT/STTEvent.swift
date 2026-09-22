@@ -32,21 +32,22 @@ public enum STTEvent: Equatable, Sendable {
     }
   }
 
-  /// One word of a partial, with its timing. Every field except the word itself is optional,
-  /// since nothing here depends on timings and the endpoint is free to omit them.
+  /// One word of a partial, with its timing. The endpoint names the word itself `text`, and
+  /// every other field is optional, since nothing here depends on timings and the endpoint is
+  /// free to omit them.
   public struct Word: Equatable, Sendable, Decodable {
-    public var word: String
+    public var text: String
     public var start: Double?
     public var end: Double?
     public var confidence: Double?
 
     public init(
-      word: String,
+      text: String,
       start: Double? = nil,
       end: Double? = nil,
       confidence: Double? = nil
     ) {
-      self.word = word
+      self.text = text
       self.start = start
       self.end = end
       self.confidence = confidence

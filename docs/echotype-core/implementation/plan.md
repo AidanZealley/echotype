@@ -17,7 +17,7 @@ Status: approved; implementation in progress.
 |---:|---|---|---|
 | 1 | [Package skeleton and audio converter](01-package-and-audio-converter.md) | Approved spec | Accepted |
 | 2 | [STT client and transcript assembler](02-stt-client.md) | Workstream 1 | Accepted |
-| 3 | [Live protocol validation](03-live-protocol-validation.md) | Workstream 2 | Not started |
+| 3 | [Live protocol validation](03-live-protocol-validation.md) | Workstream 2 | Accepted |
 | 4 | [Session machine](04-session-machine.md) | Workstreams 2, 3 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-4 | Not started |
 
@@ -101,7 +101,7 @@ macOS spike workflow and to later milestones.
 
 | Gate | Owning workstream | Placement | Status |
 |---|---|---|---|
-| G1 xAI API key and a sample recording | 3 | Before implementation can be verified | Pending |
+| G1 xAI API key and a sample recording | 3 | Before implementation can be verified | Passed |
 
 G1 candidate and instructions: Aidan supplies an xAI API key as `XAI_API_KEY` in the
 environment on this machine, and a short WAV recording of himself speaking, roughly 15
@@ -122,7 +122,8 @@ That is a user decision, not a lead decision.
 
 ## Escalations
 
-Empty until a lead blocks.
+None open. E1 and E2 were answered and discharged at workstream 3's acceptance;
+their lasting decisions are in the decision and drift log below.
 
 ## Decision and drift log
 
@@ -134,3 +135,12 @@ Empty until a lead blocks.
 | 2026-09-22 | `TranscriptAssembler` commits a trailing interim when `transcript.done` arrives | A no-op under the documented reading, since a `speech_final` clears the interim as it commits, and it recovers the user's last sentence if `finalize` instead resolves the tail with `is_final` alone. The assembler contract freezes here, so the choice had to be made before workstreams 3 and 4 build on it | Lead, workstream 2 | 2, 3, 4 |
 | 2026-09-22 | `STTClient.send(audio:)` returns only once its chunk is on the wire; every send, including the closing messages, is chained behind the send handed over before it | Ordering is the correctness property that matters: `finalize` and `audio.done` must not overtake audio still in flight, and awaiting is what surfaces a failed chunk to its own caller and gives the capture layer back pressure | Lead, workstream 2 | 2, 4 |
 | 2026-09-22 | `STTClient` neither opens nor closes the socket; `WebSocketTransport.close()` exists on the seam for workstream 4's session machine | The specification bills streaming time for an open socket, so lifecycle belongs with the session machine rather than the protocol client | Lead, workstream 2 | 2, 4 |
+| 2026-09-22 | The live session runs on this machine, not the Mac: curl 8.11.1 built from source with `--enable-websockets` lives at `~/.local/curl-ws`, and any command opening a real socket is prefixed with `LD_LIBRARY_PATH=$HOME/.local/curl-ws/lib` | Ubuntu 24.04's only libcurl is built without websockets, so `URLSessionWebSocketTask` fails with `NSURLErrorDomain -1002` unprefixed. Verified end to end against `echo.websocket.org` and `api.x.ai`. The loader's `no version information available` warning is benign | Aidan, via E1 | 3, and anything later that opens a socket here |
+| 2026-09-22 | The gate's inputs live outside the repository: the key as `XAI_API_KEY` in `~/secrets/secrets.env`, read or sourced rather than exported, and the recording at `~/echotype-fixtures/sample-with-pauses.wav`, passed through `ECHOTYPE_FIXTURE_WAV` | Criterion 3 forbids a key, recording or transcript in any committed file, and the key must never be printed, logged or committed | Aidan, via E1 and E2 | 3 |
+| 2026-09-22 | The fixture is public-corpus speech with two inserted 3.5s digital silences, not Aidan's voice and not room tone | Aidan chose a public sample over recording himself. Digital silence is the easiest case a voice activity detector will ever get, so the observed 2.7-2.9s endpointing window is the shortest it gets; a room floor may push it later. Anomalous behaviour is a property of the fixture before it is a property of the protocol | Aidan, via E1 | 3, 4 |
+| 2026-09-22 | Drift: `STTEvent.Word`'s word is `text`, not `word`. Workstream 2's type was corrected | The endpoint sends `{"text":...,"start":...,"end":...}`, so `decode` threw on every frame with a populated `words` array. Since `words` arrives only on `is_final` frames and every `speech_final` frame is one, the failure discarded exactly the frames the transcript is assembled from: 8 of 28 partials in the first live session, leaving only the last passage. Fixed and verified by the rerun | Lead, workstream 3, under the packet's Initial ownership | 2, 3, 4 |
+| 2026-09-22 | `confidence` stays on `STTEvent.Word` although the endpoint never sent it in 30 frames | An unused optional field that decodes correctly either way is not a defect the live protocol exposed, which is the only licence workstream 3 has to touch a frozen contract. Workstream 4 must not expect it to be populated | Lead, workstream 3 | 4 |
+| 2026-09-22 | Drift: the specification's silence detection is false as written and must change. "No new partials means silence" (lines 85-87) and its restatement for the `listening`/`paused` transition (lines 382-385) both assume partials stop during silence | Observed: partials keep arriving at ~1 Hz with `"text":""` throughout a silence, and nothing arrives at all during the ~2-3s the endpoint spends deciding where an utterance ends, so the documented detector sees activity during silence and silence during speech. The signal is a partial with **non-empty text**, or the last `speech_final`. Entering paused lags the end of speech by about 3s and leaving it lags resumed speech by 0.7-2.3s, both comfortable against the ten second threshold. Wording, not code; Aidan decides whether it lands in workstream 4 or 5 | Lead, workstream 3, recorded not fixed per the packet's non-goals | 4, 5, and the specification |
+| 2026-09-22 | Clarification: `endpointing=2000` is a floor, not the boundary. Budget 2.73-2.80s from the endpoint's own last reported word `end` to the declared boundary, and about 3.0s of wall clock to the `speech_final` frame being in hand | Measured across two acoustically different pauses, agreeing to 75ms. The specification never claims a 2000ms boundary, so this is not a contradiction, but any timing written against 2000ms is wrong by a second | Lead, workstream 3 | 4, and the specification |
+| 2026-09-22 | Clarification: `transcript.done` is empty. `finalize` resolves the tail into a further `speech_final` partial that arrives before `done` | `{"type":"transcript.done","text":"","words":[],"duration":25.0}`. `TranscriptAssembler` is correct and its `done` fallback never fired, but that fallback commits `interim`, which holds only the run since the last `is_final`, so it would commit a fragment if it ever fired mid-utterance. Workstream 4 must not rely on it | Lead, workstream 3 | 4 |
+| 2026-09-22 | Known gap, left for the final review: nothing in the committed suite constructs or decodes an `STTEvent.Word` | That untested path is exactly what the live endpoint exercises on every frame the transcript is assembled from, which is how the `text`/`word` defect reached a paid session. Closing it means one optional `words` argument on `Fixture.partial` and one expectation, but `STTEventTests` belongs to workstream 2, which is accepted, and workstream 3's ownership does not reach it | Lead, workstream 3 | Final review |
