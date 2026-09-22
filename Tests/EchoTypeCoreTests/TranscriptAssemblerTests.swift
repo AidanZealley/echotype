@@ -96,12 +96,32 @@ func emptySessionProducesNoText() throws {
   #expect(assembler.interim == "")
 }
 
-@Test("A partial decodes its text and flags")
+@Test("A partial decodes its text, its words and its flags")
 func partialDecodesItsPayload() throws {
-  let event = try STTEvent.decode(Fixture.partial("hello there", isFinal: true, speechFinal: true))
+  let event = try STTEvent.decode(
+    Fixture.partial(
+      "hello there",
+      words: [("hello", 0.1, 0.4), ("there", 0.4, 0.7)],
+      isFinal: true,
+      speechFinal: true
+    )
+  )
 
+  // `words` rides on every `is_final` frame, and every `speech_final` frame is one, so a word
+  // shape the decoder rejects would throw away exactly the frames the transcript is built from.
   #expect(
-    event == .partial(STTEvent.Partial(text: "hello there", isFinal: true, speechFinal: true))
+    event
+      == .partial(
+        STTEvent.Partial(
+          text: "hello there",
+          words: [
+            STTEvent.Word(text: "hello", start: 0.1, end: 0.4),
+            STTEvent.Word(text: "there", start: 0.4, end: 0.7),
+          ],
+          isFinal: true,
+          speechFinal: true
+        )
+      )
   )
 }
 

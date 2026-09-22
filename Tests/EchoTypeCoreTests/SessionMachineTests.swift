@@ -349,6 +349,29 @@ struct SessionMachineTests {
     #expect(await transport.textFrames.isEmpty)
   }
 
+  @Test("A frame the session cannot decode ends the session rather than truncating in silence")
+  func undecodableFrameEndsTheSession() async {
+    let running = await start()
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("first sentence", isFinal: true, speechFinal: true))
+
+    await transport.emit("{not json")
+    // Everything from here is past the end of the session. These are the frames that used to
+    // produce `.insert("first sentence")`: the client died on the bad frame while the session
+    // kept looping, so the trigger reported a truncated transcript as a clean success.
+    await transport.emit(Fixture.partial("second sentence", isFinal: true, speechFinal: true))
+    await session.trigger()
+    await transport.emit(Fixture.done)
+
+    let outcome = await running.value
+    guard case .failed(let text, .socket) = outcome else {
+      Issue.record("expected a socket failure, got \(outcome)")
+      return
+    }
+    #expect(text == "first sentence")
+    #expect(await transport.textFrames.isEmpty)
+  }
+
   @Test("An empty transcript inserts nothing")
   func emptyTranscriptInsertsNothing() async {
     let running = await start()

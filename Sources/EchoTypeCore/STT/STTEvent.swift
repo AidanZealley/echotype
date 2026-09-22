@@ -16,7 +16,7 @@ public enum STTEvent: Equatable, Sendable {
   ///
   /// `speechFinal` marks the end of an utterance, and those segments are the only ones the
   /// assembler commits. `isFinal` marks text the model will not revise further within the
-  /// current segment, which the overlay uses to render solid rather than dimmed text.
+  /// current segment, so it is settled but not yet committed.
   public struct Partial: Equatable, Sendable {
     public var text: String
     public var words: [Word]

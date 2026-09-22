@@ -192,7 +192,11 @@ public actor SessionMachine {
   private func readUntilEnd() async -> Ending {
     do {
       for try await message in transport.messages() {
-        if let event = try? STTEvent.decode(message) {
+        // A frame that is not decodable JSON throws here and ends the session the same way a
+        // dropped socket does. The client throws on that frame too, so carrying on would leave
+        // the two disagreeing: the session would keep reporting `listening` while its transcript
+        // had already stopped growing, and the trigger would report a truncation as a success.
+        if let event = try STTEvent.decode(message) {
           observe(event)
         }
         relay.deliver(message)

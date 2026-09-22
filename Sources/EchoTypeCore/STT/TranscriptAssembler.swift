@@ -12,8 +12,8 @@ public struct TranscriptAssembler: Equatable, Sendable {
   /// The committed transcript: the only text that may be inserted.
   public private(set) var text: String = ""
 
-  /// The trailing partial, provisional until a `speech_final` supersedes it. For display only,
-  /// which is what the overlay renders dimmed.
+  /// The trailing partial, provisional until a `speech_final` supersedes it. It is never
+  /// inserted: it exists so a caller can show what is being heard right now.
   public private(set) var interim: String = ""
 
   public mutating func apply(_ event: STTEvent) {

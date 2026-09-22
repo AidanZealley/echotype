@@ -7,11 +7,22 @@ enum Fixture {
   static let created = #"{"type":"transcript.created","request_id":"req_123"}"#
   static let done = #"{"type":"transcript.done"}"#
 
-  static func partial(_ text: String, isFinal: Bool = false, speechFinal: Bool = false) -> String {
-    """
-    {"type":"transcript.partial","text":"\(text)",\
-    "is_final":\(isFinal),"speech_final":\(speechFinal)}
-    """
+  /// The endpoint sends `words` on every `is_final` frame, naming the word itself `text` and
+  /// omitting `confidence`.
+  static func partial(
+    _ text: String,
+    words: [(text: String, start: Double, end: Double)] = [],
+    isFinal: Bool = false,
+    speechFinal: Bool = false
+  ) -> String {
+    let words =
+      words
+      .map { #"{"text":"\#($0.text)","start":\#($0.start),"end":\#($0.end)}"# }
+      .joined(separator: ",")
+    return """
+      {"type":"transcript.partial","text":"\(text)","words":[\(words)],\
+      "is_final":\(isFinal),"speech_final":\(speechFinal)}
+      """
   }
 
   static func error(code: String, message: String) -> String {
