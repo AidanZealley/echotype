@@ -16,7 +16,7 @@ Status: approved; implementation in progress.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Package skeleton and audio converter](01-package-and-audio-converter.md) | Approved spec | Accepted |
-| 2 | [STT client and transcript assembler](02-stt-client.md) | Workstream 1 | Not started |
+| 2 | [STT client and transcript assembler](02-stt-client.md) | Workstream 1 | Accepted |
 | 3 | [Live protocol validation](03-live-protocol-validation.md) | Workstream 2 | Not started |
 | 4 | [Session machine](04-session-machine.md) | Workstreams 2, 3 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-4 | Not started |
@@ -130,3 +130,7 @@ Empty until a lead blocks.
 |---|---|---|---|---|
 | 2026-09-21 | Manifest declares EchoTypeCore only, with no conditional macOS app target | The app target does not exist on this branch; the specification's snippet describes the merged manifest | Aidan | 1 |
 | 2026-09-21 | The roughly 100ms chunk cadence is the macOS capture layer's obligation, not `AudioConverter`'s | The specification assigns chunking to the `AVAudioEngine` tap; the converter returns what is ready for the buffer it is handed, and `installTap` treats buffer size as a hint | Lead, workstream 1 | 1, and the later macOS capture milestone |
+| 2026-09-22 | `speech_final` segments are joined with a single space, each trimmed, with nothing added at either end | The specification says "concatenated in order", which taken literally runs the last word of one utterance into the first word of the next | Lead, workstream 2 | 2, 3, 4 |
+| 2026-09-22 | `TranscriptAssembler` commits a trailing interim when `transcript.done` arrives | A no-op under the documented reading, since a `speech_final` clears the interim as it commits, and it recovers the user's last sentence if `finalize` instead resolves the tail with `is_final` alone. The assembler contract freezes here, so the choice had to be made before workstreams 3 and 4 build on it | Lead, workstream 2 | 2, 3, 4 |
+| 2026-09-22 | `STTClient.send(audio:)` returns only once its chunk is on the wire; every send, including the closing messages, is chained behind the send handed over before it | Ordering is the correctness property that matters: `finalize` and `audio.done` must not overtake audio still in flight, and awaiting is what surfaces a failed chunk to its own caller and gives the capture layer back pressure | Lead, workstream 2 | 2, 4 |
+| 2026-09-22 | `STTClient` neither opens nor closes the socket; `WebSocketTransport.close()` exists on the seam for workstream 4's session machine | The specification bills streaming time for an open socket, so lifecycle belongs with the session machine rather than the protocol client | Lead, workstream 2 | 2, 4 |
