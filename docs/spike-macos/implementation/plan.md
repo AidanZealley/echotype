@@ -1,21 +1,21 @@
 # EchoType macOS spike implementation plan
 
-Status: approved; implementation has not started.
+Status: approved; implementation in progress.
 
 ## Orchestration record
 
 - Runs on: Aidan's Mac. Not the remote Linux machine.
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `spike/macos-hotkey-paste`
+- Starting commit: `2c57765`
 - Review command: `lead subagents`
 - Specification approved at commit: `bbb5f41`
-- Started: `TBD`
+- Started: `2026-09-22`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Signed app bundle and run script](01-signed-app-bundle.md) | Approved spec | Not started |
+| 1 | [Signed app bundle and run script](01-signed-app-bundle.md) | Approved spec | Accepted |
 | 2 | [Hotkey tap and paste](02-hotkey-and-paste.md) | Workstream 1 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Not started |
 
@@ -71,8 +71,8 @@ Criterion 3 is the reason the spike exists.
 
 | Gate | Owning workstream | Placement | Status |
 |---|---|---|---|
-| G1 Self-signed certificate exists | 1 | Before implementation can be verified | Pending |
-| G2 App builds, signs and launches | 1 | After closure, before acceptance | Pending |
+| G1 Self-signed certificate exists | 1 | Before implementation can be verified | Passed |
+| G2 App builds, signs and launches | 1 | After closure, before acceptance | Passed |
 | G3 TCC grants and the four criteria | 2 | After closure, before acceptance | Pending |
 
 G1 candidate and instructions: Aidan creates a code signing certificate in Keychain
@@ -98,10 +98,11 @@ escalation.
 
 ## Escalations
 
-Empty until a lead blocks.
+None open.
 
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-09-22 | Drift: the `EchoType Dev` certificate must also be set to Always Trust for Code Signing; the specification's creation steps omit this | Untrusted, `security find-identity -v` hides it; G1 passed with the trust step | Aidan (E1) | 1, 2 |
+| 2026-09-22 | Decision: build on the Mac with Xcode's toolchain (`xcode-select` pointed at Xcode.app), not the Command Line Tools | The Command Line Tools swift-driver is broken on Aidan's Mac | Aidan (E1) | 1, 2 |
