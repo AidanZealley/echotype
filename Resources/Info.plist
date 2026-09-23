@@ -12,6 +12,8 @@
 	<string>APPL</string>
 	<key>CFBundleVersion</key>
 	<string>0.1</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EchoType listens while you dictate and sends your speech to xAI to turn it into text.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>
