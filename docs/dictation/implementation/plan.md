@@ -1,6 +1,6 @@
 # Dictation implementation plan
 
-Status: approved; implementation in progress.
+Status: approved; implementation complete.
 
 ## Orchestration record
 
@@ -17,7 +17,7 @@ Status: approved; implementation in progress.
 | 1 | [Core seams](01-core-seams.md) | Approved spec | Accepted |
 | 2 | [Audio capture](02-audio-capture.md) | 1 | Accepted |
 | 3 | [Dictation end to end](03-dictation-end-to-end.md) | 1, 2 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Accepted |
 
 ## Why these boundaries
 
@@ -59,8 +59,9 @@ Frozen once workstream 2 is accepted:
 - Audio reaches the session as `Data` holding 16 kHz mono little-endian Int16, in chunks
   of roughly 100ms, in capture order. Workstream 2 chooses the exact API and records it
   in its handoff; workstream 3 reads that handoff rather than assuming a shape.
-- Acquiring and releasing the input device is separate from starting and stopping
-  delivery, because the first costs 100 to 300ms and would clip the first word.
+- Superseded at gate G1 by correction T4: the input device is opened when a session
+  starts and released when it ends, so there is no separate acquire step. See the
+  release-on-end row in the decision and drift log.
 
 Held by the specification and not open to a workstream:
 
