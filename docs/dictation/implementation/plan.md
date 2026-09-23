@@ -15,7 +15,7 @@ Status: approved; implementation in progress.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Core seams](01-core-seams.md) | Approved spec | Accepted |
-| 2 | [Audio capture](02-audio-capture.md) | 1 | Not started |
+| 2 | [Audio capture](02-audio-capture.md) | 1 | Accepted |
 | 3 | [Dictation end to end](03-dictation-end-to-end.md) | 1, 2 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Not started |
 
@@ -135,3 +135,4 @@ None yet.
 | 2026-09-23 | Errors surface in the menu bar menu, not an overlay | The overlay is a later milestone, and `Outcome.failed` still has to go somewhere the user can see | Aidan, before the workflow | 3 |
 | 2026-09-23 | The API key is read from the Keychain with no UI to write it | Storage is the real one from the start, so the settings milestone adds only the editor; an `LSUIElement` app launched by `open` inherits no shell environment, so an environment variable was never an option | Aidan, before the workflow | 3 |
 | 2026-09-23 | Specification drift: `api.x.ai` answers a wrong key with 400 (`"Incorrect API key provided"`) and sends 401 only when no credentials are presented, not "401 bad key" as the spec says. A bad Keychain key therefore arrives as `STTError.badRequest` | Observed live by workstream 1's probe; `STTError(httpStatus:)` stays faithful to HTTP | Workstream 1 lead | 3: word both `.badRequest` and `.unauthorized` in the menu bar as a key problem |
+| 2026-09-23 | `AudioCapture` releases a warm, idle device when the input configuration changes, instead of reopening it for the rest of the idle window. The spec's "hold through a few minutes of idle" still holds otherwise | Reopening while idle would grab newly connected AirPods into headset mode and restart the idle timer on unrelated output changes. The next session after such a change pays the 100 to 300ms open cost | Workstream 2 lead | 3: every stream `start()` returns must be ended by `stop()`, including when the session ended while `start()` was still awaiting; see the workstream 2 handoff |
