@@ -4,15 +4,14 @@ import Synchronization
 /// The microphone, as a dictation session needs it: 16 kHz mono little-endian Int16, in chunks
 /// of roughly 100ms, ready for `SessionMachine.send(audio:)`.
 ///
-/// Holding the device and delivering audio are separate. Opening the input device takes 100 to
-/// 300ms, enough to clip the first word, so `acquire()` opens it and it stays open until it has
-/// been idle for `idleRelease`. `start()` and `stop()` only decide whether what it hears reaches
-/// a session. `start()` acquires the device itself if it is not already held.
+/// The device is held only while a session is listening, so the macOS microphone indicator
+/// clears as soon as the session ends. `start()` opens the device and starts delivering;
+/// `stop()` ends delivery and closes it. Every session pays the 100 to 300ms device open
+/// before audio flows.
 ///
 /// The engine follows the system default input device by never choosing one. When that device
-/// changes the engine stops itself and the device is closed. A session in progress reopens it
-/// at once and carries on from the new device. Otherwise it stays closed until the next
-/// `start()`, so an idle warm microphone never grabs a newly connected headset.
+/// changes the engine stops itself, and a session in progress reopens it at once and carries
+/// on from the new device.
 @MainActor final class AudioCapture {
   enum Failure: Error {
     /// The user refused microphone access, now or earlier. Only System Settings can undo it.
@@ -23,20 +22,38 @@ import Synchronization
     case engineFailed(any Error)
   }
 
-  /// How long the device stays open with nothing delivering.
-  private let idleRelease: Duration = .seconds(180)
-
   private let chunker = Chunker()
   private var engine: AVAudioEngine?
   private var deviceObserver: (any NSObjectProtocol)?
-  private var releaseTask: Task<Void, Never>?
 
-  /// Asks for microphone access the first time, then opens the default input device and keeps
-  /// it warm. Does nothing if the device is already held.
-  func acquire() async throws(Failure) {
+  /// Opens the device and starts delivering chunks.
+  ///
+  /// The stream yields chunks in capture order and finishes when `stop()` is called. It throws
+  /// `Failure.engineFailed` if the device is lost mid-session and cannot be reopened, or if
+  /// conversion fails. Starting again finishes the previous stream.
+  func start() async throws(Failure) -> AsyncThrowingStream<Data, any Error> {
+    try await openDevice()
+    let (stream, continuation) = AsyncThrowingStream.makeStream(of: Data.self)
+    chunker.begin(continuation)
+    return stream
+  }
+
+  /// Stops delivering, sends whatever is left of the last chunk, finishes the stream and
+  /// closes the device. Calling it again does nothing.
+  func stop() {
+    // Delivery ends first, under the chunker's lock, so closing the device loses nothing
+    // that would have been sent. Audio the tap has not yet received when delivery ends (up
+    // to one tap buffer, about 100ms) is not sent.
+    chunker.end()
+    closeDevice()
+  }
+
+  /// Asks for microphone access the first time, then opens the default input device. Does
+  /// nothing if the device is already open.
+  private func openDevice() async throws(Failure) {
     guard engine == nil else { return }
     guard await AVCaptureDevice.requestAccess(for: .audio) else { throw .microphoneDenied }
-    // Another caller may have acquired the device while this one waited.
+    // Another caller may have opened the device while this one waited.
     guard engine == nil else { return }
 
     let engine = AVAudioEngine()
@@ -57,36 +74,6 @@ import Synchronization
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.deviceChanged() }
     }
-    scheduleRelease()
-  }
-
-  /// Starts delivering chunks, acquiring the device first if it is not held.
-  ///
-  /// The stream yields chunks in capture order and finishes when `stop()` is called. It throws
-  /// `Failure.engineFailed` if the device is lost mid-session and cannot be reopened, or if
-  /// conversion fails. Starting again finishes the previous stream.
-  func start() async throws(Failure) -> AsyncThrowingStream<Data, any Error> {
-    try await acquire()
-    releaseTask?.cancel()
-    let (stream, continuation) = AsyncThrowingStream.makeStream(of: Data.self)
-    chunker.begin(continuation)
-    return stream
-  }
-
-  /// Stops delivering, sends whatever is left of the last chunk, and finishes the stream. The
-  /// device stays open for `idleRelease` in case another session follows.
-  func stop() {
-    chunker.end()
-    scheduleRelease()
-  }
-
-  private func scheduleRelease() {
-    releaseTask?.cancel()
-    releaseTask = Task { [weak self, idleRelease] in
-      try? await Task.sleep(for: idleRelease)
-      guard !Task.isCancelled, let self, !chunker.isDelivering else { return }
-      closeDevice()
-    }
   }
 
   /// The default input device changed, or the one in use went away. The engine has already
@@ -96,10 +83,13 @@ import Synchronization
     guard chunker.isDelivering else { return }
     Task {
       do {
-        try await acquire()
+        try await openDevice()
       } catch {
         chunker.end(throwing: error)
+        return
       }
+      // The session may have ended while the device was reopening.
+      if !chunker.isDelivering { closeDevice() }
     }
   }
 

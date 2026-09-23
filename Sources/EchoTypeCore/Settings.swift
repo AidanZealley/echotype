@@ -22,6 +22,12 @@ public struct Settings: Equatable, Sendable {
 
     /// Opt+D. `0x02` is `kVK_ANSI_D`.
     public static let optionD = Hotkey(keyCode: 0x02, modifiers: .option)
+
+    /// Whether a key press is this chord: the same key, with the configured modifiers held and
+    /// no others, so Cmd+Opt+D and Ctrl+Opt+D pass through an Opt+D hotkey untouched.
+    public func matches(keyCode: UInt16, modifiers: ModifierFlags) -> Bool {
+      keyCode == self.keyCode && modifiers == self.modifiers
+    }
   }
 
   public struct ModifierFlags: OptionSet, Equatable, Sendable {
