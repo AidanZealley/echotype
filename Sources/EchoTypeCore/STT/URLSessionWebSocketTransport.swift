@@ -1,11 +1,5 @@
 import Foundation
 
-#if canImport(FoundationNetworking)
-  // `URLSession` lives in a separate module in swift-corelibs-foundation. This is the one file
-  // that constructs a real socket, so it is the only place the import is needed.
-  import FoundationNetworking
-#endif
-
 /// The live transport, backed by `URLSessionWebSocketTask`.
 ///
 /// Nothing in the unit tests reaches this type: it exists so that the same protocol logic that
