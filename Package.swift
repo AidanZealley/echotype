@@ -13,6 +13,6 @@ let package = Package(
     .testTarget(name: "EchoTypeCoreTests", dependencies: ["EchoTypeCore"]),
     // Built into a signed .app bundle by scripts/run.sh, which is the only supported way
     // to launch it.
-    .executableTarget(name: "EchoTypeApp"),
+    .executableTarget(name: "EchoTypeApp", dependencies: ["EchoTypeCore"]),
   ]
 )
