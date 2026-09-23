@@ -174,9 +174,16 @@ to forget a session is running. It counts up only. No countdown, since nothing
 happens automatically that the user needs warning about. It turns amber at eight
 minutes as the hard cap approaches.
 
-States: listening, paused, transcribing (the brief moment between committing and
-the final result), error shown inline in red for a few seconds, and a silent fade
-when nothing was heard.
+States: starting, listening, paused, transcribing (the brief moment between
+committing and the final result), error shown inline in red for a few seconds, and
+a silent fade when nothing was heard.
+
+Starting covers the moment between Opt+D and the input device delivering audio.
+The microphone is released when each session ends, so every session pays the 100
+to 300ms it takes to open, and anything said before it is ready is lost. The
+overlay appears at once in a visibly not-ready state and switches to listening
+only when audio is flowing, so the user can see when to start speaking and a
+clipped first word is never silent.
 
 Paused dims the level meter and the elapsed timer while keeping the accumulated
 transcript at full contrast, since that text is the thing the user is reading.
@@ -312,8 +319,10 @@ with `AVAudioConverter`, sending roughly 100ms chunks as binary WebSocket frames
 That is 32 KB/s, so the API's Opus option buys nothing and would cost an encoder.
 
 Opening the input device takes 100 to 300ms, which is enough to clip the first
-word. Acquire the stream on first trigger and hold it through a few minutes of
-idle before releasing it.
+word. Acquire the stream on trigger and release it as soon as the session ends,
+so the macOS microphone indicator is lit only while dictating. Holding it warm
+between sessions avoided the open cost, but a microphone that stays live for
+minutes after use is disconcerting. The overlay's starting state covers the gap.
 
 ## Insertion
 

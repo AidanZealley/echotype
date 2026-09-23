@@ -1,76 +1,99 @@
 import AppKit
+import EchoTypeCore
 
-/// Opt+D, hardcoded for the spike. Keycode 2 is the physical D key on an ANSI layout.
-private let dKeyCode: Int64 = 2
+/// An active keyDown tap that consumes the configured hotkey, and Escape while the caller says
+/// a session is open.
+///
+/// Created once and kept for the life of the app: the tap holds an unretained pointer to it.
+@MainActor final class HotkeyMonitor {
+  private static let escapeKeyCode: UInt16 = 53  // kVK_Escape
 
-/// Opt must be the only one of these held, so Cmd+Opt+D, Ctrl+Opt+D and Shift+Opt+D
-/// pass through untouched.
-private let chordModifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+  private let hotkey: Settings.Hotkey
+  private let onHotkey: () -> Void
+  /// Returns whether a session took the press. Escape passes through when it did not.
+  private let onEscape: () -> Bool
+  private var tap: CFMachPort?
 
-/// Global so the C callback, which cannot capture context, can re-enable it.
-@MainActor private var tap: CFMachPort?
+  init(
+    hotkey: Settings.Hotkey,
+    onHotkey: @escaping () -> Void,
+    onEscape: @escaping () -> Bool
+  ) {
+    self.hotkey = hotkey
+    self.onHotkey = onHotkey
+    self.onEscape = onEscape
+  }
 
-/// Installs an active keyDown tap that consumes Opt+D and pastes a fixed string.
-/// If the tap cannot be created yet (the input grant not given), retries every
-/// second so granting the permission takes effect without a relaunch.
-@MainActor func startHotkey() {
-  // Surfaces the permission prompt instead of failing quietly. The API is still the
-  // Accessibility trust check; macOS 27 shows it to the user as Device Control and
-  // Data Access. The key is the value of kAXTrustedCheckOptionPrompt, which Swift 6
-  // rejects as a mutable global.
-  AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-  retryUntilInstalled()
-}
+  /// Installs the tap. If it cannot be created yet (the input grant not given), retries every
+  /// second so granting the permission takes effect without a relaunch.
+  func start() {
+    // Surfaces the permission prompt instead of failing quietly. The API is still the
+    // Accessibility trust check; macOS 27 shows it to the user as Device Control and
+    // Data Access. The key is the value of kAXTrustedCheckOptionPrompt, which Swift 6
+    // rejects as a mutable global.
+    AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    retryUntilInstalled()
+  }
 
-@MainActor private func retryUntilInstalled() {
-  if installTap() { return }
-  DispatchQueue.main.asyncAfter(deadline: .now() + 1) { retryUntilInstalled() }
-}
+  private func retryUntilInstalled() {
+    if installTap() { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.retryUntilInstalled() }
+  }
 
-@MainActor private func installTap() -> Bool {
-  guard
-    let port = CGEvent.tapCreate(
-      tap: .cghidEventTap,
-      place: .headInsertEventTap,
-      options: .defaultTap,
-      eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
-      callback: handleEvent,
-      userInfo: nil
-    )
-  else { return false }
+  private func installTap() -> Bool {
+    guard
+      let port = CGEvent.tapCreate(
+        tap: .cghidEventTap,
+        place: .headInsertEventTap,
+        options: .defaultTap,
+        eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
+        callback: { _, type, event, userInfo in
+          // The callback is a C function and cannot capture, so the monitor rides in
+          // `userInfo`. It runs on the main run loop, where the tap's source is installed.
+          let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(userInfo!).takeUnretainedValue()
+          let consumed = MainActor.assumeIsolated { monitor.handle(type, event) }
+          return consumed ? nil : Unmanaged.passUnretained(event)
+        },
+        userInfo: Unmanaged.passUnretained(self).toOpaque()
+      )
+    else { return false }
 
-  let source = CFMachPortCreateRunLoopSource(nil, port, 0)
-  CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-  tap = port
-  return true
-}
+    let source = CFMachPortCreateRunLoopSource(nil, port, 0)
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    tap = port
+    return true
+  }
 
-/// Runs on the main run loop, where the tap's source is installed.
-private func handleEvent(
-  proxy: CGEventTapProxy,
-  type: CGEventType,
-  event: CGEvent,
-  userInfo: UnsafeMutableRawPointer?
-) -> Unmanaged<CGEvent>? {
-  switch type {
-  case .tapDisabledByTimeout, .tapDisabledByUserInput:
-    // The system disables a slow tap; without this the hotkey silently stops.
-    MainActor.assumeIsolated {
+  /// Returns whether to consume the event. Keep it fast: the system disables a slow tap.
+  private func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
+    switch type {
+    case .tapDisabledByTimeout, .tapDisabledByUserInput:
+      // The system disables a slow tap; without this the hotkey silently stops.
       if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+      return false
+    case .keyDown:
+      let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+      if hotkey.matches(keyCode: keyCode, modifiers: Settings.ModifierFlags(event.flags)) {
+        // Repeats are consumed too, so no character leaks while the chord is held, but only
+        // the initial press counts.
+        if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { onHotkey() }
+        return true
+      }
+      return keyCode == Self.escapeKeyCode && onEscape()
+    default:
+      return false
     }
-    return Unmanaged.passUnretained(event)
-  case .keyDown
-  where event.getIntegerValueField(.keyboardEventKeycode) == dKeyCode
-    && event.flags.intersection(chordModifiers) == .maskAlternate:
-    // Repeats are consumed too, so no `d` leaks while the chord is held, but only
-    // the initial press inserts. A repeat would otherwise snapshot our own string
-    // as the "previous" pasteboard and lose the user's contents.
-    if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-      // Insert after returning, so the tap callback stays fast.
-      DispatchQueue.main.async { insert("hello from echotype") }
-    }
-    return nil
-  default:
-    return Unmanaged.passUnretained(event)
+  }
+}
+
+extension Settings.ModifierFlags {
+  /// Only the four chord modifiers. Caps Lock, Fn and the rest are ignored rather than
+  /// counted as extra modifiers.
+  init(_ flags: CGEventFlags) {
+    self = []
+    if flags.contains(.maskShift) { insert(.shift) }
+    if flags.contains(.maskControl) { insert(.control) }
+    if flags.contains(.maskAlternate) { insert(.option) }
+    if flags.contains(.maskCommand) { insert(.command) }
   }
 }
