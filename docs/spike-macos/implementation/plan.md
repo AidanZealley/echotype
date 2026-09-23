@@ -17,7 +17,7 @@ Status: approved; implementation in progress.
 |---:|---|---|---|
 | 1 | [Signed app bundle and run script](01-signed-app-bundle.md) | Approved spec | Accepted |
 | 2 | [Hotkey tap and paste](02-hotkey-and-paste.md) | Workstream 1 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Accepted |
 
 ## Why these boundaries
 
@@ -108,4 +108,5 @@ None open.
 |---|---|---|---|---|
 | 2026-09-22 | Drift: the `EchoType Dev` certificate must also be set to Always Trust for Code Signing; the specification's creation steps omit this | Untrusted, `security find-identity -v` hides it; G1 passed with the trust step | Aidan (E1) | 1, 2 |
 | 2026-09-22 | Decision: build on the Mac with Xcode's toolchain (`xcode-select` pointed at Xcode.app), not the Command Line Tools | The Command Line Tools swift-driver is broken on Aidan's Mac | Aidan (E1) | 1, 2 |
-| 2026-09-22 | Drift: on macOS 27.2 the event tap and posted Cmd+V need one "Device Control and Data Access" grant, not separate Accessibility and Input Monitoring grants; the spec's escape hatch `tccutil reset Accessibility` should become `tccutil reset All com.aidanzealley.echotype` | G3 clean revalidation: after a full TCC reset, one prompt attributed to EchoType; the grant survived a rebuild (criterion 3 passed) | Aidan (E2) | 2, Final |
+| 2026-09-22 | Drift: on macOS 27.2 the event tap and posted Cmd+V need one "Device Control and Data Access" grant, not separate Accessibility and Input Monitoring grants; the spec's escape hatch `tccutil reset Accessibility` should become `tccutil reset All com.aidanzealley.echotype`. Verified with `reset All` only; whether `reset Accessibility` clears the 27.2 grant is untested | G3 clean revalidation: after a full TCC reset, one prompt attributed to EchoType; the grant survived a rebuild (criterion 3 passed) | Aidan (E2) | 2, Final |
+| 2026-09-22 | Drift: the specification's Insertion section contradicts itself. Step 4 restores the previous pasteboard contents when `changeCount` advanced by exactly one, but the next paragraph says the transcript stays on the pasteboard either way. The spike follows step 4 | Found in final review. Resolve in the specification before build-order step 3 reuses `Inserter` | Pending Aidan | Final, later build steps |
