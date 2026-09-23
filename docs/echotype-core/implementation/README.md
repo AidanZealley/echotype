@@ -31,9 +31,19 @@ escalation rather than something to work around.
 `SwiftUI`, `AVFoundation`, `CoreGraphics` or `ApplicationServices`. Any of those makes
 the package uncompilable here and defeats the reason it exists.
 
-`URLSessionWebSocketTask` is available on Linux through `FoundationNetworking`, and
-this has been verified on this machine. It is still reached through a protocol rather
-than directly, so the client's logic is testable without a live socket.
+`URLSessionWebSocketTask` is available on Linux through `FoundationNetworking`, but it
+cannot open a socket against the system libcurl: Ubuntu 24.04 builds 8.5.0 without
+websockets, so every attempt fails with `NSURLErrorDomain -1002 "WebSockets not supported
+by libcurl"`, and no apt package fixes it. curl 8.11.1 built from source with
+`--enable-websockets` lives at `~/.local/curl-ws`, so any command that opens a real socket
+needs `LD_LIBRARY_PATH=$HOME/.local/curl-ws/lib` in front of it. The loader's
+`no version information available` warning is benign. An earlier version of this file
+claimed the transport had been verified here, which cost workstream 3 an escalation to
+disprove.
+
+Only the live socket is affected. The transport is reached through a protocol rather than
+directly, so the client's logic is testable without one, and everything else in the package
+builds and tests here normally.
 
 ## Relationship to the macOS spike workflow
 
