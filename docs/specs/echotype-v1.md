@@ -281,9 +281,17 @@ dictation costs under two tenths of a cent, so cost is not a design input.
 &keyterm=...&keyterm=...
 ```
 
-`endpointing` is set high deliberately. Utterance boundaries are controlled by
-the hotkey, and the default 400ms would chop a prompt into fragments every time
-the speaker pauses to think.
+`endpointing` is how much quiet the server waits through before it decides an
+utterance has ended, closes the segment and sets `speech_final`. It is set high
+deliberately. Utterance boundaries are controlled by the hotkey, and the default
+400ms would chop a prompt into fragments every time the speaker pauses to think.
+
+The number is a floor rather than the boundary. Measured live at
+`endpointing=2000`, the boundary landed 2.73-2.80s after the endpoint's own last
+reported word, with the frame in hand at about 3.0s of wall clock. Budget 3s, not
+2s, for anything that depends on when a segment closes. Those figures came from
+inserted digital silence, which is the easiest case a voice activity detector
+gets, so a real room may be slower still.
 
 `filler_words=false` is the default and removes "um" and "uh" with no cleanup
 pass, which is most of the reason v1 does not need an LLM step.
@@ -481,7 +489,6 @@ Testable on Linux, and this is where the real bugs live:
 - Audio conversion: device rate to 16 kHz, frame boundaries not dropping samples,
   clipping, Int16 endianness, asserted against known waveforms
 - Query string construction, including the 100 keyterm and 50 character caps
-- Settings and Keychain-adjacent serialisation round trips
 
 `URLSessionWebSocketTask` is implemented in swift-corelibs-foundation as of Swift
 6.3, so a live integration test against `wss://api.x.ai/v1/stt` with a fixture WAV
@@ -530,5 +537,10 @@ after the tap timeout.
 2. `EchoTypeCore` and its tests, written and run remotely.
 3. Audio capture wired to the socket.
 4. The overlay.
-5. Settings, Keychain, launch at login.
+5. Settings, Keychain, launch at login. This step owns how settings reach
+   `UserDefaults` and how the API key reaches the Keychain, and it owes that
+   encoding a round-trip test. `EchoTypeCore` deliberately has no serialisation,
+   because a conformance written before the encoding is chosen would only assert
+   its own invention. The round trip is still where the real bugs are: a hotkey
+   that silently stops firing after an upgrade surfaces as a mystery.
 6. `install.sh`.

@@ -125,12 +125,6 @@ That is a user decision, not a lead decision.
 None open. E1 and E2 were answered and discharged at workstream 3's acceptance;
 their lasting decisions are in the decision and drift log below.
 
-## Carry-forward
-
-Items that outlive this workflow were reconciled with the macOS spike's own list, once
-the two branches met, into [docs/open-items.md](../../open-items.md). Nothing there
-blocks this branch.
-
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
