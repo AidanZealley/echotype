@@ -40,6 +40,10 @@ public struct Settings: Equatable, Sendable {
   public var hotkey: Hotkey
 
   /// Domain terms sent to the transcription API to improve accuracy on jargon.
+  ///
+  /// The endpoint accepts up to 100, and they are the highest-value accuracy lever available:
+  /// without them the model hears "shad CN" and "Zoo stand". `STTConnection.streamingURL`
+  /// enforces the caps.
   public var keyterms: [String]
 
   /// BCP-47 language tag passed to the transcription API.
@@ -57,9 +61,20 @@ public struct Settings: Equatable, Sendable {
   /// AirPods does the obvious thing.
   public var inputDeviceID: String?
 
+  /// Temporary. The keyterms editor in Settings is what owns this list, and it does not exist
+  /// yet; until it does, dictation would otherwise ship with no keyterms at all and the terms
+  /// this app is used to dictate most are the ones it would get wrong.
+  ///
+  /// Edit this array to add a term. Delete it outright, along with the `keyterms` default
+  /// below, when the editor lands and the list becomes user data in `UserDefaults`.
+  public static let placeholderKeyterms = [
+    "shadcn", "Zustand", "pnpm", "TanStack", "t3code", "SwiftUI", "AppKit", "Tailwind",
+    "Vite", "TypeScript", "Zod", "Supabase", "Claude Code", "EchoType", "xAI",
+  ]
+
   public init(
     hotkey: Hotkey = .optionD,
-    keyterms: [String] = [],
+    keyterms: [String] = placeholderKeyterms,
     language: String = "en",
     silenceTimeout: TimeInterval = 10,
     hardCap: TimeInterval = 600,

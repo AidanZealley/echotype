@@ -372,7 +372,6 @@ Sources/
     Views/
 Tests/EchoTypeCoreTests/
 Resources/Info.plist
-Resources/EchoType.entitlements
 scripts/run.sh
 scripts/install.sh
 ```
