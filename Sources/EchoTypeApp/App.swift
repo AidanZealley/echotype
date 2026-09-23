@@ -3,15 +3,27 @@ import SwiftUI
 
 @main
 struct EchoTypeApp: App {
-  init() {
-    startHotkey()
-  }
+  @State private var controller = DictationController()
 
   var body: some Scene {
-    MenuBarExtra("EchoType", systemImage: "waveform") {
+    MenuBarExtra {
+      Text(statusLine)
+      Divider()
       Button("Quit EchoType") {
         NSApplication.shared.terminate(nil)
       }
+    } label: {
+      Image(systemName: controller.state == .idle ? "waveform" : "waveform.circle.fill")
+    }
+  }
+
+  private var statusLine: String {
+    switch controller.state {
+    case .idle: controller.problem ?? "Ready"
+    case .listening: "Listening"
+    case .paused: "Paused"
+    case .finalizing, .inserting: "Finishing"
+    case .cancelled: "Cancelled"
     }
   }
 }
