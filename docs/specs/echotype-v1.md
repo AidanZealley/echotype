@@ -39,8 +39,7 @@ The reasoning is that this app is mostly OS integration. It needs `CGEventTap`,
 that, it would add a second runtime and an IPC protocol beside it. Going native
 means one language, one binary and no third-party dependencies at all.
 
-The cost is that AppKit and SwiftUI cannot compile on Linux, so the remote
-development machine can build and test only the pure-Swift core. See
+The cost is that the whole project is macOS-only, including its tests. See
 "Development workflow".
 
 The deployment target is macOS 26.0. Nothing here needs a recent API: `CGEventTap`
@@ -308,9 +307,9 @@ and must never be treated as committed.
 
 ## Audio
 
-`AVAudioEngine` input tap, converting device rate Float32 to 16 kHz mono Int16,
-sending roughly 100ms chunks as binary WebSocket frames. That is 32 KB/s, so the
-API's Opus option buys nothing and would cost an encoder.
+`AVAudioEngine` input tap, converting device rate Float32 to 16 kHz mono Int16
+with `AVAudioConverter`, sending roughly 100ms chunks as binary WebSocket frames.
+That is 32 KB/s, so the API's Opus option buys nothing and would cost an encoder.
 
 Opening the input device takes 100 to 300ms, which is enough to clip the first
 word. Acquire the stream on first trigger and hold it through a few minutes of
@@ -356,11 +355,10 @@ produces unreadable diffs and that agents edit badly.
 ```
 Package.swift
 Sources/
-  EchoTypeCore/          no Apple-framework imports, builds and tests on Linux
+  EchoTypeCore/          decisions: no UI, no global state, no I/O
     SessionMachine.swift
     TranscriptAssembler.swift
     STTClient.swift      depends on a WebSocketTransport protocol
-    AudioConverter.swift
     Settings.swift
   EchoTypeApp/           macOS only
     App.swift            MenuBarExtra, Settings scene
@@ -376,9 +374,14 @@ scripts/run.sh
 scripts/install.sh
 ```
 
-`Package.swift` is Swift code, so a short `#if os(Linux)` drops the app target
-from the targets array there. `swift build` and `swift test` then both work on
-the remote machine.
+The split between the two targets is decisions in `EchoTypeCore`, effects in
+`EchoTypeApp`. Whether a keycode and a set of flags match the configured chord is
+a decision; `CGEvent.tapCreate` is an effect. Keeping App thin is what keeps the
+untestable surface small, since nothing that touches TCC, focus or the window
+server can be covered by a test.
+
+The line is pure decisions in Core, not simulate the OS. Protocol-wrapping
+`NSPasteboard` so it can be faked would buy tests of the fake.
 
 `STTClient` talks to a `WebSocketTransport` protocol rather than
 `URLSessionWebSocketTask` directly. That keeps protocol logic testable with
@@ -454,12 +457,15 @@ whether a narrower reset clears the macOS 27 grant was never tested.
 
 ## Development workflow
 
-The author develops on a remote Linux machine and compiles on a Mac.
-
-On the Mac:
+Development happens on the Mac, because that is where the compiler is. An earlier
+plan kept `EchoTypeCore` Linux-compatible so a remote Linux machine could build
+and test it, and that was dropped once the remaining build order turned out to be
+overwhelmingly AppKit: the share of the project a Linux machine could compile was
+falling towards nothing, and the price was a hand-written resampler standing in
+for `AVAudioConverter`.
 
 ```bash
-git pull && ./scripts/run.sh
+./scripts/run.sh
 ```
 
 `run.sh` runs `swift build`, assembles the `.app` bundle, copies the plist, signs
@@ -476,7 +482,7 @@ dictating repeatedly.
 
 ### What is tested where
 
-Testable on Linux, and this is where the real bugs live:
+Covered by `swift test`, and this is where the real bugs live:
 
 - Transcript assembly against recorded event streams: partials superseded by
   finals, multiple `speech_final` segments, `finalize` resolving a trailing
@@ -485,15 +491,15 @@ Testable on Linux, and this is where the real bugs live:
   in both directions, several pause and resume cycles accumulating text correctly,
   the no-speech close, the ten minute cap, escape mid-session, stop before ready,
   socket error while listening, stop with no audio
-- Audio conversion: device rate to 16 kHz, frame boundaries not dropping samples,
-  clipping, Int16 endianness, asserted against known waveforms
 - Query string construction, including the 100 keyterm and 50 character caps
 
-`URLSessionWebSocketTask` is implemented in swift-corelibs-foundation as of Swift
-6.3, so a live integration test against `wss://api.x.ai/v1/stt` with a fixture WAV
-can also run on Linux given a key in an environment variable. Worth doing early,
-since the streaming protocol is specified here from documentation rather than
-experience.
+Audio conversion is not on this list. `AVAudioConverter` resamples device rate
+Float32 to 16 kHz mono Int16 and is the platform's job to get right, so the
+capture layer configures it rather than reimplementing it.
+
+A live integration test runs against `wss://api.x.ai/v1/stt` with a fixture WAV,
+given a key in an environment variable. Worth doing early, since the streaming
+protocol is specified here from documentation rather than experience.
 
 Verified by hand on the Mac, once each, rather than by test:
 
