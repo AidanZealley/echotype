@@ -1,6 +1,6 @@
 # Dictation implementation workflow
 
-Status: draft orchestration instructions.
+Status: approved orchestration instructions.
 
 This directory is the complete handoff for a fresh orchestration agent.
 

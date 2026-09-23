@@ -1,6 +1,6 @@
 # Dictation implementation plan
 
-Status: draft; implementation has not started.
+Status: approved; implementation has not started.
 
 ## Orchestration record
 
