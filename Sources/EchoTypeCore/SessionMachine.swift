@@ -77,6 +77,10 @@ public enum SessionError: Error, Equatable, Sendable {
 /// Usage is `run()` in its own task, `send(audio:)` while it lasts, and `trigger()` or
 /// `cancel()` to end it. `run()` returns the session's one outcome, and `states` carries the
 /// transitions an overlay renders.
+///
+/// `states` carries no transcript text, because nothing renders it yet. An overlay that wants
+/// live text extends this type rather than reading the socket itself: a WebSocket message is
+/// delivered to exactly one reader, so a second read would take frames away from this one.
 public actor SessionMachine {
   /// The specification's states. `listening` and `paused` differ only in what is rendered;
   /// audio streams in both.

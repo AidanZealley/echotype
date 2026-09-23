@@ -11,11 +11,13 @@ private let chordModifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskC
 @MainActor private var tap: CFMachPort?
 
 /// Installs an active keyDown tap that consumes Opt+D and pastes a fixed string.
-/// If the tap cannot be created yet (Accessibility not granted), retries every
+/// If the tap cannot be created yet (the input grant not given), retries every
 /// second so granting the permission takes effect without a relaunch.
 @MainActor func startHotkey() {
-  // Surfaces the Accessibility prompt instead of failing quietly. The key is the
-  // value of kAXTrustedCheckOptionPrompt, which Swift 6 rejects as a mutable global.
+  // Surfaces the permission prompt instead of failing quietly. The API is still the
+  // Accessibility trust check; macOS 27 shows it to the user as Device Control and
+  // Data Access. The key is the value of kAXTrustedCheckOptionPrompt, which Swift 6
+  // rejects as a mutable global.
   AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
   retryUntilInstalled()
 }

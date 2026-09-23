@@ -7,8 +7,7 @@ enum Fixture {
   static let created = #"{"type":"transcript.created","request_id":"req_123"}"#
   static let done = #"{"type":"transcript.done"}"#
 
-  /// The endpoint sends `words` on every `is_final` frame, naming the word itself `text` and
-  /// omitting `confidence`.
+  /// The endpoint sends `words` on every `is_final` frame, naming the word itself `text`.
   static func partial(
     _ text: String,
     words: [(text: String, start: Double, end: Double)] = [],

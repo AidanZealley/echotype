@@ -83,9 +83,13 @@ there is nothing to warn about so there is no countdown.
 
 Implementation is a display state and nothing more. The socket stays open and
 audio keeps streaming throughout. The server's own voice activity detection is
-already the signal: no new partials means silence, new partials mean speech
-resumed. That avoids local RMS thresholds, noise-floor calibration, a reconnect,
-and the first-word clipping a reconnect would reintroduce.
+already the signal, but it is not the arrival of events that carries it: partials
+keep arriving at roughly 1 Hz with empty text all through a silence, and stop
+entirely for the two to three seconds the server spends deciding where an
+utterance ended. Speech is therefore a partial with non-empty text, or a
+`speech_final`. Anything else is quiet. That avoids local RMS thresholds,
+noise-floor calibration, a reconnect, and the first-word clipping a reconnect
+would reintroduce.
 
 The trade is that the microphone streams to xAI during a pause. This is bounded
 by the hard cap below, so the worst case is ten minutes of dead air and a few
@@ -321,9 +325,11 @@ The sequence:
 4. After roughly 800ms, restore the previous contents, but only if `changeCount`
    advanced by exactly one
 
-The `changeCount` guard means that if something else wrote to the pasteboard in
-the meantime, its contents are left alone. Either way the transcript stays on the
-pasteboard, so a paste that lands nowhere never loses the text.
+The `changeCount` guard decides which of two things happens. If nothing else
+wrote to the pasteboard, the previous contents come back, so dictating does not
+cost the user whatever they had copied. If something else did write, that write is
+left alone and the transcript stays on the pasteboard, so a paste that landed
+nowhere is still recoverable.
 
 The text is inserted exactly as the model returned it, with no leading or
 trailing whitespace added and no capitalisation adjustment. Padding rules are
@@ -380,9 +386,9 @@ idle → listening ⇄ paused → finalizing → inserting → idle
 ```
 
 `listening` and `paused` differ only in what the overlay renders. Audio streams
-in both. The transition either way is driven by whether transcript events are
-still arriving, with ten seconds of quiet moving to `paused` and any new partial
-moving back.
+in both. The transition either way is driven by the speech signal above, a
+partial with non-empty text or a `speech_final`, with ten seconds of quiet moving
+to `paused` and the next speech moving back.
 
 `finalizing` is entered only by Opt+D, a click on the overlay, or the ten minute
 hard cap. It sends `{"type":"finalize"}` then `{"type":"audio.done"}` and waits
@@ -399,8 +405,12 @@ Other edge cases the machine must handle: stop pressed before
 
 ## Permissions, signing and distribution
 
-Required TCC grants: Microphone, Accessibility (to post events), Input Monitoring
-(to observe keys).
+Required TCC grants: Microphone, and one grant covering both the event tap and the
+posted Cmd+V. On macOS 27.2 that is a single "Device Control and Data Access"
+prompt attributed to EchoType itself, rather than the separate Accessibility and
+Input Monitoring grants earlier versions asked for. The APIs are unchanged: the
+check is still the Accessibility trust check, so code and comments naming it are
+correct even though the user never sees that word.
 
 The bundle identifier is `com.aidanzealley.echotype`. It is fixed from the spike
 onwards. TCC grants, the Keychain item holding the API key, the `UserDefaults`
@@ -417,20 +427,23 @@ runtime is skipped for now, since it is only needed for notarization.
 
 Sign every build with a stable self-signed certificate, created once in Keychain
 Access via Certificate Assistant: Create a Certificate, self-signed root, type
-Code Signing, named "EchoType Dev".
+Code Signing, named "EchoType Dev". Then set its Code Signing trust to Always
+Trust. Without that, `security find-identity -v` does not list the identity and
+`scripts/run.sh` fails at signing with nothing that points at the cause.
 
 This is the detail that makes the project pleasant to work on. TCC keys its
 grants to the code signature. Signing ad-hoc with `codesign -s -` derives the
 requirement from the binary hash, so every rebuild looks like a brand new app and
-re-prompts for Accessibility and Input Monitoring. A stable identity means
-granting each permission exactly once.
+re-prompts for the grants above. A stable identity means granting each permission
+exactly once.
 
 No Apple Developer account and no notarization for v1. Gatekeeper only applies to
 quarantined downloads, and these builds are local. Both become necessary the
 moment someone else needs to run it.
 
 Escape hatch when TCC gets confused:
-`tccutil reset Accessibility com.aidanzealley.echotype`.
+`tccutil reset All com.aidanzealley.echotype`. `reset All` is the verified one;
+whether a narrower reset clears the macOS 27 grant was never tested.
 
 ## Development workflow
 
