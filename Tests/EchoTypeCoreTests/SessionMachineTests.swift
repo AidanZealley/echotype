@@ -306,6 +306,30 @@ struct SessionMachineTests {
     #expect(await log.rest() == [.idle])
   }
 
+  @Test("A finalisation the endpoint never answers ends the session rather than hanging")
+  func finalizingWithoutAnAnswerTimesOut() async {
+    let running = await start()
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("said and done", speechFinal: true))
+
+    await session.trigger()
+    #expect(await log.next() == .finalizing)
+    #expect(await transport.textFrames == closingFrames)
+
+    // The endpoint resolves the finalize into a trailing partial, then never sends
+    // `transcript.done`.
+    await transport.emit(Fixture.partial("then some", isFinal: true, speechFinal: true))
+    await clock.advance(by: Settings().finalizeTimeout)
+
+    let outcome = await running.value
+    guard case .failed(let text, .socket) = outcome else {
+      Issue.record("expected a socket failure, got \(outcome)")
+      return
+    }
+    #expect(text == "said and done then some")
+    #expect(await log.rest() == [.inserting, .idle])
+  }
+
   @Test("A socket failure keeps the segments finalised before it")
   func socketFailureKeepsFinalisedSegments() async {
     let running = await start()

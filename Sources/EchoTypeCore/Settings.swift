@@ -57,6 +57,16 @@ public struct Settings: Equatable, Sendable {
   /// where the user walks away.
   public var hardCap: TimeInterval
 
+  /// Seconds to wait for `transcript.done` after `finalize` and `audio.done` have gone out,
+  /// before giving up and keeping whatever was already committed.
+  ///
+  /// How long a forced `finalize` takes has not been measured. The nearest measured figure is
+  /// endpointing closing a segment on its own, with the frame in hand about 3s after the last
+  /// word, and forcing the segment closed should be no slower than waiting for that. Eight
+  /// seconds leaves wide margin for a real room and a slow network while still surfacing an
+  /// endpoint that has stopped answering as a visible failure.
+  public var finalizeTimeout: TimeInterval
+
   /// The chosen audio input device. `nil` means follow the system default input, so connecting
   /// AirPods does the obvious thing.
   public var inputDeviceID: String?
@@ -78,6 +88,7 @@ public struct Settings: Equatable, Sendable {
     language: String = "en",
     silenceTimeout: TimeInterval = 10,
     hardCap: TimeInterval = 600,
+    finalizeTimeout: TimeInterval = 8,
     inputDeviceID: String? = nil
   ) {
     self.hotkey = hotkey
@@ -85,6 +96,7 @@ public struct Settings: Equatable, Sendable {
     self.language = language
     self.silenceTimeout = silenceTimeout
     self.hardCap = hardCap
+    self.finalizeTimeout = finalizeTimeout
     self.inputDeviceID = inputDeviceID
   }
 }
