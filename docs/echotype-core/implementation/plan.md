@@ -127,8 +127,9 @@ their lasting decisions are in the decision and drift log below.
 
 ## Carry-forward
 
-Items that outlive this workflow are in [carry-forward.md](carry-forward.md), each with
-what to re-check once the macOS spike branch merges. Nothing there blocks this branch.
+Items that outlive this workflow were reconciled with the macOS spike's own list, once
+the two branches met, into [docs/open-items.md](../../open-items.md). Nothing there
+blocks this branch.
 
 ## Decision and drift log
 
