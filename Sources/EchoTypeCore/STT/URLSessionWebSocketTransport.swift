@@ -70,7 +70,13 @@ public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked 
   }
 
   /// A rejected handshake leaves its status on the task's response, which is where the
-  /// documented error statuses come from.
+  /// documented error statuses come from. Confirmed live: a rejected upgrade populates
+  /// `task.response` and leaves `closeCode` at `.invalid`, so the status does reach here.
+  ///
+  /// The status is not the one the specification predicts for a bad key. `api.x.ai` answers a
+  /// well-formed but incorrect key with 400 and `"Incorrect API key provided"`, reserving 401
+  /// for a request carrying no credentials at all. So a wrong key surfaces as
+  /// `STTError.badRequest` and only a missing one as `.unauthorized`.
   private func sessionError(from error: any Error) -> any Error {
     guard let status = (task.response as? HTTPURLResponse)?.statusCode, status >= 400 else {
       return error

@@ -112,6 +112,8 @@ public actor SessionMachine {
     /// The transcript ended without a trigger: the socket closed, or sent `transcript.done`
     /// unasked.
     case closed
+    /// `finalize` and `audio.done` went out and `transcript.done` never came back.
+    case timedOut
     case failed(any Error)
   }
 
@@ -217,7 +219,10 @@ public actor SessionMachine {
   private func observe(_ event: STTEvent) {
     switch event {
     case .partial(let partial):
-      guard isSpeech(partial) else { return }
+      // Speech only moves the silence and pause bookkeeping while the session is streaming.
+      // Once finalising, the trailing partial `finalize` resolves into must leave the
+      // finalize deadline alone.
+      guard isActive, isSpeech(partial) else { return }
       heardSpeech = true
       lastSpeechAt = clock.now
       if state == .paused { transition(to: .listening) }
@@ -276,15 +281,32 @@ public actor SessionMachine {
   /// The only route to `finalizing`: an explicit trigger or the hard cap.
   private func beginFinalizing() async {
     transition(to: .finalizing)
-    clock.cancel()
     do {
       try await client.finish()
     } catch {
       // The socket is gone, so `transcript.done` will never arrive. End the loop and keep
-      // whatever was finalised.
+      // whatever was finalised. `conclude` cancels the wake-up still pending from `listening`.
       ending = .failed(error)
       transport.close()
+      return
     }
+    // An endpoint that accepts the closing messages and then says nothing would leave the
+    // message loop suspended forever, so the wait is bounded. Scheduling replaces the silence
+    // and hard cap wake-up, and `conclude` cancels whatever is still pending. A session that
+    // ended while the closing messages were sending has already concluded, so nothing is armed.
+    guard ending == nil else { return }
+    clock.schedule(at: clock.now + settings.finalizeTimeout) { [weak self] in
+      await self?.finalizingDeadlineReached()
+    }
+  }
+
+  /// The endpoint never answered `finalize`. Ending the loop keeps the committed segments, on
+  /// the same reasoning as a dropped socket: a visibly truncated transcript beats losing the
+  /// speech.
+  private func finalizingDeadlineReached() {
+    guard ending == nil, state == .finalizing else { return }
+    ending = .timedOut
+    transport.close()
   }
 
   private func conclude(_ ending: Ending) async -> Outcome {
@@ -307,6 +329,9 @@ public actor SessionMachine {
       settle(text: text)
     case .closed:
       outcome = .failed(text: text, error: .socket("the transcript ended before the session did"))
+      settle(text: text)
+    case .timedOut:
+      outcome = .failed(text: text, error: .socket("the endpoint never answered the finalize request"))
       settle(text: text)
     case .failed(let error):
       outcome = .failed(text: text, error: SessionError(error))
