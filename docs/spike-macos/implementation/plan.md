@@ -1,23 +1,23 @@
 # EchoType macOS spike implementation plan
 
-Status: approved; implementation has not started.
+Status: approved; implementation in progress.
 
 ## Orchestration record
 
 - Runs on: Aidan's Mac. Not the remote Linux machine.
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `spike/macos-hotkey-paste`
+- Starting commit: `2c57765`
 - Review command: `lead subagents`
 - Specification approved at commit: `bbb5f41`
-- Started: `TBD`
+- Started: `2026-09-22`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Signed app bundle and run script](01-signed-app-bundle.md) | Approved spec | Not started |
-| 2 | [Hotkey tap and paste](02-hotkey-and-paste.md) | Workstream 1 | Not started |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Not started |
+| 1 | [Signed app bundle and run script](01-signed-app-bundle.md) | Approved spec | Accepted |
+| 2 | [Hotkey tap and paste](02-hotkey-and-paste.md) | Workstream 1 | Accepted |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Accepted |
 
 ## Why these boundaries
 
@@ -71,9 +71,9 @@ Criterion 3 is the reason the spike exists.
 
 | Gate | Owning workstream | Placement | Status |
 |---|---|---|---|
-| G1 Self-signed certificate exists | 1 | Before implementation can be verified | Pending |
-| G2 App builds, signs and launches | 1 | After closure, before acceptance | Pending |
-| G3 TCC grants and the four criteria | 2 | After closure, before acceptance | Pending |
+| G1 Self-signed certificate exists | 1 | Before implementation can be verified | Passed |
+| G2 App builds, signs and launches | 1 | After closure, before acceptance | Passed |
+| G3 TCC grants and the four criteria | 2 | After closure, before acceptance | Passed |
 
 G1 candidate and instructions: Aidan creates a code signing certificate in Keychain
 Access via Certificate Assistant, Create a Certificate, identity type Self Signed
@@ -90,7 +90,9 @@ G3 candidate and instructions: Aidan runs `./scripts/run.sh`, grants Accessibili
 Input Monitoring when prompted, then works through the four criteria above with
 TextEdit focused. Required evidence: a plain statement of pass or fail for each of the
 four, and for criterion 3 whether any permission prompt reappeared. Resume condition:
-all four pass.
+all four pass. macOS may ask only for Accessibility and never for Input Monitoring,
+because an active keyboard tap is covered by the Accessibility grant; an absent Input
+Monitoring prompt is expected and is not a failure.
 
 If criterion 3 fails, the lead does not attempt to redesign the signing approach on
 its own. That outcome changes the specification's development workflow, so it is an
@@ -98,10 +100,13 @@ escalation.
 
 ## Escalations
 
-Empty until a lead blocks.
+None open.
 
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-09-22 | Drift: the `EchoType Dev` certificate must also be set to Always Trust for Code Signing; the specification's creation steps omit this | Untrusted, `security find-identity -v` hides it; G1 passed with the trust step | Aidan (E1) | 1, 2 |
+| 2026-09-22 | Decision: build on the Mac with Xcode's toolchain (`xcode-select` pointed at Xcode.app), not the Command Line Tools | The Command Line Tools swift-driver is broken on Aidan's Mac | Aidan (E1) | 1, 2 |
+| 2026-09-22 | Drift: on macOS 27.2 the event tap and posted Cmd+V need one "Device Control and Data Access" grant, not separate Accessibility and Input Monitoring grants; the spec's escape hatch `tccutil reset Accessibility` should become `tccutil reset All com.aidanzealley.echotype`. Verified with `reset All` only; whether `reset Accessibility` clears the 27.2 grant is untested | G3 clean revalidation: after a full TCC reset, one prompt attributed to EchoType; the grant survived a rebuild (criterion 3 passed) | Aidan (E2) | 2, Final |
+| 2026-09-22 | Drift: the specification's Insertion section contradicts itself. Step 4 restores the previous pasteboard contents when `changeCount` advanced by exactly one, but the next paragraph says the transcript stays on the pasteboard either way. The spike follows step 4 | Found in final review. Resolve in the specification before build-order step 3 reuses `Inserter` | Pending Aidan | Final, later build steps |

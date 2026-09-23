@@ -1,4 +1,6 @@
 .build/
+.swiftpm/
+.vscode/
 
 # Workstream 3 reads a recording supplied through ECHOTYPE_FIXTURE_WAV. Recordings and
 # transcripts are evidence, never artefacts: they are not committed.
