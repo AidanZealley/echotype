@@ -1,6 +1,6 @@
 # Workstream 3: Dictation end to end
 
-Status: blocked on gate G1 (escalation E1).
+Status: accepted.
 
 ## Task packet
 
