@@ -331,7 +331,8 @@ public actor SessionMachine {
       outcome = .failed(text: text, error: .socket("the transcript ended before the session did"))
       settle(text: text)
     case .timedOut:
-      outcome = .failed(text: text, error: .socket("the endpoint never answered the finalize request"))
+      outcome = .failed(
+        text: text, error: .socket("the endpoint never answered the finalize request"))
       settle(text: text)
     case .failed(let error):
       outcome = .failed(text: text, error: SessionError(error))

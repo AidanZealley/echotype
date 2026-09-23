@@ -14,8 +14,9 @@ import Observation
 
   private enum Phase {
     case idle
-    /// Opening the microphone and reading the key. Only the first-use permission prompt makes
-    /// this last long enough to matter; presses in the meantime are ignored.
+    /// Opening the microphone and reading the key, which takes a noticeable moment every
+    /// session. Presses in the meantime are ignored, and Escape passes through to the focused
+    /// app because no session is open yet.
     case starting
     case running(SessionMachine)
   }
