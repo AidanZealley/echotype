@@ -29,7 +29,7 @@ TCC grant again.
 
 The tests use Swift Testing. Plain `swift test` can exit nonzero after every test has
 passed, because the XCTest suite is empty, so run `timeout 120 swift test
---disable-xctest`. `swift-format` is installed at `~/.local/bin/swift-format`.
+--disable-xctest`. Run `swift-format` as `xcrun swift-format`.
 
 ## What agents cannot verify here
 
@@ -213,7 +213,7 @@ Independently review workstream <N> of the overlay milestone.
 Read <packet path>, docs/overlay/implementation/README.md and the source-of-truth
 documents it identifies. Inspect the uncommitted diff and the surrounding code. Run
 proportionate checks: `swift build`, `timeout 120 swift test --disable-xctest`, and
-`swift-format lint --recursive Sources Tests Package.swift`.
+`xcrun swift-format lint --recursive Sources Tests Package.swift`.
 
 Judge the work against the packet's acceptance criteria and the specification. Look for
 correctness defects, unmet criteria, boundary violations and unjustified complexity.

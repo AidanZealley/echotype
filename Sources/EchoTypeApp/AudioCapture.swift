@@ -24,12 +24,10 @@ import Synchronization
     case engineFailed(any Error)
   }
 
-  /// The input level from 0 to 1, for the overlay's meter. Updated from every tap buffer while
-  /// capturing, and zero whenever capture is stopped.
-  private(set) var level = 0.0
-  /// Called on the main actor each time a tap buffer updates `level`, roughly every 100ms. The
-  /// first call after `start()` means audio is flowing.
-  var onLevel: @MainActor () -> Void = {}
+  /// Called on the main actor with each tap buffer's input level, from 0 to 1 for the overlay's
+  /// meter, roughly every 100ms while capturing. The first call after `start()` means audio is
+  /// flowing.
+  var onLevel: @MainActor (Double) -> Void = { _ in }
 
   private let chunker = Chunker()
   private var engine: AVAudioEngine?
@@ -55,7 +53,6 @@ import Synchronization
     // to one tap buffer, about 100ms) is not sent.
     chunker.end()
     closeDevice()
-    level = 0
   }
 
   /// Asks for microphone access the first time, then opens the default input device. Does
@@ -91,8 +88,7 @@ import Synchronization
   private func levelArrived(_ level: Double) {
     // A buffer measured just before `stop()` can arrive after it.
     guard chunker.isDelivering else { return }
-    self.level = level
-    onLevel()
+    onLevel(level)
   }
 
   /// The default input device changed, or the one in use went away. The engine has already
@@ -105,7 +101,6 @@ import Synchronization
         try await openDevice()
       } catch {
         chunker.end(throwing: error)
-        level = 0
         return
       }
       // The session may have ended while the device was reopening.
