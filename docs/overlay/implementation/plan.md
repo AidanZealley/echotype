@@ -1,6 +1,6 @@
 # Overlay implementation plan
 
-Status: in progress; workstreams 1 and 2 accepted.
+Status: in progress; workstreams 1 to 3 accepted, final review not started.
 
 ## Orchestration record
 
@@ -16,7 +16,7 @@ Status: in progress; workstreams 1 and 2 accepted.
 |---:|---|---|---|
 | 1 | [Live session seam](01-live-session-seam.md) | Approved spec | Accepted |
 | 2 | [Overlay panel and variants](02-overlay-panel-and-variants.md) | 1 | Accepted |
-| 3 | [Live overlay](03-live-overlay.md) | 1, 2 | Not started |
+| 3 | [Live overlay](03-live-overlay.md) | 1, 2 | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Not started |
 
 ## Why these boundaries
@@ -123,7 +123,8 @@ Required evidence, in Aidan's words:
 
 - Owning workstream: 3
 - Placement: after focused closure, before acceptance
-- Status: `Pending`
+- Status: `Passed`, except observation 10 (second display), which is external validation
+  still pending because Aidan has only one display
 - Candidate: the uncommitted workstream 3 state, launched with `./scripts/run.sh`
 - Resume condition: Aidan reports every observation below, or a failure the lead can
   correct and republish
@@ -163,3 +164,6 @@ None open.
 | 2026-09-24 | `SessionMachine` owns the session's one transcript assembler. `STTClient` keeps the socket protocol (holding audio until `transcript.created`, send ordering, the closing messages) and stops assembling | The machine already decodes every frame to drive pausing. Mirroring the client's assembler would hold the same transcript twice | Pending approval of this workflow | 1 |
 | 2026-09-24 | The pill follows variant B rather than the specification's single row: a slim strip holding the bar meter, the phase word and elapsed time above a larger transcript, the hint at the foot, plus blue level feedback as a glow inside the pill, clipped by its edge: a rolling wave hanging from the top edge whose depth follows the level, at opacity 0.4 listening, 0.25 starting and 0.15 paused. This departs from the Overlay section's single row and its "not decorative waveform art" | Aidan's final choice at gate G1 (E1 to E4). The specification's contents all remain, including the bar meter; the opacity was left to the lead and may be tuned at G2 | Aidan, G1 attempts 1 to 4 | 2, 3 |
 | 2026-09-24 | The `transcript.done` fallback from [0003](../../decisions/0003-transcript-assembly.md) commits the whole unfinished utterance (its `is_final` runs plus the provisional tail) rather than only the latest run. 0003's Consequences line is stale and must be rewritten when this milestone retires into decision records | Simpler than preserving the old fragment behaviour and cannot insert a fragment. The fallback has never fired under the observed protocol | Workstream 1 lead | 1 |
+| 2026-09-24 | A click on the pill commits a running session and does nothing otherwise, so clicking a red error pill does not start a session where Opt+D would. The specification says a click "does the same as Opt+D" | A click should never open the microphone. The packet's Outcome ("Clicking it commits") and criterion 6 describe a commit, and a click during a fade or on an error would otherwise start a session. Aidan saw it at G2 and asked; the lead confirmed it is intended | Workstream 3 lead, seen by Aidan at G2 | 3 |
+| 2026-09-24 | The pill switches from starting to listening on the first tap buffer delivered to the main actor, not the first 100ms chunk | The pump does not read the stream until the session is listening, so the first chunk is not observable without a relay. The buffer is at most about 85ms earlier | Workstream 3 lead | 3 |
+| 2026-09-24 | The error pill truncates its message from the end at two lines; the transcript still truncates from the left | Aidan saw an error lose its start at G2 (E5). An error's start says what failed | Workstream 3 lead, on Aidan's G2 report | 3 |
