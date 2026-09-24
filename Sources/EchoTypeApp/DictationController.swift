@@ -92,16 +92,16 @@ import Observation
     finish(outcome, audioFailure: audioFailure)
   }
 
-  /// Runs the session to its outcome, mirroring its states into the menu and feeding it audio.
+  /// Runs the session to its outcome, mirroring its state into the menu and feeding it audio.
   /// Returns the error that ended capture early, if the microphone failed.
   private func run(
     _ session: SessionMachine, streaming chunks: AsyncThrowingStream<Data, any Error>
   ) async -> (SessionMachine.Outcome, (any Error)?) {
     let outcome = Task { await session.run() }
     var pump: Task<(any Error)?, Never>?
-    for await next in session.states {
-      state = next
-      // The first state is `listening`, from which point `send(audio:)` accepts audio rather
+    for await snapshot in session.snapshots {
+      state = snapshot.state
+      // The first snapshot is `listening`, from which point `send(audio:)` accepts audio rather
       // than dropping it.
       if pump == nil { pump = Task { await self.pump(chunks, into: session) } }
     }

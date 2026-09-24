@@ -14,14 +14,49 @@ func interimTextIsNeverCommitted() throws {
     to: &assembler
   )
 
+  // `is_final` on its own settles the run for display but commits nothing.
   #expect(assembler.text == "")
-  #expect(assembler.interim == "tanstack is")
+  #expect(assembler.settled == "tanstack is")
+  #expect(assembler.provisional == "")
 
   try apply([Fixture.partial("tanstack is great", speechFinal: true)], to: &assembler)
 
-  // The rewritten hearing is gone, and `is_final` on its own committed nothing either.
+  // The rewritten hearing is gone.
   #expect(assembler.text == "tanstack is great")
-  #expect(assembler.interim == "")
+  #expect(assembler.settled == "tanstack is great")
+}
+
+@Test("Settled runs build up an utterance that its speech_final replaces rather than repeats")
+func settledRunsComposeTheUtterance() throws {
+  var assembler = TranscriptAssembler()
+  // The recorded shape of one utterance: each partial carries only the run since the last
+  // `is_final`, and the `speech_final` frame resends the whole utterance.
+  try apply(
+    [
+      Fixture.created,
+      Fixture.partial("meet on the fourth"),
+      Fixture.partial("meet on the 4th", isFinal: true),
+      Fixture.partial("at ten"),
+    ],
+    to: &assembler
+  )
+  #expect(assembler.settled == "meet on the 4th")
+  #expect(assembler.provisional == "at ten")
+
+  try apply([Fixture.partial("at 10:00", isFinal: true)], to: &assembler)
+  #expect(assembler.settled == "meet on the 4th at 10:00")
+  #expect(assembler.provisional == "")
+
+  try apply(
+    [
+      Fixture.partial("meet on the 4th at 10:00", isFinal: true, speechFinal: true),
+      Fixture.partial("bring"),
+    ],
+    to: &assembler
+  )
+  #expect(assembler.text == "meet on the 4th at 10:00")
+  #expect(assembler.settled == "meet on the 4th at 10:00")
+  #expect(assembler.provisional == "bring")
 }
 
 @Test("speech_final segments accumulate in order")
@@ -93,7 +128,7 @@ func emptySessionProducesNoText() throws {
   )
 
   #expect(assembler.text == "")
-  #expect(assembler.interim == "")
+  #expect(assembler.provisional == "")
 }
 
 @Test("A partial decodes its text, its words and its flags")
@@ -145,5 +180,5 @@ func doneCommitsTheTrailingInterim() throws {
   )
 
   #expect(assembler.text == "open the settings pane and paste the key")
-  #expect(assembler.interim == "")
+  #expect(assembler.provisional == "")
 }

@@ -14,11 +14,10 @@ func audioWaitsForTheSessionToBeReady() async throws {
   transport.emit(Fixture.created)
   transport.emit(Fixture.partial("hello", speechFinal: true))
   transport.emit(Fixture.done)
-  let text = try await client.run()
+  try await client.run()
 
   // Held rather than dropped, so the handshake does not clip the first word.
   #expect(transport.binaryFrames == [firstWords])
-  #expect(text == "hello")
 
   let laterWords = Data([0x03])
   try await client.send(audio: laterWords)
@@ -40,7 +39,7 @@ func finishBeforeTheSessionIsReady() async throws {
   // user already stopped.
   transport.emit(Fixture.created)
   transport.endStream()
-  _ = try await client.run()
+  try await client.run()
   #expect(transport.binaryFrames.isEmpty)
 }
 
@@ -65,7 +64,7 @@ func queuedAudioKeepsItsOrderWhileASendIsInFlight() async throws {
   try await handover.value
 
   transport.emit(Fixture.done)
-  _ = try await session.value
+  try await session.value
 
   #expect(await transport.binaryFrames == [firstChunk, secondChunk])
 }
@@ -93,19 +92,7 @@ func finishWaitsForAudioAlreadyHandedOver() async throws {
     await transport.frameLog == ["audio", #"{"type":"finalize"}"#, #"{"type":"audio.done"}"#])
 
   transport.emit(Fixture.done)
-  _ = try await session.value
-}
-
-@Test("A socket closing without transcript.done returns the finalised segments")
-func streamEndingWithoutDoneReturnsFinalisedText() async throws {
-  let transport = FakeWebSocketTransport()
-  let client = STTClient(transport: transport)
-
-  transport.emit(Fixture.created)
-  transport.emit(Fixture.partial("the socket dropped here", speechFinal: true))
-  transport.endStream()
-
-  #expect(try await client.run() == "the socket dropped here")
+  try await session.value
 }
 
 @Test("An error event ends the session with a typed error")
@@ -121,13 +108,9 @@ func errorEventSurfacesAsATypedError() async throws {
   {
     try await client.run()
   }
-
-  // The segments finalised before the failure survive, because inserting a truncated
-  // transcript beats losing the speech.
-  #expect(await client.text == "kept text")
 }
 
-@Test("A transport failure surfaces unchanged and keeps the finalised text")
+@Test("A transport failure surfaces unchanged")
 func transportFailureSurfaces() async throws {
   let transport = FakeWebSocketTransport()
   let client = STTClient(transport: transport)
@@ -139,7 +122,6 @@ func transportFailureSurfaces() async throws {
   await #expect(throws: STTError.unavailable) {
     try await client.run()
   }
-  #expect(await client.text == "half a sentence")
 }
 
 @Test("Each documented error status maps to a distinguishable error")
