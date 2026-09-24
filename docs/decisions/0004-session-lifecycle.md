@@ -1,6 +1,7 @@
 # 0004 Session and socket lifecycle belong to the session machine
 
-Status: accepted, 2026-09-22 (EchoTypeCore), extended 2026-09-23 (dictation).
+Status: accepted, 2026-09-22 (EchoTypeCore), extended 2026-09-23 (dictation) and
+2026-09-24 (overlay).
 
 ## Context
 
@@ -23,11 +24,17 @@ has to reach the user without losing text they already spoke.
   `type` is skipped.
 - The wait in `finalizing` is bounded by `Settings.finalizeTimeout` (8s). Expiry
   produces `failed(text:error:)`, not a hang.
+- The first ending the machine decides wins. Cancel, a `done` or `error` frame, a
+  finalize send failure, the finalize timeout and a clean conclusion all go through one
+  `decide(_:)`, which records an ending only if none is set. Closing the real socket does
+  not discard frames already read, so a `transcript.done` arriving after Escape used to
+  overwrite the cancel and insert text.
 
 ## Consequences
 
-- The overlay must extend `SessionMachine` to read live text. It must not open a second
-  reader on the socket, because a WebSocket message goes to one reader.
+- Live text reaches the overlay through `SessionMachine.snapshots` (see
+  [0003](0003-transcript-assembly.md)). Nothing may open a second reader on the socket,
+  because a WebSocket message goes to one reader.
 - A dictation committed before `transcript.created` arrives inserts nothing and reports
   nothing. That doesn't matter for 20 to 60 second prompts, and the overlay's starting
   state tells the user when to speak.

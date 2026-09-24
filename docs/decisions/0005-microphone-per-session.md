@@ -26,7 +26,8 @@ indicator lit after dictation ends, which Aidan found disconcerting.
 - Every session pays the device open. On the MacBook Pro microphone that caused no
   first-word clipping, cold or back to back.
 - The specification's overlay gains a starting state between Opt+D and audio flowing,
-  so the user sees when to speak. The overlay milestone implements it.
+  so the user sees when to speak. See [0009](0009-overlay-behaviour.md) for when it
+  switches to listening.
 - Bluetooth earbuds produce wrong transcripts. The endpoint gets faint headset-profile
   audio and returns guesses or the keyterm prompt, and the profile switch loses the
   opening seconds. Input device choice or a warning belongs with settings.
