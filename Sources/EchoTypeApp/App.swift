@@ -31,7 +31,7 @@ struct EchoTypeApp: App {
   private var statusLine: String {
     guard let controller else { return "Overlay demo" }
     return switch controller.state {
-    case .idle: controller.problem ?? "Ready"
+    case .idle: "Ready"
     case .listening: "Listening"
     case .paused: "Paused"
     case .finalizing, .inserting: "Finishing"
