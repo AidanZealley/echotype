@@ -1,23 +1,27 @@
+import AppKit
 import EchoTypeCore
 import Foundation
 import Observation
 
-/// Owns the session lifecycle: the hotkey opens a session, the hotkey again commits it, Escape
-/// discards it, and the outcome is inserted at the caret.
+/// Owns the session lifecycle: the hotkey opens a session, the hotkey or a click on the pill
+/// commits it, Escape discards it, and the outcome is inserted at the caret.
 ///
-/// `state` and `problem` are what the menu bar renders. The menu is the only place the user can
-/// see anything in this milestone, so it also carries failures and a missing API key.
+/// The overlay pill shows the session from the press to its end, errors included. `state` is
+/// what the menu bar renders.
+///
+/// The hotkey and Escape arrive inside the event tap's callback, which must only decide whether
+/// to consume the event. So those handlers change `phase`, which is what that decision reads,
+/// and leave every other piece of work to a task.
 @MainActor @Observable final class DictationController {
   private(set) var state: SessionMachine.State = .idle
-  /// Why the last attempt failed, until the next one starts.
-  private(set) var problem: String?
 
   private enum Phase {
     case idle
-    /// Opening the microphone and reading the key, which takes a noticeable moment every
-    /// session. Presses in the meantime are ignored, and Escape passes through to the focused
-    /// app because no session is open yet.
+    /// Opening the microphone, reading the key and opening the socket, which takes a noticeable
+    /// moment every session. Presses and clicks are ignored; Escape abandons the start.
     case starting
+    /// Escape was pressed while starting. The start stops at its next step.
+    case abandoned
     case running(SessionMachine)
   }
 
@@ -25,10 +29,18 @@ import Observation
   private let settings = Settings()
   private let audio = AudioCapture()
   private let inserter = Inserter()
+  @ObservationIgnored private lazy var panel = OverlayPanel { [weak self] in self?.clicked() }
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
 
+  /// The session's pill and the screen it stays on, from the press until the session ends.
+  private var pill: Pill?
+  private var screen: NSScreen?
+  /// Fades an error pill after it has been read.
+  private var errorFade: Task<Void, Never>?
+
   init() {
+    audio.onLevel = { [weak self] in self?.levelChanged() }
     let monitor = HotkeyMonitor(
       hotkey: settings.hotkey,
       onHotkey: { [weak self] in self?.hotkeyPressed() },
@@ -38,32 +50,60 @@ import Observation
     self.monitor = monitor
   }
 
+  // MARK: Input
+
+  /// Called inside the event tap.
   private func hotkeyPressed() {
     switch phase {
     case .idle:
       phase = .starting
       Task { await dictate() }
-    case .starting:
+    case .starting, .abandoned:
       break
     case .running:
-      // Commit by ending capture rather than triggering the session here. The pump sends what
-      // is still queued and the partial last chunk `stop()` flushes, then triggers, so the last
-      // word reaches xAI before `audio.done`.
-      audio.stop()
+      Task { commit() }
     }
   }
 
-  /// Escape belongs to the focused app unless a session is open.
+  /// Called inside the event tap. Escape belongs to the focused app unless a session is
+  /// starting or running.
   private func escapePressed() -> Bool {
-    guard case .running(let session) = phase else { return false }
-    Task { await session.cancel() }
-    return true
+    switch phase {
+    case .idle:
+      return false
+    case .starting:
+      phase = .abandoned
+      Task { end() }
+      return true
+    case .abandoned:
+      return true
+    case .running(let session):
+      Task { await session.cancel() }
+      return true
+    }
   }
+
+  /// A click commits a running session, as Opt+D does. It never opens one, so clicking an
+  /// error pill, or a pill fading after a session, never starts the microphone. Only Opt+D
+  /// starts a session.
+  private func clicked() {
+    guard case .running = phase else { return }
+    commit()
+  }
+
+  /// Commits by ending capture rather than triggering the session here. The pump sends what is
+  /// still queued and the partial last chunk `stop()` flushes, then triggers, so the last word
+  /// reaches xAI before `audio.done`. A second commit does nothing.
+  private func commit() {
+    audio.stop()
+  }
+
+  // MARK: Session
 
   /// One session, from the first press to the insertion.
   private func dictate() async {
-    problem = nil
     defer { phase = .idle }
+    showStarting()
 
     // The microphone first: before the socket, so a denied grant never opens a billed
     // connection, and before the key, so the Keychain read is not in the first word's path
@@ -73,14 +113,16 @@ import Observation
     do {
       chunks = try await audio.start()
     } catch {
-      problem = describe(error)
-      return
+      return end(showing: isAbandoned ? nil : describe(error))
     }
-    guard let apiKey = await Task.detached(operation: { Keychain.apiKey() }).value else {
+    guard !isAbandoned else { return abandon() }
+    let apiKey = await Task.detached(operation: { Keychain.apiKey() }).value
+    guard !isAbandoned else { return abandon() }
+    guard let apiKey else {
       audio.stop()
-      problem = "No xAI API key in the Keychain"
-      return
+      return end(showing: "No xAI API key in the Keychain")
     }
+
     // The socket opens here, on trigger, because an idle open socket bills streaming time.
     let transport = URLSessionWebSocketTransport(
       url: STTConnection.streamingURL(settings: settings), apiKey: apiKey)
@@ -92,8 +134,18 @@ import Observation
     finish(outcome, audioFailure: audioFailure)
   }
 
-  /// Runs the session to its outcome, mirroring its state into the menu and feeding it audio.
-  /// Returns the error that ended capture early, if the microphone failed.
+  private var isAbandoned: Bool {
+    if case .abandoned = phase { true } else { false }
+  }
+
+  /// Escape arrived while starting: release the microphone, open no socket, fade the pill.
+  private func abandon() {
+    audio.stop()
+    end()
+  }
+
+  /// Runs the session to its outcome, mirroring it into the menu and the pill and feeding it
+  /// audio. Returns the error that ended capture early, if the microphone failed.
   private func run(
     _ session: SessionMachine, streaming chunks: AsyncThrowingStream<Data, any Error>
   ) async -> (SessionMachine.Outcome, (any Error)?) {
@@ -101,6 +153,7 @@ import Observation
     var pump: Task<(any Error)?, Never>?
     for await snapshot in session.snapshots {
       state = snapshot.state
+      updatePill { $0.apply(snapshot) }
       // The first snapshot is `listening`, from which point `send(audio:)` accepts audio rather
       // than dropping it.
       if pump == nil { pump = Task { await self.pump(chunks, into: session) } }
@@ -108,13 +161,13 @@ import Observation
     let result = await outcome.value
     // Ends the stream, which ends the pump, and releases the microphone.
     // A session that ended on its own (cancel, silence, the hard cap, a failure) still has a
-    // stream open. After a commit press this is a second `stop()`, which does nothing.
+    // stream open. After a commit this is a second `stop()`, which does nothing.
     audio.stop()
     return (result, await pump?.value ?? nil)
   }
 
   /// Feeds the session every chunk the stream yields, then commits it. The stream ends on
-  /// `stop()`, from a commit press or the end of the session, or by throwing if the microphone
+  /// `stop()`, from a commit or the end of the session, or by throwing if the microphone
   /// fails. Returns that failure, if any.
   private func pump(
     _ chunks: AsyncThrowingStream<Data, any Error>, into session: SessionMachine
@@ -137,6 +190,7 @@ import Observation
   }
 
   private func finish(_ outcome: SessionMachine.Outcome, audioFailure: (any Error)?) {
+    var failure = audioFailure
     switch outcome {
     case .insert(let text):
       inserter.insert(text)
@@ -144,9 +198,49 @@ import Observation
       break
     case .failed(let text, let error):
       if !text.isEmpty { inserter.insert(text) }
-      problem = describe(error)
+      failure = failure ?? error
     }
-    if let audioFailure { problem = describe(audioFailure) }
+    end(showing: failure.map(describe))
+  }
+
+  // MARK: Pill
+
+  /// Shows the pill in its starting state on the screen holding the focused window, replacing
+  /// an error still showing from the last session.
+  private func showStarting() {
+    errorFade?.cancel()
+    screen = NSScreen.forFocusedWindow()
+    pill = Pill(phase: .starting, startedAt: .now)
+    updatePill { _ in }
+  }
+
+  /// A tap buffer arrived: audio is flowing, so a starting pill is now listening.
+  private func levelChanged() {
+    updatePill { pill in
+      pill.level = audio.level
+      if pill.phase == .starting { pill.phase = .listening }
+    }
+  }
+
+  /// Changes the live pill and shows it. Does nothing once the session's pill has ended.
+  private func updatePill(_ change: (inout Pill) -> Void) {
+    guard var pill, let screen else { return }
+    change(&pill)
+    self.pill = pill
+    panel.show(pill, on: screen)
+  }
+
+  /// Ends the session's pill: fades it, or shows `error` in red for three seconds first.
+  private func end(showing error: String? = nil) {
+    guard var pill, let screen else { return }
+    self.pill = nil
+    guard let error else { return panel.hide() }
+    pill.phase = .error(error)
+    panel.show(pill, on: screen)
+    errorFade = Task {
+      try? await Task.sleep(for: .seconds(3))
+      if !Task.isCancelled { panel.hide() }
+    }
   }
 
   private func describe(_ error: any Error) -> String {
@@ -170,6 +264,21 @@ import Observation
       "Connection failed: \(description)"
     default:
       "Dictation failed: \(error)"
+    }
+  }
+}
+
+extension Pill {
+  /// Takes a snapshot's text, and its state once audio is flowing. Until then the pill stays
+  /// `starting`, whatever the session says, because nothing said yet is being heard.
+  fileprivate mutating func apply(_ snapshot: SessionMachine.Snapshot) {
+    settled = snapshot.settled
+    provisional = snapshot.provisional
+    switch snapshot.state {
+    case .listening where phase != .starting: phase = .listening
+    case .paused where phase != .starting: phase = .paused
+    case .finalizing, .inserting: phase = .transcribing
+    default: break
     }
   }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import EchoTypeCore
 import SwiftUI
 
 /// The floating panel that holds the pill at the bottom centre of a screen.
@@ -80,5 +81,46 @@ private final class Panel: NSPanel {
     } else {
       super.sendEvent(event)
     }
+  }
+}
+
+extension NSScreen {
+  /// The screen for a session's pill: the one holding the frontmost app's focused window, or
+  /// the one under the mouse when there is no focused window.
+  @MainActor static func forFocusedWindow() -> NSScreen? {
+    if let window = focusedWindowFrame(),
+      let index = Overlay.screenIndex(holding: window, among: screens.map(\.frame))
+    {
+      return screens[index]
+    }
+    let mouse = NSEvent.mouseLocation
+    return screens.first { $0.frame.contains(mouse) } ?? main
+  }
+
+  /// The focused window's frame in Accessibility coordinates, if Accessibility can say.
+  @MainActor private static func focusedWindowFrame() -> CGRect? {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+    let element = AXUIElementCreateApplication(app.processIdentifier)
+    guard let window: AXUIElement = copy(kAXFocusedWindowAttribute, of: element),
+      let position: AXValue = copy(kAXPositionAttribute, of: window),
+      let size: AXValue = copy(kAXSizeAttribute, of: window)
+    else { return nil }
+    var frame = CGRect.zero
+    guard AXValueGetValue(position, .cgPoint, &frame.origin),
+      AXValueGetValue(size, .cgSize, &frame.size)
+    else { return nil }
+    return frame
+  }
+
+  /// Reads one attribute with a short timeout. The lookup runs on the main thread, which also
+  /// serves the event tap, and a timeout set on one element does not carry to the elements
+  /// read from it, so each read bounds its own. A hung app would otherwise hold both for the
+  /// default six seconds per read.
+  private static func copy<T>(_ attribute: String, of element: AXUIElement) -> T? {
+    AXUIElementSetMessagingTimeout(element, 0.25)
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success
+    else { return nil }
+    return value as? T
   }
 }
