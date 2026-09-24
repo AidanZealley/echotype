@@ -1,6 +1,6 @@
 # Overlay implementation plan
 
-Status: in progress; workstream 1 accepted.
+Status: in progress; workstreams 1 and 2 accepted.
 
 ## Orchestration record
 
@@ -15,7 +15,7 @@ Status: in progress; workstream 1 accepted.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Live session seam](01-live-session-seam.md) | Approved spec | Accepted |
-| 2 | [Overlay panel and variants](02-overlay-panel-and-variants.md) | 1 | Not started |
+| 2 | [Overlay panel and variants](02-overlay-panel-and-variants.md) | 1 | Accepted |
 | 3 | [Live overlay](03-live-overlay.md) | 1, 2 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Not started |
 
@@ -107,7 +107,7 @@ Held by the specification and not open to a workstream:
 
 - Owning workstream: 2
 - Placement: after the first implementation pass, before the independent review
-- Status: `Pending`
+- Status: `Passed`
 - Candidate: the uncommitted workstream 2 state, launched with
   `./scripts/run.sh --hud-demo`
 - Resume condition: Aidan names one variant, optionally with adjustments. If he asks for
@@ -161,4 +161,5 @@ None open.
 | 2026-09-24 | Failures and a missing API key show inline in the overlay. The menu bar's state line goes back to showing only the session state | The overlay is the error surface the specification describes. The menu carried failures only while nothing else could ([0006](../../decisions/0006-api-key-and-error-surface.md)) | Pending approval of this workflow | 3 |
 | 2026-09-24 | Escape during the starting state is consumed and abandons the start: the microphone is released and no socket opens | The pill is visible from the first press, so Escape has an obvious target. Resolves the open item in [0007](../../decisions/0007-known-gaps.md) | Pending approval of this workflow | 3 |
 | 2026-09-24 | `SessionMachine` owns the session's one transcript assembler. `STTClient` keeps the socket protocol (holding audio until `transcript.created`, send ordering, the closing messages) and stops assembling | The machine already decodes every frame to drive pausing. Mirroring the client's assembler would hold the same transcript twice | Pending approval of this workflow | 1 |
+| 2026-09-24 | The pill follows variant B rather than the specification's single row: a slim strip holding the bar meter, the phase word and elapsed time above a larger transcript, the hint at the foot, plus blue level feedback as a glow inside the pill, clipped by its edge: a rolling wave hanging from the top edge whose depth follows the level, at opacity 0.4 listening, 0.25 starting and 0.15 paused. This departs from the Overlay section's single row and its "not decorative waveform art" | Aidan's final choice at gate G1 (E1 to E4). The specification's contents all remain, including the bar meter; the opacity was left to the lead and may be tuned at G2 | Aidan, G1 attempts 1 to 4 | 2, 3 |
 | 2026-09-24 | The `transcript.done` fallback from [0003](../../decisions/0003-transcript-assembly.md) commits the whole unfinished utterance (its `is_final` runs plus the provisional tail) rather than only the latest run. 0003's Consequences line is stale and must be rewritten when this milestone retires into decision records | Simpler than preserving the old fragment behaviour and cannot insert a fragment. The fallback has never fired under the observed protocol | Workstream 1 lead | 1 |
