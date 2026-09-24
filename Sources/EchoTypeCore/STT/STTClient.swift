@@ -2,13 +2,14 @@ import Foundation
 
 /// Drives one transcription session over a `WebSocketTransport`.
 ///
-/// Usage is: start `run()` in its own task, feed it audio, then call `finish()` and await the
-/// text `run()` returns. Audio handed over before the endpoint sends `transcript.created` is
-/// held and forwarded the moment it arrives, so the first words of an utterance are not lost
-/// to the connection handshake.
+/// Usage is: start `run()` in its own task, feed it audio, then call `finish()`. Audio handed
+/// over before the endpoint sends `transcript.created` is held and forwarded the moment it
+/// arrives, so the first words of an utterance are not lost to the connection handshake.
+///
+/// The client keeps the protocol and nothing else. The transcript belongs to whoever reads the
+/// events, which in a session is `SessionMachine`.
 public actor STTClient {
   private let transport: any WebSocketTransport
-  private var assembler = TranscriptAssembler()
   private var isCreated = false
   private var queuedAudio: [Data] = []
   /// The most recently enqueued send. Each new send waits for it before touching the socket,
@@ -20,18 +21,12 @@ public actor STTClient {
     self.transport = transport
   }
 
-  /// The committed transcript so far. Readable after `run()` throws, because a session that
-  /// loses its socket should still insert the segments it finalised.
-  public var text: String { assembler.text }
-
-  /// Consumes the server stream until `transcript.done` or the socket closing, and returns the
-  /// final text. Throws `STTError` for an `error` event or a transport failure, and the
-  /// decoder's error for a frame that is not decodable JSON. An unrecognised event `type` is
-  /// ignored instead. Whatever was finalised before a throw stays readable through `text`.
-  public func run() async throws -> String {
+  /// Consumes the server stream until `transcript.done` or the socket closing. Throws
+  /// `STTError` for an `error` event or a transport failure, and the decoder's error for a frame
+  /// that is not decodable JSON. An unrecognised event `type` is ignored instead.
+  public func run() async throws {
     for try await message in transport.messages() {
       guard let event = try STTEvent.decode(message) else { continue }
-      assembler.apply(event)
 
       switch event {
       case .created:
@@ -46,12 +41,11 @@ public actor STTClient {
       case .error(let error):
         throw STTError.server(error)
       case .done:
-        return assembler.text
+        return
       case .partial:
         break
       }
     }
-    return assembler.text
   }
 
   /// Hands one chunk of 16 kHz mono Int16 audio to the endpoint, or holds it until the session
