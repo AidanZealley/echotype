@@ -1,6 +1,6 @@
 # Overlay implementation plan
 
-Status: in progress; workstreams 1 to 3 accepted, final review not started.
+Status: complete; workstreams 1 to 3 and the final review accepted.
 
 ## Orchestration record
 
@@ -17,7 +17,7 @@ Status: in progress; workstreams 1 to 3 accepted, final review not started.
 | 1 | [Live session seam](01-live-session-seam.md) | Approved spec | Accepted |
 | 2 | [Overlay panel and variants](02-overlay-panel-and-variants.md) | 1 | Accepted |
 | 3 | [Live overlay](03-live-overlay.md) | 1, 2 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-3 | Accepted |
 
 ## Why these boundaries
 
@@ -167,3 +167,4 @@ None open.
 | 2026-09-24 | A click on the pill commits a running session and does nothing otherwise, so clicking a red error pill does not start a session where Opt+D would. The specification says a click "does the same as Opt+D" | A click should never open the microphone. The packet's Outcome ("Clicking it commits") and criterion 6 describe a commit, and a click during a fade or on an error would otherwise start a session. Aidan saw it at G2 and asked; the lead confirmed it is intended | Workstream 3 lead, seen by Aidan at G2 | 3 |
 | 2026-09-24 | The pill switches from starting to listening on the first tap buffer delivered to the main actor, not the first 100ms chunk | The pump does not read the stream until the session is listening, so the first chunk is not observable without a relay. The buffer is at most about 85ms earlier | Workstream 3 lead | 3 |
 | 2026-09-24 | The error pill truncates its message from the end at two lines; the transcript still truncates from the left | Aidan saw an error lose its start at G2 (E5). An error's start says what failed | Workstream 3 lead, on Aidan's G2 report | 3 |
+| 2026-09-24 | [0006](../../decisions/0006-api-key-and-error-surface.md)'s bullet on the menu's state line carrying failures is stale, since failures now show in the pill. Rewrite it with 0003's Consequences line when this milestone retires into decision records | Decision records are rewritten at retirement, not mid-workflow | Final review lead | Final |
