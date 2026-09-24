@@ -79,24 +79,29 @@ private struct LevelMeter: View {
 }
 
 /// Settled text solid and provisional text dimmed, at most two lines, losing its beginning
-/// rather than the words just spoken. An error replaces it in red. With no text yet it keeps
-/// one empty line, since the strip above already names the phase.
+/// rather than the words just spoken. An error replaces it in red, also at most two lines but
+/// losing its end, because its start says what failed. With no text yet it keeps one empty
+/// line, since the strip above already names the phase.
 private struct Transcript: View {
   let pill: Pill
 
   var body: some View {
-    TailLayout {
-      content.fixedSize(horizontal: false, vertical: true)
-      Text(verbatim: "A\nA").hidden()
+    Group {
+      if case .error(let message) = pill.phase {
+        Text(message).foregroundStyle(.red).lineLimit(2)
+      } else {
+        TailLayout {
+          text.fixedSize(horizontal: false, vertical: true)
+          Text(verbatim: "A\nA").hidden()
+        }
+        .clipped()
+      }
     }
-    .clipped()
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  @ViewBuilder private var content: some View {
-    if case .error(let message) = pill.phase {
-      Text(message).foregroundStyle(.red)
-    } else if pill.settled.isEmpty && pill.provisional.isEmpty {
+  @ViewBuilder private var text: some View {
+    if pill.settled.isEmpty && pill.provisional.isEmpty {
       Text(verbatim: " ")
     } else {
       let gap = pill.settled.isEmpty || pill.provisional.isEmpty ? "" : " "

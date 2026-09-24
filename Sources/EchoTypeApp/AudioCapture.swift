@@ -1,4 +1,6 @@
 import AVFoundation
+import Accelerate
+import EchoTypeCore
 import Synchronization
 
 /// The microphone, as a dictation session needs it: 16 kHz mono little-endian Int16, in chunks
@@ -21,6 +23,13 @@ import Synchronization
     /// `AVAudioEngine` would not start, or audio could not be converted.
     case engineFailed(any Error)
   }
+
+  /// The input level from 0 to 1, for the overlay's meter. Updated from every tap buffer while
+  /// capturing, and zero whenever capture is stopped.
+  private(set) var level = 0.0
+  /// Called on the main actor each time a tap buffer updates `level`, roughly every 100ms. The
+  /// first call after `start()` means audio is flowing.
+  var onLevel: @MainActor () -> Void = {}
 
   private let chunker = Chunker()
   private var engine: AVAudioEngine?
@@ -46,6 +55,7 @@ import Synchronization
     // to one tap buffer, about 100ms) is not sent.
     chunker.end()
     closeDevice()
+    level = 0
   }
 
   /// Asks for microphone access the first time, then opens the default input device. Does
@@ -60,7 +70,9 @@ import Synchronization
     let input = engine.inputNode
     let format = input.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else { throw .noInputDevice }
-    chunker.install(on: input, format: format)
+    chunker.install(on: input, format: format) { [weak self] level in
+      Task { @MainActor in self?.levelArrived(level) }
+    }
     do {
       try engine.start()
     } catch {
@@ -76,6 +88,13 @@ import Synchronization
     }
   }
 
+  private func levelArrived(_ level: Double) {
+    // A buffer measured just before `stop()` can arrive after it.
+    guard chunker.isDelivering else { return }
+    self.level = level
+    onLevel()
+  }
+
   /// The default input device changed, or the one in use went away. The engine has already
   /// stopped. Reopen it on whatever the default is now, but only for a session in progress.
   private func deviceChanged() {
@@ -86,6 +105,7 @@ import Synchronization
         try await openDevice()
       } catch {
         chunker.end(throwing: error)
+        level = 0
         return
       }
       // The session may have ended while the device was reopening.
@@ -124,12 +144,16 @@ private final class Chunker: Sendable {
 
   var isDelivering: Bool { state.withLock { $0.continuation != nil } }
 
-  /// Installs the tap. Nonisolated so the tap block is too: a block formed on the main actor
-  /// would trap when the engine calls it from its audio thread.
-  func install(on input: AVAudioInputNode, format: AVAudioFormat) {
+  /// Installs the tap, which hands `onLevel` each buffer's level while delivering. Nonisolated
+  /// so the tap block is too: a block formed on the main actor would trap when the engine calls
+  /// it from its audio thread.
+  func install(
+    on input: AVAudioInputNode, format: AVAudioFormat,
+    onLevel: @escaping @Sendable (Double) -> Void
+  ) {
     // The buffer size is a hint the engine may ignore; `receive` chunks whatever arrives.
     input.installTap(onBus: 0, bufferSize: 4_096, format: format) { [self] buffer, _ in
-      receive(buffer)
+      if let level = receive(buffer) { onLevel(level) }
     }
   }
 
@@ -150,9 +174,11 @@ private final class Chunker: Sendable {
     }
   }
 
-  private func receive(_ buffer: AVAudioPCMBuffer) {
+  /// Delivers the buffer and returns its level, or nil when not delivering or on failure.
+  private func receive(_ buffer: AVAudioPCMBuffer) -> Double? {
     state.withLock { state in
-      guard let continuation = state.continuation else { return }
+      guard let continuation = state.continuation else { return nil }
+      let level = Overlay.level(rms: Self.rms(of: buffer))
       do {
         if state.converter?.inputFormat != buffer.format {
           state.converter = try makeConverter(from: buffer.format)
@@ -161,7 +187,7 @@ private final class Chunker: Sendable {
       } catch {
         continuation.finish(throwing: AudioCapture.Failure.engineFailed(error))
         state = State()
-        return
+        return nil
       }
       var sent = 0
       while state.pending.count - sent >= Self.chunkBytes {
@@ -171,7 +197,25 @@ private final class Chunker: Sendable {
       // A fresh copy of the tail. `removeFirst` on `Data` keeps the consumed bytes allocated,
       // so the buffer would grow for the length of the session.
       if sent > 0 { state.pending = Data(state.pending[sent...]) }
+      return level
     }
+  }
+
+  /// The loudest channel's RMS, measured on the buffer as the device delivers it. The loudest
+  /// rather than the first, because conversion mixes every channel in and the meter should
+  /// show whatever is being sent.
+  private static func rms(of buffer: AVAudioPCMBuffer) -> Float {
+    guard let channels = buffer.floatChannelData else { return 0 }
+    var loudest: Float = 0
+    for channel in 0..<Int(buffer.format.channelCount) {
+      // An interleaved buffer has one pointer, with the channels `stride` apart.
+      let samples =
+        buffer.format.isInterleaved ? channels[0] + channel : channels[channel]
+      var rms: Float = 0
+      vDSP_rmsqv(samples, buffer.stride, &rms, vDSP_Length(buffer.frameLength))
+      loudest = max(loudest, rms)
+    }
+    return loudest
   }
 
   private func makeConverter(from input: AVAudioFormat) throws -> AVAudioConverter {
