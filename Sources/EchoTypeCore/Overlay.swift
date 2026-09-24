@@ -7,8 +7,8 @@ public enum Overlay {
   /// Maps a buffer's RMS amplitude, with full scale at 1, onto the level meter's 0 to 1.
   ///
   /// Linear in decibels from -50 dBFS, about a quiet room through a laptop microphone, to
-  /// -20 dBFS, loud speech close up. Ordinary speech lands around the middle and room noise
-  /// barely lifts the meter off zero.
+  /// -20 dBFS, loud speech close up. Ordinary speech, about -30 dBFS, lands at about two
+  /// thirds and room noise barely lifts the meter off zero.
   public static func level(rms: Float) -> Double {
     let decibels = 20 * log10(Double(rms))
     return min(max((decibels + 50) / 30, 0), 1)
