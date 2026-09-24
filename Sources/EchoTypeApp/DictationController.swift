@@ -40,7 +40,7 @@ import Observation
   private var errorFade: Task<Void, Never>?
 
   init() {
-    audio.onLevel = { [weak self] in self?.levelChanged() }
+    audio.onLevel = { [weak self] level in self?.levelChanged(level) }
     let monitor = HotkeyMonitor(
       hotkey: settings.hotkey,
       onHotkey: { [weak self] in self?.hotkeyPressed() },
@@ -215,9 +215,9 @@ import Observation
   }
 
   /// A tap buffer arrived: audio is flowing, so a starting pill is now listening.
-  private func levelChanged() {
+  private func levelChanged(_ level: Double) {
     updatePill { pill in
-      pill.level = audio.level
+      pill.level = level
       if pill.phase == .starting { pill.phase = .listening }
     }
   }
