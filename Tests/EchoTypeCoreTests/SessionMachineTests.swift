@@ -131,21 +131,40 @@ final class TestClock: SessionClock, @unchecked Sendable {
   }
 }
 
-/// Reads the session's transitions in order. Awaiting the next transition is how these tests
-/// synchronise with the session's own timeline.
-actor StateLog {
-  private var buffered: [SessionMachine.State] = []
-  private var waiter: CheckedContinuation<SessionMachine.State?, Never>?
+/// Reads the session's snapshots in order. Awaiting the next one is how these tests synchronise
+/// with the session's own timeline.
+actor SnapshotLog {
+  private var buffered: [SessionMachine.Snapshot] = []
+  private var waiter: CheckedContinuation<SessionMachine.Snapshot?, Never>?
   private var isFinished = false
+  /// The most recent snapshot read, whether by `snapshot()` or `next()`.
+  private(set) var latest: SessionMachine.Snapshot?
 
-  init(_ states: AsyncStream<SessionMachine.State>) {
-    Task { await self.consume(states) }
+  init(_ snapshots: AsyncStream<SessionMachine.Snapshot>) {
+    Task { await self.consume(snapshots) }
   }
 
+  /// The next snapshot, whatever changed.
+  func snapshot() async -> SessionMachine.Snapshot? {
+    let next: SessionMachine.Snapshot?
+    if !buffered.isEmpty {
+      next = buffered.removeFirst()
+    } else if isFinished {
+      next = nil
+    } else {
+      next = await withCheckedContinuation { waiter = $0 }
+    }
+    if let next { latest = next }
+    return next
+  }
+
+  /// The next state the session enters, passing over snapshots that only changed its text.
   func next() async -> SessionMachine.State? {
-    if !buffered.isEmpty { return buffered.removeFirst() }
-    if isFinished { return nil }
-    return await withCheckedContinuation { waiter = $0 }
+    let current = latest?.state
+    while let next = await snapshot() {
+      if next.state != current { return next.state }
+    }
+    return nil
   }
 
   /// Every transition still to come. The stream finishes with the session, so this returns once
@@ -158,13 +177,13 @@ actor StateLog {
     return states
   }
 
-  private func consume(_ states: AsyncStream<SessionMachine.State>) async {
-    for await state in states {
+  private func consume(_ snapshots: AsyncStream<SessionMachine.Snapshot>) async {
+    for await snapshot in snapshots {
       if let waiter {
         self.waiter = nil
-        waiter.resume(returning: state)
+        waiter.resume(returning: snapshot)
       } else {
-        buffered.append(state)
+        buffered.append(snapshot)
       }
     }
     isFinished = true
@@ -178,11 +197,11 @@ struct SessionMachineTests {
   let transport = ScriptedTransport()
   let clock = TestClock()
   let session: SessionMachine
-  let log: StateLog
+  let log: SnapshotLog
 
   init() {
     session = SessionMachine(transport: transport, settings: Settings(), clock: clock)
-    log = StateLog(session.states)
+    log = SnapshotLog(session.snapshots)
   }
 
   /// Starts the session and waits until it is listening, which is also what proves its message
@@ -409,5 +428,97 @@ struct SessionMachineTests {
     #expect(await running.value == .nothing)
     // No `inserting`, so the macOS layer is never asked to paste an empty string.
     #expect(await log.rest() == [.idle])
+  }
+
+  @Test("Provisional text is shown, then superseded by the run it settles into")
+  func provisionalTextIsSuperseded() async {
+    let running = await start()
+    await transport.emit(Fixture.created)
+
+    await transport.emit(Fixture.partial("tan stock"))
+    #expect(await log.snapshot() == .init(state: .listening, settled: "", provisional: "tan stock"))
+    await transport.emit(Fixture.partial("tanstack is", isFinal: true))
+    #expect(
+      await log.snapshot() == .init(state: .listening, settled: "tanstack is", provisional: ""))
+
+    await session.cancel()
+    _ = await running.value
+  }
+
+  @Test("Settled text accumulates across speech_final segments and is what gets inserted")
+  func settledTextAccumulatesAcrossSegments() async {
+    let running = await start()
+    await transport.emit(Fixture.created)
+
+    await transport.emit(Fixture.partial("install pnpm"))
+    // The recorded twin: an `is_final` frame, then the same frame with `speech_final` as well.
+    await transport.emit(Fixture.partial("install pnpm", isFinal: true))
+    await transport.emit(Fixture.partial("install pnpm", isFinal: true, speechFinal: true))
+    await transport.emit(Fixture.partial("then add"))
+    await transport.emit(Fixture.partial("then add shadcn", isFinal: true, speechFinal: true))
+
+    var shown: [SessionMachine.Snapshot] = []
+    for _ in 0..<4 { if let next = await log.snapshot() { shown.append(next) } }
+    #expect(
+      shown == [
+        .init(state: .listening, settled: "", provisional: "install pnpm"),
+        .init(state: .listening, settled: "install pnpm", provisional: ""),
+        .init(state: .listening, settled: "install pnpm", provisional: "then add"),
+        .init(state: .listening, settled: "install pnpm then add shadcn", provisional: ""),
+      ])
+
+    await session.trigger()
+    await transport.emit(Fixture.done)
+    #expect(await running.value == .insert("install pnpm then add shadcn"))
+  }
+
+  @Test("Settled text survives pause and resume cycles")
+  func settledTextSurvivesPauses() async {
+    let running = await start()
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("one", isFinal: true, speechFinal: true))
+
+    await clock.advance(by: 10)
+    #expect(await log.next() == .paused)
+    #expect(await log.latest == .init(state: .paused, settled: "one", provisional: ""))
+
+    await transport.emit(Fixture.partial("tw"))
+    #expect(await log.next() == .listening)
+    #expect(await log.latest == .init(state: .listening, settled: "one", provisional: "tw"))
+    await transport.emit(Fixture.partial("two", isFinal: true, speechFinal: true))
+
+    await clock.advance(by: 10)
+    #expect(await log.next() == .paused)
+    #expect(await log.latest == .init(state: .paused, settled: "one two", provisional: ""))
+
+    await transport.emit(Fixture.partial("three", isFinal: true, speechFinal: true))
+    #expect(await log.next() == .listening)
+    #expect(
+      await log.latest == .init(state: .listening, settled: "one two three", provisional: ""))
+
+    await session.cancel()
+    _ = await running.value
+  }
+
+  @Test("The last snapshot carries the last text")
+  func lastSnapshotCarriesTheText() async {
+    let running = await start()
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("said and done", speechFinal: true))
+
+    await session.trigger()
+    #expect(await log.next() == .finalizing)
+    // What `finalize` resolves the tail into arrives while the pill shows transcribing.
+    await transport.emit(Fixture.partial("then some"))
+    #expect(
+      await log.snapshot()
+        == .init(state: .finalizing, settled: "said and done", provisional: "then some"))
+    await transport.emit(Fixture.partial("then some", isFinal: true, speechFinal: true))
+    await transport.emit(Fixture.done)
+
+    #expect(await running.value == .insert("said and done then some"))
+    #expect(await log.rest() == [.inserting, .idle])
+    #expect(
+      await log.latest == .init(state: .idle, settled: "said and done then some", provisional: ""))
   }
 }

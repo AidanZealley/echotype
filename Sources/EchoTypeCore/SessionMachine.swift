@@ -75,12 +75,13 @@ public enum SessionError: Error, Equatable, Sendable {
 /// except the hard cap: quiet only changes what the overlay renders.
 ///
 /// Usage is `run()` in its own task, `send(audio:)` while it lasts, and `trigger()` or
-/// `cancel()` to end it. `run()` returns the session's one outcome, and `states` carries the
-/// transitions an overlay renders.
+/// `cancel()` to end it. `run()` returns the session's one outcome, and `snapshots` carries
+/// what an overlay renders.
 ///
-/// `states` carries no transcript text, because nothing renders it yet. An overlay that wants
-/// live text extends this type rather than reading the socket itself: a WebSocket message is
-/// delivered to exactly one reader, so a second read would take frames away from this one.
+/// The machine holds the session's one transcript: the text it inserts and the text it shows
+/// come from the same assembler. Anything else that wants live text reads `snapshots` rather
+/// than the socket: a WebSocket message is delivered to exactly one reader, so a second read
+/// would take frames away from this one.
 public actor SessionMachine {
   /// The specification's states. `listening` and `paused` differ only in what is rendered;
   /// audio streams in both.
@@ -105,6 +106,23 @@ public actor SessionMachine {
     case failed(text: String, error: SessionError)
   }
 
+  /// What an overlay renders at one moment of the session.
+  public struct Snapshot: Equatable, Sendable {
+    public var state: State
+    /// Committed text plus the settled runs of the current utterance, rendered solid. The
+    /// utterance's `speech_final` text replaces its runs wholesale, so this is not guaranteed
+    /// to only grow at its end.
+    public var settled: String
+    /// The tail the model may still rewrite, rendered dimmed after `settled`.
+    public var provisional: String
+
+    public init(state: State, settled: String, provisional: String) {
+      self.state = state
+      self.settled = settled
+      self.provisional = provisional
+    }
+  }
+
   /// How the message loop ended, which is what decides the outcome.
   private enum Ending {
     case finalised
@@ -123,17 +141,19 @@ public actor SessionMachine {
   private let relay: RelayTransport
   private let client: STTClient
 
-  /// Every state the session enters, in order. Finishes when the session does.
-  public nonisolated let states: AsyncStream<State>
-  private nonisolated let transitions: AsyncStream<State>.Continuation
+  /// A snapshot for every state the session enters and every change to its text, in order.
+  /// Finishes when the session does, and the last snapshot still carries the last text.
+  public nonisolated let snapshots: AsyncStream<Snapshot>
+  private nonisolated let publisher: AsyncStream<Snapshot>.Continuation
+  private var published: Snapshot?
 
   private var state: State = .idle
+  private var transcript = TranscriptAssembler()
 
   private var startedAt: TimeInterval = 0
   private var lastSpeechAt: TimeInterval = 0
   private var heardSpeech = false
   private var ending: Ending?
-  private var clientTask: Task<String, any Error>?
 
   public init(transport: any WebSocketTransport, settings: Settings, clock: any SessionClock) {
     self.transport = transport
@@ -142,18 +162,18 @@ public actor SessionMachine {
     let relay = RelayTransport(base: transport)
     self.relay = relay
     self.client = STTClient(transport: relay)
-    (states, transitions) = AsyncStream.makeStream(of: State.self)
+    (snapshots, publisher) = AsyncStream.makeStream(of: Snapshot.self)
   }
 
   /// Runs the session to its one outcome.
   ///
-  /// Reads the socket itself and hands every message on to the client, because the client
-  /// exposes only the final text while pausing needs to see the partials.
+  /// Reads the socket itself and hands every message on to the client, which keeps the protocol
+  /// while the machine keeps the transcript and decides when to pause.
   public func run() async -> Outcome {
     guard state == .idle else { return .nothing }
     begin()
     let ending = await readUntilEnd()
-    return await conclude(ending)
+    return conclude(ending)
   }
 
   /// Hands one chunk of audio to the endpoint. Audio streams while paused too, since pausing is
@@ -172,7 +192,7 @@ public actor SessionMachine {
   /// Escape: discard everything.
   public func cancel() {
     guard isActive else { return }
-    ending = .cancelled
+    decide(.cancelled)
     transition(to: .cancelled)
     clock.cancel()
     transport.close()
@@ -180,18 +200,27 @@ public actor SessionMachine {
 
   /// Whether the session still accepts input: it is streaming, and nothing has ended it yet.
   ///
-  /// `ending` is set the moment the outcome is decided, including before `conclude` suspends
-  /// waiting for the client, so a late `trigger()` or `cancel()` cannot land behind a session
-  /// that is already on its way out.
+  /// `ending` is set the moment the outcome is decided, so a late `trigger()` or `cancel()`
+  /// cannot land behind a session that is already on its way out.
   private var isActive: Bool {
     ending == nil && (state == .listening || state == .paused)
+  }
+
+  /// Records how the session ends. The first ending decided wins: closing the socket does not
+  /// discard frames already received, so a `transcript.done` or `error` read after Escape must
+  /// not turn the cancel into an insertion.
+  private func decide(_ ending: Ending) {
+    guard self.ending == nil else { return }
+    self.ending = ending
   }
 
   private func begin() {
     startedAt = clock.now
     lastSpeechAt = startedAt
     transition(to: .listening)
-    clientTask = Task { [client] in try await client.run() }
+    // The client's own failures reach the machine as the frames or socket errors behind them,
+    // so its result is not needed.
+    Task { [client] in _ = try? await client.run() }
     reschedule()
   }
 
@@ -217,6 +246,9 @@ public actor SessionMachine {
   }
 
   private func observe(_ event: STTEvent) {
+    // Text is kept in every state, including the partial `finalize` resolves into.
+    transcript.apply(event)
+    defer { publish() }
     switch event {
     case .partial(let partial):
       // Speech only moves the silence and pause bookkeeping while the session is streaming.
@@ -231,9 +263,9 @@ public actor SessionMachine {
       // Text reaches the target app only on an explicit trigger or the hard cap, so a `done`
       // arriving without one is the socket ending the transcript on its own. The accumulated
       // text surfaces as a failure rather than as an insertion nobody asked for.
-      ending = state == .finalizing ? .finalised : .closed
+      decide(state == .finalizing ? .finalised : .closed)
     case .error(let serverError):
-      ending = .failed(STTError.server(serverError))
+      decide(.failed(STTError.server(serverError)))
     case .created:
       break
     }
@@ -286,7 +318,7 @@ public actor SessionMachine {
     } catch {
       // The socket is gone, so `transcript.done` will never arrive. End the loop and keep
       // whatever was finalised. `conclude` cancels the wake-up still pending from `listening`.
-      ending = .failed(error)
+      decide(.failed(error))
       transport.close()
       return
     }
@@ -305,20 +337,18 @@ public actor SessionMachine {
   /// speech.
   private func finalizingDeadlineReached() {
     guard ending == nil, state == .finalizing else { return }
-    ending = .timedOut
+    decide(.timedOut)
     transport.close()
   }
 
-  private func conclude(_ ending: Ending) async -> Outcome {
-    // Recorded before the await below, so a trigger or cancel arriving while the client is
-    // still finishing is rejected rather than transitioning a session that has already ended.
-    self.ending = ending
+  private func conclude(_ ending: Ending) -> Outcome {
+    // Recorded so that a late trigger or cancel is rejected rather than transitioning a session
+    // that has already ended.
+    decide(ending)
     clock.cancel()
     relay.finish()
-    // Closed before awaiting the client, so a client suspended in a send on a socket that has
-    // already failed is unblocked rather than waited on.
     transport.close()
-    let text = await finalText()
+    let text = transcript.text
 
     let outcome: Outcome
     switch ending {
@@ -338,15 +368,8 @@ public actor SessionMachine {
       outcome = .failed(text: text, error: SessionError(error))
       settle(text: text)
     }
-    transitions.finish()
+    publisher.finish()
     return outcome
-  }
-
-  /// The transcript the client assembled, or whatever it had finalised before it threw.
-  private func finalText() async -> String {
-    guard let clientTask else { return "" }
-    if let text = try? await clientTask.value { return text }
-    return await client.text
   }
 
   /// Ends a session that was not cancelled. `inserting` is entered only when there is text, so
@@ -359,7 +382,16 @@ public actor SessionMachine {
   private func transition(to next: State) {
     guard state != next else { return }
     state = next
-    transitions.yield(next)
+    publish()
+  }
+
+  /// Publishes the current snapshot unless it is the one already published.
+  private func publish() {
+    let snapshot = Snapshot(
+      state: state, settled: transcript.settled, provisional: transcript.provisional)
+    guard snapshot != published else { return }
+    published = snapshot
+    publisher.yield(snapshot)
   }
 }
 
