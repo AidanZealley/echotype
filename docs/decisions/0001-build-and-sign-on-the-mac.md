@@ -14,7 +14,9 @@ that a stable signature keeps grants across rebuilds.
 - Sign every build with the self-signed code signing certificate named `EchoType Dev`.
   Its Code Signing trust was set to Always Trust so `security find-identity -v`
   would list it. This certificate choice was replaced by [0014](0014-sign-with-apple-development.md).
-- `scripts/run.sh` is the only build, sign and launch path.
+- `scripts/deploy.sh` is the only build, sign and launch path. `scripts/run.sh` uses it
+  for the development bundle at `.build/EchoType.app` and `scripts/install.sh` for the
+  release bundle at `/Applications/EchoType.app`.
 - The bundle identifier in `Resources/Info.plist` never changes. TCC grants, the
   Keychain item and `UserDefaults` all key off it.
 - Build with Xcode's toolchain (`xcode-select` pointed at Xcode.app). The Command Line

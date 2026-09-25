@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -16,6 +17,21 @@ struct EchoTypeApp: App {
       Task { await PillDemo.run() }
     } else {
       _controller = State(initialValue: DictationController(store: store))
+    }
+    Self.claimLoginItem()
+  }
+
+  /// `SMAppService.mainApp` answers `status` by bundle identifier, but the login item launches
+  /// the copy that last registered it or read its status. An item enabled before install, or
+  /// after opening Settings in the development bundle, points at `.build/EchoType.app`. The
+  /// installed copy registers again at launch while the item is enabled, which points it back
+  /// here. A disabled item stays disabled. The development bundle never claims it at launch.
+  private static func claimLoginItem() {
+    guard Bundle.main.bundlePath == "/Applications/EchoType.app" else { return }
+    Task.detached {
+      let service = SMAppService.mainApp
+      guard service.status == .enabled else { return }
+      try? service.register()
     }
   }
 
