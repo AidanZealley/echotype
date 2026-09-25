@@ -1,20 +1,20 @@
 # Local install implementation plan
 
-Status: draft; implementation has not started.
+Status: in progress.
 
 ## Orchestration record
 
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `codex/install-echotype-v1`
+- Starting commit: `f9820dc`
 - Review command: lead subagents
-- Specification approved at commit: `TBD`
-- Started: `TBD`
+- Specification approved at commit: `f9820dc`
+- Started: 2026-09-25
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Install a signed release app](01-local-install.md) | Approved v1 spec and current settings implementation | Not started |
+| 1 | [Install a signed release app](01-local-install.md) | Approved v1 spec and current settings implementation | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstream 1 and gate G1 | Not started |
 
 ## Why this boundary
@@ -39,7 +39,7 @@ Release bundling, replacement of the installed app and launch-at-login registrat
 
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
-| G1 Installed login behavior | Workstream 1 | After closure, before acceptance | Pending | `/Applications/EchoType.app` built by `install.sh`; record date and verification in packet | The developer confirms enable and disable behavior across real login, or supplies a failure for repair |
+| G1 Installed login behavior | Workstream 1 | After closure, before acceptance | Passed | `/Applications/EchoType.app` built by `install.sh`; record date and verification in packet | The developer confirms enable and disable behavior across real login, or supplies a failure for repair |
 
 ## Escalations
 
@@ -49,4 +49,4 @@ Empty until a lead blocks. Each entry must give the decision or evidence needed,
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-09-25 | `scripts/deploy.sh` added as the shared build, sign and launch step behind `run.sh` and `install.sh`; the specification's file tree lists it | Keeps the plist, bundle, signing identity and stop-before-replace on one path, as the specification's "same code path" requires | Workstream 1 lead | 1 |

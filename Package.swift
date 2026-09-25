@@ -11,8 +11,8 @@ let package = Package(
     // signed bundle and a real socket.
     .target(name: "EchoTypeCore"),
     .testTarget(name: "EchoTypeCoreTests", dependencies: ["EchoTypeCore"]),
-    // Built into a signed .app bundle by scripts/run.sh, which is the only supported way
-    // to launch it.
+    // Built into a signed .app bundle by scripts/deploy.sh, through run.sh for development
+    // or install.sh for /Applications. That is the only supported way to launch it.
     .executableTarget(name: "EchoTypeApp", dependencies: ["EchoTypeCore"]),
   ]
 )
