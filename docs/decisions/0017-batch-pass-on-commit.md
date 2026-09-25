@@ -40,8 +40,8 @@ Only `text` is used.
   [0004](0004-session-lifecycle.md) is unchanged. The pill stays on `Transcribing` with
   the live text during the pass and never shows the batch text. Escape, the hotkey and a
   click on the pill do nothing then, as while finalizing.
-- If batch throws, times out or returns empty text, the live text is inserted and the
-  pill shows no error. The user still gets their words, with the streamed punctuation.
+- If batch throws, times out or returns empty or whitespace-only text, the live text is
+  inserted and the pill shows no error. The user still gets their words, with the streamed punctuation.
 - `BatchTranscriber` limits the whole request to 5 seconds with
   `timeoutIntervalForResource`. A one-minute dictation should take a second or two, so
   the timeout only matters when something has gone wrong. `URLRequest.timeoutInterval`
@@ -50,6 +50,13 @@ Only `text` is used.
   those buffered before `listening`. It is never written to disk and is released once
   the pass and the insertion are done. A minute is about 1.9 MB.
 - The API key read at the start of the session is reused, so the Keychain is read once.
+- Both requests take their keyterms from `STTConnection.keyterms(settings:)`, so the caps
+  on count and length are defined once.
+- The hard cap drops from ten minutes to five. Every capped session now ends in a batch
+  request, and a ten minute recording is about 19 MB, which would most likely time out or
+  be rejected and add 5 seconds before the live text went in. Five minutes (about 9.6 MB)
+  is still far beyond a normal dictation. The amber elapsed time moves from eight minutes
+  to four.
 
 ## Evidence
 
@@ -75,4 +82,8 @@ dictation was not measured.
   parameter would look like the feature doing nothing. Reproduce the request with
   `curl` to find it.
 - The menu bar shows idle during the pass while the pill still shows `Transcribing`.
+- A capped session can still fall back after the full 5 second timeout.
+- If the microphone fails mid-session after some text has settled, the pass runs on the
+  partial recording first, so the red error appears up to 5 seconds late.
+- `endpointing=2000` has not been dictated against since the revert; G1 ran at 5000.
 - Re-transcribing during the session and an LLM clean-up pass are out of scope.
