@@ -1,6 +1,6 @@
 # Local install implementation plan
 
-Status: in progress.
+Status: complete.
 
 ## Orchestration record
 
@@ -15,7 +15,7 @@ Status: in progress.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Install a signed release app](01-local-install.md) | Approved v1 spec and current settings implementation | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstream 1 and gate G1 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstream 1 and gate G1 | Accepted |
 
 ## Why this boundary
 
