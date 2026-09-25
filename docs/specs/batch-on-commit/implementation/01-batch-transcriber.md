@@ -1,6 +1,6 @@
 # Workstream 1: Batch transcriber and setting
 
-Status: not started.
+Status: accepted.
 
 ## Task packet
 
@@ -80,29 +80,95 @@ without `XAI_API_KEY`; do not set it.
 
 ## Implementation handoff
 
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
+- Base commit: `2acb117`
+- Outcome: `BatchTranscriber` (`wav`, `request`, `transcribe`) and `Settings.batchOnCommit` exist
+  as the plan's cross-workstream contracts describe. Nothing in `EchoTypeApp` calls them yet.
+- Files changed: `Sources/EchoTypeCore/STT/BatchTranscriber.swift` (new),
+  `Sources/EchoTypeCore/STT/STTConnection.swift`, `Sources/EchoTypeCore/Settings.swift`,
+  `Tests/EchoTypeCoreTests/BatchTranscriberTests.swift` (new),
+  `Tests/EchoTypeCoreTests/SettingsTests.swift`,
+  `docs/decisions/0010-settings-storage-and-api-key.md`.
+- Decisions:
+  - The caps are shared through a new `public static func STTConnection.keyterms(settings:)
+    -> [String]`, which `streamingURL` now uses too. `maximumKeytermLength` stays `private`.
+  - `BatchTranscriber.timeout` is `internal` (5 s). `transcribe` makes an ephemeral
+    `URLSession` per call and invalidates it with `finishTasksAndInvalidate()`.
+  - A response that is not an `HTTPURLResponse` throws `STTError.unexpectedStatus(0)`.
+  - The multipart boundary is `echotype-<UUID>`; the file part is named `audio.wav` with
+    `Content-Type: audio/wav`.
+  - The pinned payload in `SettingsTests` stores `"batchOnCommit":false`, so it also proves a
+    non-default value decodes. `missingFieldsDefault` checks the absent key decodes to `true`.
+- Verification: `swift build` clean; `swift test` 47 tests passed, `LiveProtocolTests` skipped
+  without `XAI_API_KEY`. Changed Swift files run through `swift format -i`.
+- Known limitations or external checks: `transcribe` has no automated test by design; G1 in
+  workstream 2 proves the live request, including whether batch accepts `keyterm` and
+  `filler_words`.
+- Specification drift: none.
 
 ## Independent review
 
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
+- Reviewer: fresh independent review agent (Claude Opus 5.5), against base `2acb117`.
+- Verdict: accept. No Required findings.
+- Evidence:
+  - `swift build`: build complete. `swift test`: "Test run with 47 tests in 1 suite passed",
+    including `wavReadsBack` and `batchRequestFields`; the existing `STTConnection` streaming
+    URL tests still pass after the keyterm refactor.
+  - `swift format lint` on the five changed Swift files: no diagnostics.
+  - AC1: `BatchTranscriber.swift:12-31` writes RIFF/`WAVEfmt `/`data` with 16000 Hz, 1 channel,
+    16 bits, then `header + pcm`. `BatchTranscriberTests.swift:10-19` checks 44 + count, the
+    unchanged suffix, and `WAVRecording` sample rate, channels and samples, including
+    `.max`/`.min`.
+  - AC2: `BatchTranscriber.swift:37-60` builds `POST https://api.x.ai/v1/stt`, headers from
+    `STTConnection.headers(apiKey:)`, one boundary shared by header and body, fields in order
+    `format`, `filler_words`, `language`, `keyterm`..., then `file`. The test parses the body
+    with the header's boundary and checks field order and values, the 100-term and 50-character
+    caps (`t97` last, `x` * 50), and that `file` is last with the WAV unchanged.
+  - AC3: `BatchTranscriber.swift:71-82` uses an ephemeral session with
+    `timeoutIntervalForResource = timeout` (5), maps any non-2xx (and a non-HTTP response, as 0)
+    to `STTError(httpStatus:)`, and decodes `text`. It matches the plan's contract signature,
+    `public` on a `public enum`.
+  - AC4: `Settings.swift:88-109,123,136-137,146` adds the field with default `true`, the
+    coding key, an independent `try? decodeIfPresent ?? defaults` decode and an unconditional
+    encode. `SettingsTests.swift` pins `"batchOnCommit":false`, round-trips `false`, and
+    `missingFieldsDefault` asserts the absent key gives `true`.
+  - AC5: decision 0010 lines 15-18 list `batchOnCommit` among the stored keys.
+  - Boundaries: nothing in `Sources/EchoTypeApp` changed; `streamingURL` emits the same query
+    items in the same order (the keyterm mapping only moved into `keyterms(settings:)`); no
+    network stub or live test was added.
+- Required findings: none.
+- Optional observations:
+  - O1. `STTConnection.keyterms(settings:)` is a new `public` function where the packet
+    suggested widening `maximumKeytermLength` (`01-batch-transcriber.md`, Scope: "Widen
+    `maximumKeytermLength` from `private` if needed rather than copying the number"). It keeps
+    the caps in one place as the plan's contract requires and removes the duplicate mapping,
+    so it satisfies the intent; recorded only so the lead can note it is not drift.
+  - O2. `Settings.swift:114` says "Only the fields the settings window edits are persisted".
+    `batchOnCommit` has no control until workstream 2 adds the toggle, so the comment is briefly
+    ahead of the code. No change needed if workstream 2 lands as planned.
+- Questions: none.
 
 ## Resolution
 
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
+- Finding dispositions:
+  - O1 rejected as a change, accepted as the design. `STTConnection.keyterms(settings:)` keeps
+    both caps in `STTConnection` and gives both requests one mapping, which meets the plan's
+    contract better than exposing the length constant. Not drift.
+  - O2 no change. The toggle lands in workstream 2, which makes the comment true again.
+  - No Required findings, so the remediation pass was skipped.
+- Simplification/deletion pass: the lead read the whole diff. The old keyterm mapping in
+  `streamingURL` was replaced rather than duplicated; nothing else is left over.
+- Final verification: `swift build` clean; `swift test` 47 tests passed, `LiveProtocolTests`
+  skipped without `XAI_API_KEY`.
 
 ## Closure review
 
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
+- Reviewer: fresh closure review agent (Claude Opus 5.5), against base `2acb117`.
+- Verdict: accept. No finding was accepted for remediation, so there were no fixes to check. The
+  uncommitted diff is the one the independent review saw and still meets acceptance criteria
+  1 to 6.
+- Evidence: `swift build` complete; `swift test` "Test run with 47 tests in 1 suite passed",
+  including `wavReadsBack` and `batchRequestFields`. The `transcribe` signature, its throwing
+  behaviour, the internal 5 second constant, `Settings.batchOnCommit` and the shared
+  `STTConnection.keyterms(settings:)` match the plan's cross-workstream contracts. Nothing in
+  `Sources/EchoTypeApp` changed.
+- Remaining required findings: none.

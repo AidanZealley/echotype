@@ -8,6 +8,12 @@ public enum STTConnection {
   public static let maximumKeyterms = 100
   private static let maximumKeytermLength = 50
 
+  /// The settings' keyterms under the endpoint's caps. The streaming URL and the batch request
+  /// both send these.
+  public static func keyterms(settings: Settings) -> [String] {
+    settings.keyterms.prefix(maximumKeyterms).map { String($0.prefix(maximumKeytermLength)) }
+  }
+
   /// `endpointing` is deliberately far above the 400ms default: utterance boundaries are
   /// controlled by the hotkey, and the default would chop a prompt into fragments every time
   /// the speaker pauses to think. `format=true` punctuates each utterance on its own, so every
@@ -28,9 +34,7 @@ public enum STTConnection {
         URLQueryItem(name: "format", value: "true"),
         URLQueryItem(name: "language", value: settings.language),
       ]
-      + settings.keyterms.prefix(maximumKeyterms).map { term in
-        URLQueryItem(name: "keyterm", value: String(term.prefix(maximumKeytermLength)))
-      }
+      + keyterms(settings: settings).map { URLQueryItem(name: "keyterm", value: $0) }
     guard let url = components.url else {
       preconditionFailure("The streaming URL is built from constants and cannot be invalid")
     }

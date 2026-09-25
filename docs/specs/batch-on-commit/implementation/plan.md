@@ -4,17 +4,17 @@ Status: draft; implementation has not started.
 
 ## Orchestration record
 
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `feat/batch-on-commit`
+- Starting commit: `2acb117`
 - Review command: `lead subagents`
 - Specification approved at commit: `18bd0c9`
-- Started: `TBD`
+- Started: `2026-09-25`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Batch transcriber and setting](01-batch-transcriber.md) | Approved spec | Not started |
+| 1 | [Batch transcriber and setting](01-batch-transcriber.md) | Approved spec | Accepted |
 | 2 | [Insert the batch text on stop](02-insert-batch-text.md) | 1 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G1 | Not started |
 

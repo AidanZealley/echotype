@@ -8,7 +8,8 @@ func settingsRoundTrip() {
     hotkey: .controlOptionD,
     keyterms: ["shadcn", "TanStack Start"],
     language: "en-GB",
-    inputDeviceID: "BuiltInMicrophoneDevice"
+    inputDeviceID: "BuiltInMicrophoneDevice",
+    batchOnCommit: false
   )
 
   #expect(Settings(decoding: settings.encoded()) == settings)
@@ -22,7 +23,7 @@ func settingsRoundTrip() {
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice"}
+    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","batchOnCommit":false}
     """#.utf8)
 
   #expect(
@@ -31,7 +32,8 @@ func storedValueDecodes() {
         hotkey: .controlOptionD,
         keyterms: ["shadcn", "TanStack Start"],
         language: "en-GB",
-        inputDeviceID: "BuiltInMicrophoneDevice"
+        inputDeviceID: "BuiltInMicrophoneDevice",
+        batchOnCommit: false
       )
   )
   #expect(
@@ -43,6 +45,7 @@ func missingFieldsDefault() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6}}"#.utf8)
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
+  #expect(Settings(decoding: stored).batchOnCommit)
 }
 
 @Test("Unreadable data decodes to the defaults")
