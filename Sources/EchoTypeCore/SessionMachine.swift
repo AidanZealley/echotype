@@ -1,57 +1,5 @@
 import Foundation
 
-/// The session's only source of time, injected so that tests move time forward explicitly
-/// instead of waiting.
-///
-/// A session needs one wake-up at a time: the silence timeout while listening, and the hard cap
-/// once it is paused or once silence has already fired. Scheduling replaces whatever was
-/// pending, so there is no timer identity to track on either side of the seam.
-public protocol SessionClock: Sendable {
-  /// Seconds on a monotonic timeline. Only differences are meaningful.
-  var now: TimeInterval { get }
-
-  /// Runs `fire` when the clock reaches `deadline`, replacing any wake-up scheduled before it.
-  func schedule(at deadline: TimeInterval, fire: @Sendable @escaping () async -> Void)
-
-  /// Cancels the pending wake-up, if any.
-  func cancel()
-}
-
-/// The clock a real session runs on.
-///
-/// Time is `systemUptime` rather than a date, so a session is unaffected by the wall clock
-/// moving under it.
-public final class SystemClock: SessionClock, @unchecked Sendable {
-  private let lock = NSLock()
-  private var pending: Task<Void, Never>?
-
-  public init() {}
-
-  public var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
-
-  public func schedule(at deadline: TimeInterval, fire: @Sendable @escaping () async -> Void) {
-    let delay = max(0, deadline - now)
-    let task = Task {
-      try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-      guard !Task.isCancelled else { return }
-      await fire()
-    }
-    lock.lock()
-    let previous = pending
-    pending = task
-    lock.unlock()
-    previous?.cancel()
-  }
-
-  public func cancel() {
-    lock.lock()
-    let previous = pending
-    pending = nil
-    lock.unlock()
-    previous?.cancel()
-  }
-}
-
 /// Why a session ended badly, in the form the overlay has to render.
 public enum SessionError: Error, Equatable, Sendable {
   /// The endpoint reported a failure, or the client could not read the stream.
@@ -393,40 +341,4 @@ public actor SessionMachine {
     published = snapshot
     publisher.yield(snapshot)
   }
-}
-
-/// The transport `STTClient` sees: messages the session has already read, and sends passed
-/// straight through to the real socket.
-private final class RelayTransport: WebSocketTransport {
-  private let base: any WebSocketTransport
-  private let stream: AsyncThrowingStream<String, any Error>
-  private let continuation: AsyncThrowingStream<String, any Error>.Continuation
-
-  init(base: any WebSocketTransport) {
-    self.base = base
-    (stream, continuation) = AsyncThrowingStream.makeStream(of: String.self)
-  }
-
-  func deliver(_ message: String) {
-    continuation.yield(message)
-  }
-
-  func finish() {
-    continuation.finish()
-  }
-
-  func send(binary: Data) async throws {
-    try await base.send(binary: binary)
-  }
-
-  func send(text: String) async throws {
-    try await base.send(text: text)
-  }
-
-  func messages() -> AsyncThrowingStream<String, any Error> {
-    stream
-  }
-
-  /// The session owns the socket's lifetime, so a client teardown is not one.
-  func close() {}
 }
