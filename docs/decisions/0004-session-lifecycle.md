@@ -16,7 +16,7 @@ has to reach the user without losing text they already spoke.
   including `finalize` and `audio.done`, is chained behind the previous one. That
   keeps closing messages from overtaking audio, surfaces a failed chunk to its caller
   and gives capture back pressure.
-- Text reaches the target app only on an explicit trigger or the ten minute hard cap.
+- Text reaches the target app only on an explicit trigger or the five minute hard cap.
   A `transcript.done` outside `finalizing` ends the session as
   `failed(text:error:)`. The accumulated text is still inserted, but the macOS layer is
   never handed a clean commit it didn't trigger.

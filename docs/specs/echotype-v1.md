@@ -91,7 +91,7 @@ noise-floor calibration, a reconnect, and the first-word clipping a reconnect
 would reintroduce.
 
 The trade is that the microphone streams to xAI during a pause. This is bounded
-by the hard cap below, so the worst case is ten minutes of dead air and a few
+by the hard cap below, so the worst case is five minutes of dead air and a few
 pence, on a session the user explicitly started.
 
 The same ten second setting covers the case where the user triggers and never
@@ -107,7 +107,7 @@ the user is still gathering their thoughts, leaving them talking into nothing.
 Neither failure costs anything except annoyance, since no text is at risk either
 way, so the value is tuned for how it feels rather than for safety.
 
-A hard session cap of ten minutes ends everything, inserting whatever has
+A hard session cap of five minutes ends everything, inserting whatever has
 accumulated. This exists for the case where the user walks away, not for normal
 use.
 
@@ -171,7 +171,7 @@ the user notice a misheard term and cancel rather than paste something wrong.
 
 Elapsed time earns its place because the trigger is a toggle and it is possible
 to forget a session is running. It counts up only. No countdown, since nothing
-happens automatically that the user needs warning about. It turns amber at eight
+happens automatically that the user needs warning about. It turns amber at four
 minutes as the hard cap approaches.
 
 States: starting, listening, paused, transcribing (the brief moment between
@@ -416,7 +416,7 @@ in both. The transition either way is driven by the speech signal above, a
 partial with non-empty text or a `speech_final`, with ten seconds of quiet moving
 to `paused` and the next speech moving back.
 
-`finalizing` is entered only by Opt+D, a click on the overlay, or the ten minute
+`finalizing` is entered only by Opt+D, a click on the overlay, or the five minute
 hard cap. It sends `{"type":"finalize"}` then `{"type":"audio.done"}` and waits
 for `transcript.done`.
 
@@ -507,7 +507,7 @@ Covered by `swift test`, and this is where the real bugs live:
   partial, events after `audio.done`, empty results
 - The session machine with an injected clock: the listening and paused transitions
   in both directions, several pause and resume cycles accumulating text correctly,
-  the no-speech close, the ten minute cap, escape mid-session, stop before ready,
+  the no-speech close, the five minute cap, escape mid-session, stop before ready,
   socket error while listening, stop with no audio
 - Query string construction, including the 100 keyterm and 50 character caps
 

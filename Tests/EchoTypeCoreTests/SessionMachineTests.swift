@@ -95,7 +95,7 @@ struct SessionMachineTests {
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("walked away", speechFinal: true))
 
-    await clock.advance(by: 600)
+    await clock.advance(by: 300)
     #expect(await log.next() == .paused)
     #expect(await log.next() == .finalizing)
     #expect(await transport.textFrames == closingFrames)

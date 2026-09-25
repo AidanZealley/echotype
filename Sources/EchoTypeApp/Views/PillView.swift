@@ -132,7 +132,7 @@ private struct TailLayout: Layout {
   }
 }
 
-/// Minutes and seconds since the session started, amber from eight minutes as the ten minute
+/// Minutes and seconds since the session started, amber from four minutes as the five minute
 /// cap approaches, dimmed while paused.
 private struct Elapsed: View {
   let pill: Pill
@@ -142,7 +142,7 @@ private struct Elapsed: View {
       let seconds = max(0, Int(context.date.timeIntervalSince(pill.startedAt)))
       Text(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
         .monospacedDigit()
-        .foregroundStyle(seconds >= 8 * 60 ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+        .foregroundStyle(seconds >= 4 * 60 ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
     }
     .opacity(pill.phase == .paused ? 0.4 : 1)
   }
