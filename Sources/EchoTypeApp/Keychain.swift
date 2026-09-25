@@ -24,19 +24,25 @@ enum Keychain {
     return key
   }
 
-  /// Replaces any item with a new one holding `key`. Recreating rather than updating means
-  /// the app always owns the item: one seeded by hand carries an access list that makes the
-  /// app prompt on every read, and an update would keep that list. Returns whether the new
-  /// item was written; if the old one cannot be deleted, nothing is added.
+  /// Updates the existing item so changing the key does not reset its access rule. A new
+  /// item uses the app's default rule until the Keychain grants it access.
   static func save(_ key: String) -> Bool {
-    guard clear() else { return false }
-    let item: [CFString: Any] = [
+    let query: [CFString: Any] = [
       kSecClass: kSecClassGenericPassword,
       kSecAttrService: service,
-      kSecAttrAccount: "xai",
-      kSecValueData: Data(key.utf8),
     ]
-    return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    let data = Data(key.utf8)
+    switch SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary) {
+    case errSecSuccess:
+      return true
+    case errSecItemNotFound:
+      var item = query
+      item[kSecAttrAccount] = "xai"
+      item[kSecValueData] = data
+      return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    default:
+      return false
+    }
   }
 
   /// Deletes every item under the service. Returns whether none is left.

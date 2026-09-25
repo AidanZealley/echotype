@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds, bundles, signs and (re)launches EchoType. The only supported way to run
-# the app: TCC grants key off the bundle identifier and the stable "EchoType Dev"
-# signature, so every build must go through this path to keep its permissions.
+# the app: TCC grants key off the bundle identifier and signing identity, so every
+# build must go through this path to keep its permissions.
 # Arguments are passed to the app, for example `./scripts/run.sh --hud-demo`.
 set -euo pipefail
 
@@ -22,6 +22,6 @@ mkdir -p "$app/Contents/MacOS"
 cp .build/debug/EchoTypeApp "$app/Contents/MacOS/"
 cp Resources/Info.plist "$app/Contents/"
 
-codesign --force --sign "EchoType Dev" "$app"
+codesign --force --sign "Apple Development" "$app"
 
 open "$app" --args "$@"
