@@ -32,5 +32,5 @@ it.
   kept as a gap in [0007](0007-known-gaps.md).
 - The window occasionally opened behind until `orderFrontRegardless()` was added, and
   that could not be reproduced on demand. If it comes back, start here.
-- `scripts/run.sh` stops the running instance before replacing its bundle. Replacing it
+- `scripts/deploy.sh` stops the running instance before replacing its bundle. Replacing it
   underneath the running app made `open` fail with error -600.

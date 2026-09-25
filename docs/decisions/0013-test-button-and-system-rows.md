@@ -34,4 +34,5 @@ covers the socket.
   copy and kept its enabled or disabled state. The installed app registers again at launch
   when the item is enabled, so the item points back at `/Applications/EchoType.app`, and it
   leaves a disabled item alone. Opening Settings in the development bundle moves the item to
-  `.build/EchoType.app` until the installed app next launches.
+  `.build/EchoType.app` until the installed app next launches. See
+  [0016](0016-install-and-claim-the-login-item.md).

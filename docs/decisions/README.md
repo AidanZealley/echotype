@@ -26,3 +26,4 @@ delete it.
 | 0013 | [The Test button, launch at login and the permission rows](0013-test-button-and-system-rows.md) | Accepted; key field superseded by 0015 |
 | 0014 | [Sign with Apple Development](0014-sign-with-apple-development.md) | Accepted |
 | 0015 | [Settings in tabs, with a masked saved key](0015-settings-window-layout.md) | Accepted |
+| 0016 | [Install to /Applications and claim the login item there](0016-install-and-claim-the-login-item.md) | Accepted |
