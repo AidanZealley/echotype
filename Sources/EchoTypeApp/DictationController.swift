@@ -25,8 +25,8 @@ import Observation
     case running(SessionMachine)
   }
 
-  /// No persistence yet: the defaults are the settings.
-  private let settings = Settings()
+  /// The monitor reads the hotkey from it live; each session reads a copy of the rest.
+  private let store: SettingsStore
   private let audio = AudioCapture()
   private let inserter = Inserter()
   @ObservationIgnored private lazy var panel = OverlayPanel { [weak self] in self?.clicked() }
@@ -39,10 +39,11 @@ import Observation
   /// Fades an error pill after it has been read.
   private var errorFade: Task<Void, Never>?
 
-  init() {
+  init(store: SettingsStore) {
+    self.store = store
     audio.onLevel = { [weak self] level in self?.levelChanged(level) }
     let monitor = HotkeyMonitor(
-      hotkey: settings.hotkey,
+      store: store,
       onHotkey: { [weak self] in self?.hotkeyPressed() },
       onEscape: { [weak self] in self?.escapePressed() ?? false }
     )
@@ -103,6 +104,8 @@ import Observation
   /// One session, from the first press to the insertion.
   private func dictate() async {
     defer { phase = .idle }
+    // Read once, here, so a change in Settings never reaches a session already running.
+    let settings = store.settings
     showStarting()
 
     // The microphone first: before the socket, so a denied grant never opens a billed
@@ -120,7 +123,7 @@ import Observation
     guard !isAbandoned else { return abandon() }
     guard let apiKey else {
       audio.stop()
-      return end(showing: "No xAI API key in the Keychain")
+      return end(showing: "Add your xAI API key in EchoType Settings")
     }
 
     // The socket opens here, on trigger, because an idle open socket bills streaming time.

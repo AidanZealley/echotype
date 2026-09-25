@@ -5,7 +5,7 @@ import Foundation
 public enum STTConnection {
   /// The endpoint accepts at most this many keyterms, and longer ones are truncated rather
   /// than dropped.
-  private static let maximumKeyterms = 100
+  public static let maximumKeyterms = 100
   private static let maximumKeytermLength = 50
 
   /// `endpointing` is deliberately far above the 400ms default: utterance boundaries are
