@@ -11,15 +11,17 @@ app=.build/EchoType.app
 
 swift build
 
+# Stop the old instance before replacing its bundle. Replacing the bundle under a running
+# instance leaves Launch Services with a stale record for it, and `open` then fails with
+# error -600. Waiting for the exit also stops `open` from just reactivating the old one.
+pkill -x EchoTypeApp || true
+while pgrep -x EchoTypeApp >/dev/null; do sleep 0.1; done
+
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp .build/debug/EchoTypeApp "$app/Contents/MacOS/"
 cp Resources/Info.plist "$app/Contents/"
 
 codesign --force --sign "EchoType Dev" "$app"
-
-# Wait for the old instance to exit, otherwise `open` just reactivates it.
-pkill -x EchoTypeApp || true
-while pgrep -x EchoTypeApp >/dev/null; do sleep 0.1; done
 
 open "$app" --args "$@"
