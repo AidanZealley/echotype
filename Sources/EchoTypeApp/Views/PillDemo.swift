@@ -52,9 +52,9 @@ import AppKit
     show(pill)
     await pause(3)
 
-    // Past eight minutes the elapsed time turns amber.
+    // Past four minutes the elapsed time turns amber.
     pill.phase = .listening
-    pill.startedAt = .now - 8 * 60 - 5
+    pill.startedAt = .now - 4 * 60 - 5
     await speak(&pill, for: 3, show: show)
 
     pill.phase = .transcribing

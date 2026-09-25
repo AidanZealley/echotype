@@ -94,7 +94,7 @@ public struct Settings: Equatable, Sendable {
     keyterms: [String] = [],
     language: String = "en",
     silenceTimeout: TimeInterval = 10,
-    hardCap: TimeInterval = 600,
+    hardCap: TimeInterval = 300,
     finalizeTimeout: TimeInterval = 8,
     inputDeviceID: String? = nil,
     batchOnCommit: Bool = true
