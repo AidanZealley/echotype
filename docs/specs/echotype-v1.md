@@ -385,6 +385,7 @@ Sources/
 Tests/EchoTypeCoreTests/
   Support/               session test transport, clock and snapshot log
 Resources/Info.plist
+scripts/deploy.sh
 scripts/run.sh
 scripts/install.sh
 ```

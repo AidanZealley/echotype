@@ -29,6 +29,3 @@ Status: open. Remove each item as it is resolved.
   does not open a regular app's status item menu over a fullscreen app. Close the window
   or go to the desktop first; Opt+D still works. Showing the Dock icon only while
   EchoType is frontmost would fix it but drop the window's Cmd+Tab entry.
-- **Launch at login and `install.sh`** (build-order step 6). A login item registered from
-  `.build/EchoType.app` points at that path, so once the app is installed in
-  `/Applications` it has to be registered again from there.
