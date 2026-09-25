@@ -1,6 +1,6 @@
 # Batch pass on commit implementation plan
 
-Status: draft; implementation has not started.
+Status: complete; every workstream and the final review are accepted.
 
 ## Orchestration record
 
@@ -16,7 +16,7 @@ Status: draft; implementation has not started.
 |---:|---|---|---|
 | 1 | [Batch transcriber and setting](01-batch-transcriber.md) | Approved spec | Accepted |
 | 2 | [Insert the batch text on stop](02-insert-batch-text.md) | 1 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G1 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G1 | Accepted |
 
 Statuses: `Not started`, `Implementing`, `Review`, `Remediation`, `Closure review`, `Blocked`,
 `Accepted`. One workstream is active at a time.
