@@ -7,18 +7,15 @@ private func queryItems(_ settings: Settings) -> [URLQueryItem] {
   return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
 }
 
-/// Keyterms are passed empty so this stays about the fixed parameters. `Settings` defaults them
-/// to a placeholder list until the keyterms editor exists, and pinning that list here would only
-/// assert the placeholder.
 @Test("The connection URL carries the documented parameters")
 func connectionURLCarriesTheDocumentedParameters() {
-  let url = STTConnection.streamingURL(settings: Settings(keyterms: [], language: "en-GB"))
+  let url = STTConnection.streamingURL(settings: Settings(language: "en-GB"))
 
   #expect(url.scheme == "wss")
   #expect(url.host == "api.x.ai")
   #expect(url.path == "/v1/stt")
   #expect(
-    queryItems(Settings(keyterms: [], language: "en-GB")) == [
+    queryItems(Settings(language: "en-GB")) == [
       URLQueryItem(name: "encoding", value: "pcm"),
       URLQueryItem(name: "sample_rate", value: "16000"),
       URLQueryItem(name: "interim_results", value: "true"),

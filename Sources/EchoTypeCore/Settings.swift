@@ -2,15 +2,15 @@ import Foundation
 
 /// Every tunable the user can change, as one value type.
 ///
-/// This is the single source of the app's settings. The macOS layer is responsible for
-/// persisting it (`UserDefaults`) and for the API key, which lives in the Keychain and is
-/// deliberately not part of this type.
+/// This is the single source of the app's settings. The macOS layer stores `encoded()` in
+/// `UserDefaults` and keeps the API key in the Keychain; the key is deliberately not part of
+/// this type.
 public struct Settings: Equatable, Sendable {
   /// The keyboard chord that starts and stops a session.
   ///
   /// Stored as a keycode plus modifiers rather than a string so that adding presets, or a
   /// recorder UI later, does not change the storage format.
-  public struct Hotkey: Equatable, Sendable {
+  public struct Hotkey: Hashable, Sendable, Codable {
     /// A virtual keycode, in the same space as `kVK_ANSI_D` and friends.
     public var keyCode: UInt16
     public var modifiers: ModifierFlags
@@ -23,6 +23,13 @@ public struct Settings: Equatable, Sendable {
     /// Opt+D. `0x02` is `kVK_ANSI_D`.
     public static let optionD = Hotkey(keyCode: 0x02, modifiers: .option)
 
+    /// Ctrl+Opt+D, for when some app claims Opt+D. Ctrl+Opt is VoiceOver's modifier, which is
+    /// why this is not the default.
+    public static let controlOptionD = Hotkey(keyCode: 0x02, modifiers: [.control, .option])
+
+    /// The chords the settings window offers.
+    public static let presets = [optionD, controlOptionD]
+
     /// Whether a key press is this chord: the same key, with the configured modifiers held and
     /// no others, so Cmd+Opt+D and Ctrl+Opt+D pass through an Opt+D hotkey untouched.
     public func matches(keyCode: UInt16, modifiers: ModifierFlags) -> Bool {
@@ -30,7 +37,8 @@ public struct Settings: Equatable, Sendable {
     }
   }
 
-  public struct ModifierFlags: OptionSet, Equatable, Sendable {
+  /// Stored as its raw value, so these bit positions are part of the stored format.
+  public struct ModifierFlags: OptionSet, Hashable, Sendable, Codable {
     public let rawValue: UInt8
 
     public init(rawValue: UInt8) {
@@ -77,20 +85,9 @@ public struct Settings: Equatable, Sendable {
   /// AirPods does the obvious thing.
   public var inputDeviceID: String?
 
-  /// Temporary. The keyterms editor in Settings is what owns this list, and it does not exist
-  /// yet; until it does, dictation would otherwise ship with no keyterms at all and the terms
-  /// this app is used to dictate most are the ones it would get wrong.
-  ///
-  /// Edit this array to add a term. Delete it outright, along with the `keyterms` default
-  /// below, when the editor lands and the list becomes user data in `UserDefaults`.
-  public static let placeholderKeyterms = [
-    "shadcn", "Zustand", "pnpm", "TanStack", "t3code", "SwiftUI", "AppKit", "Tailwind",
-    "Vite", "TypeScript", "Zod", "Supabase", "Claude Code", "EchoType", "xAI",
-  ]
-
   public init(
     hotkey: Hotkey = .optionD,
-    keyterms: [String] = placeholderKeyterms,
+    keyterms: [String] = [],
     language: String = "en",
     silenceTimeout: TimeInterval = 10,
     hardCap: TimeInterval = 600,
@@ -104,5 +101,50 @@ public struct Settings: Equatable, Sendable {
     self.hardCap = hardCap
     self.finalizeTimeout = finalizeTimeout
     self.inputDeviceID = inputDeviceID
+  }
+}
+
+// MARK: Storage
+
+/// The stored form. Only the fields the settings window edits are persisted; the timeouts stay
+/// code defaults so today's values are not frozen into every install.
+///
+/// The key names and the hotkey's shape are the upgrade contract: renaming one would reset
+/// that setting on every existing install. Each field decodes on its own and falls back to its
+/// default, so adding a field later, or one unreadable field, never resets the others.
+extension Settings: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case hotkey, keyterms, language, inputDeviceID
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let defaults = Settings()
+    self = defaults
+    hotkey = (try? container.decodeIfPresent(Hotkey.self, forKey: .hotkey)) ?? defaults.hotkey
+    keyterms =
+      (try? container.decodeIfPresent([String].self, forKey: .keyterms)) ?? defaults.keyterms
+    language =
+      (try? container.decodeIfPresent(String.self, forKey: .language)) ?? defaults.language
+    inputDeviceID = try? container.decodeIfPresent(String.self, forKey: .inputDeviceID)
+  }
+
+  public func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(hotkey, forKey: .hotkey)
+    try container.encode(keyterms, forKey: .keyterms)
+    try container.encode(language, forKey: .language)
+    try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)
+  }
+
+  /// Decodes a stored value. Missing or unreadable data gives the defaults.
+  public init(decoding data: Data?) {
+    self = data.flatMap { try? JSONDecoder().decode(Settings.self, from: $0) } ?? Settings()
+  }
+
+  /// The value to store.
+  public func encoded() -> Data {
+    // Strings and integers always encode.
+    try! JSONEncoder().encode(self)
   }
 }

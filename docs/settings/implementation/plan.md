@@ -1,20 +1,20 @@
 # Settings implementation plan
 
-Status: draft; implementation has not started.
+Status: in progress; workstream 1 accepted.
 
 ## Orchestration record
 
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `feat/settings`
+- Starting commit: `086af98`
 - Review command: `lead subagents`
 - Specification approved at commit: `f81ca54`
-- Started: `TBD`
+- Started: `2026-09-24`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Persistent settings and the window](01-persistent-settings-and-window.md) | Approved spec | Not started |
+| 1 | [Persistent settings and the window](01-persistent-settings-and-window.md) | Approved spec | Accepted |
 | 2 | [Input device, key test and system status](02-device-test-and-system-status.md) | 1 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Not started |
 
@@ -112,7 +112,7 @@ Held by the specification and not open to a workstream:
 
 - Owning workstream: 1
 - Placement: after focused closure, before acceptance
-- Status: `Pending`
+- Status: `Passed`
 - Candidate: the uncommitted workstream 1 state, launched with `./scripts/run.sh`
 - Resume condition: Aidan reports every observation below, or a failure the lead can
   correct and republish
@@ -173,4 +173,5 @@ None open.
 | 2026-09-24 | The settings window is one grouped `Form` in the standard macOS pattern, with no layout variants | An established pattern, judged at G1 | Aidan, before the workflow | 1, 2 |
 | 2026-09-24 | Only fields the window edits are persisted: hotkey, keyterms, language, input device. The timeouts stay code defaults | Persisting values nothing edits would freeze today's defaults into every install | Pending approval of this workflow | 1 |
 | 2026-09-24 | Launch at login state is read from `SMAppService`, not stored | The system is the source of truth and can be changed in System Settings | Pending approval of this workflow | 2 |
+| 2026-09-25 | EchoType shows a Dock icon and a Cmd+Tab entry while the settings window is open, switching to a regular app and back to accessory when the window closes. The specification says `LSUIElement` keeps it out of the Dock and Cmd+Tab | macOS does not reliably activate an accessory app, so the window opened behind the frontmost app or without focus at G1. Tailscale does the same | Aidan, at G1 (E3) | 1, 2 |
 | 2026-09-24 | The Test button runs a real streaming session through the controller for five seconds and shows the outcome inline. It never inserts and shows no pill. It does not use the batch endpoint | The specification says one click validates the microphone, the device, the key and the socket, and only the streaming path covers the socket | Pending approval of this workflow | 2 |
