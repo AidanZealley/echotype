@@ -1,6 +1,7 @@
 # 0013 The Test button, launch at login and the permission rows
 
-Status: accepted, 2026-09-25 (settings gate G2).
+Status: accepted, 2026-09-25 (settings gate G2). Key field handling superseded by
+[0015](0015-settings-window-layout.md).
 
 ## Context
 
@@ -14,8 +15,8 @@ covers the socket.
   seconds, then commits it as the hotkey would and shows the outcome inline: the
   transcript, a key error, a failure, or that nothing was heard. It never inserts and shows
   no pill. It does not use the batch endpoint.
-- Test saves the key field first and skips the run if the save failed. Test and dictation
-  exclude each other: the controller's `.testing` phase makes the hotkey, Escape and pill
+- Test uses the saved key. (Until [0015](0015-settings-window-layout.md) it saved the key
+  field first.) Test and dictation exclude each other: the controller's `.testing` phase makes the hotkey, Escape and pill
   clicks do nothing, and the button is disabled while a dictation runs.
 - Launch at login is read from and written to `SMAppService.mainApp`, never stored,
   because the user can change it in System Settings. The window rereads it when it appears

@@ -210,7 +210,7 @@ list.
 
 Panes:
 
-- API key, entered as a secure field, with a Test button
+- API key, shown masked once saved, with Test, reveal, replace and remove
 - Hotkey preset dropdown
 - Input device picker
 - Keyterms editor

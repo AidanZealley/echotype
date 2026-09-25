@@ -23,5 +23,6 @@ delete it.
 | 0010 | [How settings and the API key are stored](0010-settings-storage-and-api-key.md) | Accepted |
 | 0011 | [The settings window makes EchoType a regular app while it is open](0011-settings-window-activation.md) | Accepted |
 | 0012 | [Capture the microphone with AVCaptureSession on the chosen input](0012-capture-with-avcapturesession.md) | Accepted |
-| 0013 | [The Test button, launch at login and the permission rows](0013-test-button-and-system-rows.md) | Accepted |
+| 0013 | [The Test button, launch at login and the permission rows](0013-test-button-and-system-rows.md) | Accepted; key field superseded by 0015 |
 | 0014 | [Sign with Apple Development](0014-sign-with-apple-development.md) | Accepted |
+| 0015 | [Settings in tabs, with a masked saved key](0015-settings-window-layout.md) | Accepted |

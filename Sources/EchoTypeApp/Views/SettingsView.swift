@@ -4,7 +4,7 @@ import EchoTypeCore
 import ServiceManagement
 import SwiftUI
 
-/// The settings window: one grouped form. The hotkey applies at once; the rest apply from the
+/// The settings window: a tab per concern. The hotkey applies at once; the rest apply from the
 /// next session.
 struct SettingsView: View {
   @Bindable var store: SettingsStore
@@ -12,29 +12,39 @@ struct SettingsView: View {
   let controller: DictationController?
 
   var body: some View {
-    Form {
-      Section {
-        APIKeyRow(controller: controller)
+    TabView {
+      Tab("General", systemImage: "gearshape") {
+        GeneralTab(store: store)
       }
-      Section {
-        Picker("Hotkey", selection: $store.settings.hotkey) {
-          ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { hotkey in
-            Text(verbatim: Self.label(hotkey)).tag(hotkey)
-          }
-        }
-        InputRow(store: store)
-        LanguageRow(store: store)
+      Tab("Keyterms", systemImage: "character.book.closed") {
+        KeytermsTab(store: store)
       }
-      Section {
-        KeytermsRow(store: store)
+      Tab("API Key", systemImage: "key") {
+        APIKeyTab(controller: controller)
       }
-      Section {
-        LaunchAtLoginRow()
-      }
-      PermissionsSection()
     }
-    .formStyle(.grouped)
     .frame(width: 460)
+  }
+}
+
+private struct GeneralTab: View {
+  @Bindable var store: SettingsStore
+
+  var body: some View {
+    Form {
+      Picker("Hotkey", selection: $store.settings.hotkey) {
+        ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { hotkey in
+          Text(verbatim: Self.label(hotkey)).tag(hotkey)
+        }
+      }
+      InputRow(store: store)
+      LanguageRow(store: store)
+      LaunchAtLoginRow()
+      PermissionsRow()
+        .padding(.top, 12)
+    }
+    .formStyle(.columns)
+    .padding(20)
     .fixedSize(horizontal: false, vertical: true)
   }
 
@@ -43,91 +53,180 @@ struct SettingsView: View {
   }
 }
 
-/// The key is saved when the field is submitted or loses focus, and an emptied field clears
-/// it. Every Keychain call runs off the main actor, one at a time and in order.
+/// A saved key is shown masked, never in an editable field. Save, Replace and Remove are
+/// explicit, and every Keychain call runs off the main actor with the buttons disabled until it
+/// finishes, so two writes cannot race.
 ///
-/// Test saves the key in the field, then runs a five second session through the controller and
-/// shows what it heard.
-private struct APIKeyRow: View {
+/// Test runs a five second session through the controller with the saved key and shows what it
+/// heard.
+private struct APIKeyTab: View {
   let controller: DictationController?
-  @State private var key = ""
-  /// What the Keychain holds, so leaving an unchanged field writes nothing. It only advances
-  /// when a write succeeds, so a failed one is retried on the next submit or blur.
-  @State private var savedKey = ""
-  @State private var saveFailed = false
-  @State private var lastWrite: Task<Void, Never>?
+  /// What the Keychain holds. Nil when there is no key.
+  @State private var savedKey: String?
+  @State private var loaded = false
+  @State private var draft = ""
+  /// Replace was clicked, so the field shows even though a key is saved.
+  @State private var replacing = false
+  @State private var revealed = false
+  /// The width the key has to fill, which sets how many bullets the masked key shows.
+  @State private var keyWidth: CGFloat = 0
+  @State private var confirmingRemove = false
+  @State private var writing = false
+  @State private var writeError: String?
   @State private var testing = false
   @State private var testOutcome: DictationController.TestOutcome?
-  @FocusState private var focused: Bool
 
   var body: some View {
-    VStack(alignment: .leading) {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("xAI API key")
+      if !loaded {
+        ProgressView().controlSize(.small)
+      } else if let savedKey, !replacing {
+        saved(savedKey)
+      } else {
+        entry
+      }
+      messages
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(20)
+    .fixedSize(horizontal: false, vertical: true)
+    .task {
+      savedKey = await Task.detached { Keychain.apiKey() }.value
+      loaded = true
+    }
+    .confirmationDialog("Remove the API key?", isPresented: $confirmingRemove) {
+      Button("Remove", role: .destructive) { Task { await remove() } }
+    } message: {
+      Text("Dictation won't work until you add another.")
+    }
+  }
+
+  private func saved(_ key: String) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(alignment: .firstTextBaseline) {
+        Text(verbatim: revealed ? key : Self.masked(key, width: keyWidth))
+          .font(.body.monospaced())
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .onGeometryChange(for: CGFloat.self, of: \.size.width) { keyWidth = $0 }
+        Button(revealed ? "Hide key" : "Show key", systemImage: revealed ? "eye.slash" : "eye") {
+          revealed.toggle()
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .help(revealed ? "Hide key" : "Show key")
+      }
       HStack {
-        SecureField("xAI API key", text: $key)
-          .focused($focused)
-          .onSubmit(save)
-          .onChange(of: focused) { if !focused { save() } }
-          .onDisappear(perform: save)
-          .task {
-            let stored = await Task.detached { Keychain.apiKey() }.value ?? ""
-            // A slow read, or one held up by a prompt, must not replace what the user typed.
-            guard key.isEmpty else { return }
-            key = stored
-            savedKey = stored
-          }
+        Spacer()
         if let controller {
           Button(testing ? "Testing…" : "Test") {
             Task { await test(controller) }
           }
-          .disabled(testing || !controller.isIdle)
+          .disabled(testing || writing || !controller.isIdle)
         }
+        Button("Replace") {
+          draft = ""
+          replacing = true
+        }
+        Button("Remove", role: .destructive) { confirmingRemove = true }
       }
-      if saveFailed {
-        Text("Couldn't save the key")
-          .font(.caption)
-          .foregroundStyle(.red)
-      }
-      switch testOutcome {
-      case .heard(let text):
-        Text(text)
-          .font(.caption)
-          .textSelection(.enabled)
-      case .heardNothing:
-        Text("Nothing was heard")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      case .failed(let error):
-        Text(error)
-          .font(.caption)
-          .foregroundStyle(.red)
-      case nil:
-        EmptyView()
+      .disabled(writing || testing)
+    }
+  }
+
+  /// Wraps rather than scrolling sideways, so the whole key is visible while pasting it. That
+  /// means it is not masked, which a secure field would need.
+  private var entry: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      TextField("xAI API key", text: $draft, prompt: Text(verbatim: "xai-…"), axis: .vertical)
+        .labelsHidden()
+        .font(.body.monospaced())
+        .lineLimit(2...4)
+        .onSubmit { Task { await save() } }
+      HStack {
+        Spacer()
+        if replacing {
+          Button("Cancel") {
+            replacing = false
+            writeError = nil
+          }
+        }
+        Button("Save") { Task { await save() } }
+          .keyboardShortcut(.defaultAction)
+          .disabled(writing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
+  }
+
+  @ViewBuilder private var messages: some View {
+    if let writeError {
+      Text(writeError)
+        .font(.caption)
+        .foregroundStyle(.red)
+    }
+    switch testOutcome {
+    case .heard(let text):
+      Text(text)
+        .font(.caption)
+        .textSelection(.enabled)
+    case .heardNothing:
+      Text("Nothing was heard")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    case .failed(let error):
+      Text(error)
+        .font(.caption)
+        .foregroundStyle(.red)
+    case nil:
+      EmptyView()
+    }
+  }
+
+  /// `xai-••••…••••a3F9`: enough to tell keys apart without showing one. The bullets fill one
+  /// line of `width`, up to the key's own length.
+  private static func masked(_ key: String, width: CGFloat) -> String {
+    let prefix = key.firstIndex(of: "-").map { key[...$0] } ?? ""
+    let hidden = key.count - prefix.count - 4
+    let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    let fitting = Int(width / ("•" as NSString).size(withAttributes: [.font: font]).width)
+    let bullets = String(repeating: "•", count: max(8, min(hidden, fitting - prefix.count - 4)))
+    guard hidden >= 4 else { return bullets }
+    return "\(prefix)\(bullets)\(key.suffix(4))"
   }
 
   private func test(_ controller: DictationController) async {
     testing = true
     defer { testing = false }
     testOutcome = nil
-    save()
-    await lastWrite?.value
-    // Testing the key the Keychain still holds would not be testing the one on screen.
-    guard !saveFailed else { return }
     testOutcome = await controller.test()
   }
 
-  private func save() {
-    let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard key != savedKey else { return }
-    lastWrite = Task { [lastWrite] in
-      await lastWrite?.value
-      let saved = await Task.detached {
-        key.isEmpty ? Keychain.clear() : Keychain.save(key)
-      }.value
-      if saved { savedKey = key }
-      saveFailed = !saved
-    }
+  private func save() async {
+    let key = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !key.isEmpty, !writing else { return }
+    guard await write("Couldn't save the key", { Keychain.save(key) }) else { return }
+    savedKey = key
+    draft = ""
+    replacing = false
+    revealed = false
+  }
+
+  private func remove() async {
+    guard await write("Couldn't remove the key", Keychain.clear) else { return }
+    savedKey = nil
+    revealed = false
+  }
+
+  /// Runs a Keychain write off the main actor and reports a failure under the key.
+  private func write(_ failure: String, _ operation: @escaping @Sendable () -> Bool) async -> Bool {
+    writing = true
+    defer { writing = false }
+    let succeeded = await Task.detached(operation: operation).value
+    writeError = succeeded ? nil : failure
+    if succeeded { testOutcome = nil }
+    return succeeded
   }
 }
 
@@ -143,17 +242,21 @@ private struct LanguageRow: View {
   }
 
   var body: some View {
-    TextField("Language", text: $text, prompt: Text(verbatim: EchoTypeCore.Settings().language))
-      .onChange(of: text) {
-        let tag = text.trimmingCharacters(in: .whitespaces)
-        store.settings.language = tag.isEmpty ? EchoTypeCore.Settings().language : tag
-      }
+    LabeledContent("Language") {
+      TextField("Language", text: $text, prompt: Text(verbatim: EchoTypeCore.Settings().language))
+        .labelsHidden()
+        .frame(width: 80)
+        .onChange(of: text) {
+          let tag = text.trimmingCharacters(in: .whitespaces)
+          store.settings.language = tag.isEmpty ? EchoTypeCore.Settings().language : tag
+        }
+    }
   }
 }
 
 /// One term per line. The editor holds its own text while the user types; writing the parsed
 /// list back into it would eat the newline being typed.
-private struct KeytermsRow: View {
+private struct KeytermsTab: View {
   let store: SettingsStore
   @State private var text: String
 
@@ -163,21 +266,30 @@ private struct KeytermsRow: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading) {
-      LabeledContent("Keyterms") {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Text("Names and jargon to spell your way, one per line")
+        Spacer()
         Text(verbatim: "\(store.settings.keyterms.count) of \(STTConnection.maximumKeyterms)")
           .monospacedDigit()
-          .foregroundStyle(.secondary)
       }
+      .foregroundStyle(.secondary)
       TextEditor(text: $text)
         .font(.body)
-        .frame(height: 140)
+        .scrollContentBackground(.hidden)
+        // The text view already insets each line by a few points horizontally.
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+        .frame(height: 260)
         .onChange(of: text) {
           store.settings.keyterms = text.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         }
     }
+    .padding(20)
   }
 }
 
@@ -267,16 +379,18 @@ private struct LaunchAtLoginRow: View {
 /// Whether each permission is granted, read when the window appears and whenever the app
 /// becomes active, so coming back from System Settings shows the change. The rows never ask for
 /// a permission: the first dictation asks for the microphone, and launch asks for the other.
-private struct PermissionsSection: View {
+private struct PermissionsRow: View {
   @State private var microphone = false
   @State private var deviceControl = false
 
   var body: some View {
-    Section {
-      row("Microphone", granted: microphone, pane: "Privacy_Microphone")
-      // Still the Accessibility trust check, which macOS 27 names Device Control and Data
-      // Access.
-      row("Device Control and Data Access", granted: deviceControl, pane: "Privacy_Accessibility")
+    LabeledContent("Permissions") {
+      Grid(alignment: .leading, verticalSpacing: 8) {
+        row("Microphone", granted: microphone, pane: "Privacy_Microphone")
+        // Still the Accessibility trust check, which macOS 27 names Device Control and Data
+        // Access.
+        row("Device Control and Data Access", granted: deviceControl, pane: "Privacy_Accessibility")
+      }
     }
     .onAppear(perform: refresh)
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
@@ -284,14 +398,16 @@ private struct PermissionsSection: View {
   }
 
   private func row(_ title: String, granted: Bool, pane: String) -> some View {
-    LabeledContent(title) {
-      HStack {
+    GridRow(alignment: .firstTextBaseline) {
+      VStack(alignment: .leading) {
+        Text(title)
         Text(granted ? "Granted" : "Not granted")
+          .font(.caption)
           .foregroundStyle(granted ? .secondary : Color.red)
-        Button("Open") {
-          let url = "x-apple.systempreferences:com.apple.preference.security?\(pane)"
-          NSWorkspace.shared.open(URL(string: url)!)
-        }
+      }
+      Button("Open") {
+        let url = "x-apple.systempreferences:com.apple.preference.security?\(pane)"
+        NSWorkspace.shared.open(URL(string: url)!)
       }
     }
   }
