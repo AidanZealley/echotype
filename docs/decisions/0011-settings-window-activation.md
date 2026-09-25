@@ -10,7 +10,7 @@ Cmd+Tab. At G1 the settings window opened intermittently behind the frontmost ap
 without keyboard focus. macOS treats activation as a request it can decline, and it
 declines an accessory app's request often enough to notice. Two workarounds, activating
 after the menu closed and raising the window directly, were not enough on their own.
-Tailscale's settings window shows a Dock icon while it is open, and Aidan chose to match
+Tailscale's settings window shows a Dock icon while it is open, and the author chose to match
 it.
 
 ## Decision

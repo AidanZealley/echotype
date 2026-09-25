@@ -8,7 +8,7 @@ original warm idle hold. Device choice and capture are superseded by
 
 The specification originally held the input device warm through a few minutes of
 idle to avoid the 100 to 300ms open cost. A warm microphone keeps the orange macOS
-indicator lit after dictation ends, which Aidan found disconcerting.
+indicator lit after dictation ends, which the author found disconcerting.
 
 ## Decision
 

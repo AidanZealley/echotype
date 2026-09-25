@@ -22,6 +22,9 @@ mkdir -p "$app/Contents/MacOS"
 cp .build/debug/EchoTypeApp "$app/Contents/MacOS/"
 cp Resources/Info.plist "$app/Contents/"
 
-codesign --force --sign "Apple Development" "$app"
+# A unique local Apple Development identity is selected by default. Set the variable
+# to a full certificate name or SHA-1 hash if more than one is installed.
+signing_identity=${ECHOTYPE_SIGNING_IDENTITY:-Apple Development}
+codesign --force --sign "$signing_identity" "$app"
 
 open "$app" --args "$@"

@@ -29,9 +29,10 @@ Keychain item the app cannot read without a prompt.
 - `SettingsStore` in the app is the only writer of `UserDefaults`. The hotkey monitor
   reads the current hotkey on every key event, so a change applies without a relaunch.
   The controller snapshots the settings once at the start of each session.
-- The API key lives only in the Keychain, as one generic password item under the service
-  `com.aidanzealley.echotype`, account `xai`. `Keychain.save` deletes every item under the
-  service, then adds the new one. Because the app writes the item itself, it reads it back
+- The API key lives only in the Keychain, as one generic password item whose service
+  is the bundle identifier in `Resources/Info.plist` and whose account is `xai`.
+  `Keychain.save` deletes every item under that service, then adds the new one.
+  Because the app writes the item itself, it reads it back
   without a prompt. Keychain calls can block on a prompt, so the window makes them from
   detached tasks.
 

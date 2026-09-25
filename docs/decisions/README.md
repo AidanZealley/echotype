@@ -11,7 +11,7 @@ delete it.
 
 | # | Decision | Status |
 |---:|---|---|
-| 0001 | [Build on the Mac and sign with a self-signed certificate](0001-build-and-sign-on-the-mac.md) | Accepted |
+| 0001 | [Build on the Mac and sign with a self-signed certificate](0001-build-and-sign-on-the-mac.md) | Accepted; certificate choice superseded by 0014 |
 | 0002 | [Detect speech from what the endpoint actually sends](0002-speech-signal-from-observed-protocol.md) | Accepted |
 | 0003 | [Transcript assembly rules](0003-transcript-assembly.md) | Accepted |
 | 0004 | [Session and socket lifecycle belong to the session machine](0004-session-lifecycle.md) | Accepted |
@@ -24,3 +24,4 @@ delete it.
 | 0011 | [The settings window makes EchoType a regular app while it is open](0011-settings-window-activation.md) | Accepted |
 | 0012 | [Capture the microphone with AVCaptureSession on the chosen input](0012-capture-with-avcapturesession.md) | Accepted |
 | 0013 | [The Test button, launch at login and the permission rows](0013-test-button-and-system-rows.md) | Accepted |
+| 0014 | [Sign with Apple Development](0014-sign-with-apple-development.md) | Accepted |

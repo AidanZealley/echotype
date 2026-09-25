@@ -7,7 +7,7 @@ layout.
 
 The specification lays the pill out in one row, left to right: level meter, transcript,
 elapsed time, with the hint underneath. It asks for a meter of small vertical bars, "not
-decorative waveform art". Aidan chose the design from variants over four rounds with the
+decorative waveform art". The author chose the design from variants over four rounds with the
 `--hud-demo` launch. Three layouts came first: the specification's single row, a text-first
 layout, and a pill whose bottom edge was the meter. He preferred the text-first layout but
 wanted the more obvious level feedback of the third. The level feedback then went from a
@@ -29,7 +29,7 @@ forms, and finally opacity and placement.
   jitters. It is blurred and fades lighter downward. Its ripples move only while
   listening, and it flattens to a faint line when the user is quiet.
 - Glow opacity: 0.4 listening, 0.25 and grey while starting, 0.15 and still while paused,
-  gone once transcribing or failed. Aidan asked for it more subtle than the candidates
+  gone once transcribing or failed. The author asked for it more subtle than the candidates
   twice. The values were then picked without him naming a number, and he raised nothing
   about them at G2.
 - The transcript truncates from the left. Error text replaces it in red and truncates
@@ -41,7 +41,7 @@ forms, and finally opacity and placement.
 ## Consequences
 
 - The glow's ripples move on their own while the user speaks. That is the waveform art
-  the specification rules out, and Aidan accepted it. The bar meter is still the thing to
+  the specification rules out, and the author accepted it. The bar meter is still the thing to
   read the level from.
 - Tune the glow in `LevelGlow` and the meter mapping in `Overlay.level(rms:)`, and check
   both with `./scripts/run.sh --hud-demo` before dictating.

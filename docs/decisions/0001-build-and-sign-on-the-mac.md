@@ -1,6 +1,7 @@
 # 0001 Build on the Mac and sign with a self-signed certificate
 
-Status: accepted, 2026-09-22 (macOS spike). Linux development dropped at `47e3fa1`.
+Status: accepted, 2026-09-22 (macOS spike). Certificate choice superseded by
+[0014](0014-sign-with-apple-development.md). Linux development dropped at `47e3fa1`.
 
 ## Context
 
@@ -10,14 +11,14 @@ that a stable signature keeps grants across rebuilds.
 
 ## Decision
 
-- Sign every build with a self-signed code signing certificate named `EchoType Dev`.
-  Its Code Signing trust must be set to Always Trust. Without that step,
-  `security find-identity -v` hides the identity.
+- Sign every build with the self-signed code signing certificate named `EchoType Dev`.
+  Its Code Signing trust was set to Always Trust so `security find-identity -v`
+  would list it. This certificate choice was replaced by [0014](0014-sign-with-apple-development.md).
 - `scripts/run.sh` is the only build, sign and launch path.
-- The bundle identifier `com.aidanzealley.echotype` never changes. TCC grants, the
+- The bundle identifier in `Resources/Info.plist` never changes. TCC grants, the
   Keychain item and `UserDefaults` all key off it.
 - Build with Xcode's toolchain (`xcode-select` pointed at Xcode.app). The Command Line
-  Tools swift-driver was broken on Aidan's Mac.
+  Tools swift-driver was broken on the development Mac.
 
 ## Consequences
 
@@ -25,5 +26,6 @@ that a stable signature keeps grants across rebuilds.
 - On macOS 27.2 the event tap and the posted Cmd+V need one "Device Control and Data
   Access" grant, not separate Accessibility and Input Monitoring grants. The API check
   is still `AXIsProcessTrusted`.
-- To reset permissions, use `tccutil reset All com.aidanzealley.echotype`. That is the
-  verified command. Whether `reset Accessibility` clears the 27.2 grant is untested.
+- To reset permissions, use `tccutil reset All` with the bundle identifier from
+  `Resources/Info.plist`. That reset was verified; whether a narrower reset clears
+  the macOS 27 grant is untested.

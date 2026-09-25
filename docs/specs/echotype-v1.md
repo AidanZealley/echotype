@@ -437,7 +437,7 @@ Input Monitoring grants earlier versions asked for. The APIs are unchanged: the
 check is still the Accessibility trust check, so code and comments naming it are
 correct even though the user never sees that word.
 
-The bundle identifier is `com.aidanzealley.echotype`. It is fixed from the spike
+The bundle identifier in `Resources/Info.plist` is fixed from the spike
 onwards. TCC grants, the Keychain item holding the API key, the `UserDefaults`
 domain and the login item registration all key off it, so changing it later makes
 macOS treat the result as a new app and resets every one of them. The display
@@ -450,24 +450,26 @@ Do not enable App Sandbox. It blocks `CGEventPost` and the event tap outright an
 there is no entitlement that buys a way out for a non-App-Store app. Hardened
 runtime is skipped for now, since it is only needed for notarization.
 
-Sign every build with a stable self-signed certificate, created once in Keychain
-Access via Certificate Assistant: Create a Certificate, self-signed root, type
-Code Signing, named "EchoType Dev". Then set its Code Signing trust to Always
-Trust. Without that, `security find-identity -v` does not list the identity and
-`scripts/run.sh` fails at signing with nothing that points at the cause.
+Sign every build with the developer's Apple Development identity. Install that
+certificate through Xcode and check that `security find-identity -v -p codesigning`
+lists it. `scripts/run.sh` selects it automatically when only one matches
+`Apple Development`; set `ECHOTYPE_SIGNING_IDENTITY` to its full certificate
+name or SHA-1 hash when several match. The release install must use the same
+selection. This replaced the self-signed `EchoType Dev` certificate used in
+the spike. See [decision 0014](../decisions/0014-sign-with-apple-development.md).
 
 This is the detail that makes the project pleasant to work on. TCC keys its
 grants to the code signature. Signing ad-hoc with `codesign -s -` derives the
 requirement from the binary hash, so every rebuild looks like a brand new app and
-re-prompts for the grants above. A stable identity means granting each permission
-exactly once.
+re-prompts for the grants above. Keeping the same signing requirement across
+rebuilds is what lets the grants persist.
 
-No Apple Developer account and no notarization for v1. Gatekeeper only applies to
-quarantined downloads, and these builds are local. Both become necessary the
-moment someone else needs to run it.
+No notarization for v1. Gatekeeper only applies to quarantined downloads, and
+these builds are local. Distribution to other people would need a separate
+signing and notarization plan.
 
-Escape hatch when TCC gets confused:
-`tccutil reset All com.aidanzealley.echotype`. `reset All` is the verified one;
+Escape hatch when TCC gets confused: use `tccutil reset All` with the bundle
+identifier from `Resources/Info.plist`. `reset All` is the verified one;
 whether a narrower reset clears the macOS 27 grant was never tested.
 
 ## Development workflow
@@ -531,8 +533,9 @@ delivering `tapDisabledByTimeout`. The handler must catch that and re-enable
 itself, or dictation silently stops working after a while. This is the most
 likely cause of a "it stopped working and I don't know why" bug.
 
-Whether a self-signed identity gives TCC grants that genuinely survive rebuilds
-is the assumption the whole development loop rests on. Prove it first.
+TCC grants survived rebuilds during the self-signed spike. The current Apple
+Development identity is a different signing requirement, so verify grants
+persist across rebuilds with that identity too.
 
 The streaming protocol is taken from documentation. Event ordering and the exact
 semantics of `speech_final` versus `is_final` may differ in practice. The silence
@@ -549,7 +552,7 @@ after the tap timeout.
 
 ## Build order
 
-1. The spike, before any app code. `run.sh`, the self-signed certificate, an
+1. The spike, before any app code. `run.sh`, a stable signing certificate, an
    empty menu bar app, a `CGEventTap`, and Opt+D pasting the literal string
    "hello" into TextEdit. This proves the signing loop, TCC persistence and the
    paste round trip in about an hour, and each of those is a place this could
