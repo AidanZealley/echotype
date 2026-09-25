@@ -14,8 +14,8 @@ Keychain item the app cannot read without a prompt.
 
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
-  `keyterms`, `language` and `inputDeviceID` (omitted when `nil`). The key names and the
-  modifier bit positions are the upgrade contract.
+  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`) and `batchOnCommit`. The key
+  names and the modifier bit positions are the upgrade contract.
 - Each field decodes on its own and falls back to its default, so a missing or unreadable
   field resets only itself and adding a field never resets the hotkey. Data that is not a
   JSON object gives all defaults.

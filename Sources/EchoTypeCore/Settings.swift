@@ -56,7 +56,7 @@ public struct Settings: Equatable, Sendable {
   /// Domain terms sent to the transcription API to improve accuracy on jargon.
   ///
   /// The endpoint accepts up to 100, and they are the highest-value accuracy lever available:
-  /// without them the model hears "shad CN" and "Zoo stand". `STTConnection.streamingURL`
+  /// without them the model hears "shad CN" and "Zoo stand". `STTConnection.keyterms(settings:)`
   /// enforces the caps.
   public var keyterms: [String]
 
@@ -85,6 +85,10 @@ public struct Settings: Equatable, Sendable {
   /// AirPods does the obvious thing.
   public var inputDeviceID: String?
 
+  /// Whether to transcribe the whole recording again when the user stops, and insert that text
+  /// instead of the streamed text. The batch pass punctuates across pauses much better.
+  public var batchOnCommit: Bool
+
   public init(
     hotkey: Hotkey = .optionD,
     keyterms: [String] = [],
@@ -92,7 +96,8 @@ public struct Settings: Equatable, Sendable {
     silenceTimeout: TimeInterval = 10,
     hardCap: TimeInterval = 600,
     finalizeTimeout: TimeInterval = 8,
-    inputDeviceID: String? = nil
+    inputDeviceID: String? = nil,
+    batchOnCommit: Bool = true
   ) {
     self.hotkey = hotkey
     self.keyterms = keyterms
@@ -101,6 +106,7 @@ public struct Settings: Equatable, Sendable {
     self.hardCap = hardCap
     self.finalizeTimeout = finalizeTimeout
     self.inputDeviceID = inputDeviceID
+    self.batchOnCommit = batchOnCommit
   }
 }
 
@@ -114,7 +120,7 @@ public struct Settings: Equatable, Sendable {
 /// default, so adding a field later, or one unreadable field, never resets the others.
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
-    case hotkey, keyterms, language, inputDeviceID
+    case hotkey, keyterms, language, inputDeviceID, batchOnCommit
   }
 
   public init(from decoder: any Decoder) throws {
@@ -127,6 +133,8 @@ extension Settings: Codable {
     language =
       (try? container.decodeIfPresent(String.self, forKey: .language)) ?? defaults.language
     inputDeviceID = try? container.decodeIfPresent(String.self, forKey: .inputDeviceID)
+    batchOnCommit =
+      (try? container.decodeIfPresent(Bool.self, forKey: .batchOnCommit)) ?? defaults.batchOnCommit
   }
 
   public func encode(to encoder: any Encoder) throws {
@@ -135,6 +143,7 @@ extension Settings: Codable {
     try container.encode(keyterms, forKey: .keyterms)
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)
+    try container.encode(batchOnCommit, forKey: .batchOnCommit)
   }
 
   /// Decodes a stored value. Missing or unreadable data gives the defaults.
@@ -144,7 +153,7 @@ extension Settings: Codable {
 
   /// The value to store.
   public func encoded() -> Data {
-    // Strings and integers always encode.
+    // Strings, integers and booleans always encode.
     try! JSONEncoder().encode(self)
   }
 }
