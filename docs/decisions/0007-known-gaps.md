@@ -12,9 +12,15 @@ Status: open. Remove each item as it is resolved.
 - **Verified only by reading:** tap re-enable after `tapDisabledByTimeout`, two
   insertions within the 800ms pasteboard restore window, and the pill appearing on the
   second display when that display holds the focused window.
-- **Bluetooth input** gives wrong transcripts. See
+- **Bluetooth input** runs in the headset profile, which gave wrong transcripts before
+  [0012](0012-capture-with-avcapturesession.md). See
   [0005](0005-microphone-per-session.md). The settings input picker lets the user choose
   another microphone, but nothing warns that a Bluetooth input is in use.
+- **Every 400 is worded as a key problem.** Language is free text, saved on every
+  keystroke. If `api.x.ai` answers an unsupported language tag (say "english") with 400,
+  every dictation and Test blames the key. Unverified against the live endpoint.
+- **The resampler's tail is not flushed** when capture stops, so roughly the last 20 to
+  30ms of audio is not sent. No clipping has been heard.
 - **Inputs with more than two channels** are not mixed properly. Without a channel
   layout from the system the session fails to convert; with one, the mix to mono keeps
   only the first channel.
