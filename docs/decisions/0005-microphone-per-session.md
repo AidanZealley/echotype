@@ -1,7 +1,8 @@
 # 0005 Open the microphone per session and release it when the session ends
 
 Status: accepted, 2026-09-23 (dictation gate G1). Replaces the specification's
-original warm idle hold.
+original warm idle hold. Device choice and capture are superseded by
+[0012](0012-capture-with-avcapturesession.md).
 
 ## Context
 
@@ -19,7 +20,8 @@ indicator lit after dictation ends, which Aidan found disconcerting.
   `trigger()`. Otherwise the last word can be dropped after `audio.done`.
 - Audio reaches the session as 16 kHz mono little-endian Int16 `Data` in roughly 100ms
   chunks. The chunk cadence is the capture layer's job, not `AudioConverter`'s.
-- The app follows the system default input.
+- The app follows the system default input. (Superseded: the settings window chooses the
+  input, and a session keeps the input it opened.)
 
 ## Consequences
 
@@ -30,4 +32,5 @@ indicator lit after dictation ends, which Aidan found disconcerting.
   switches to listening.
 - Bluetooth earbuds produce wrong transcripts. The endpoint gets faint headset-profile
   audio and returns guesses or the keyterm prompt, and the profile switch loses the
-  opening seconds. Input device choice or a warning belongs with settings.
+  opening seconds. The settings window now lets the user choose another input; nothing
+  warns yet (see [0007](0007-known-gaps.md)).
