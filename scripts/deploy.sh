@@ -18,9 +18,10 @@ swift build -c "$configuration"
 # existing bundle untouched.
 staged=.build/EchoType-$configuration.app
 rm -rf "$staged"
-mkdir -p "$staged/Contents/MacOS"
+mkdir -p "$staged/Contents/MacOS" "$staged/Contents/Resources"
 cp "$(swift build -c "$configuration" --show-bin-path)/EchoTypeApp" "$staged/Contents/MacOS/"
 cp Resources/Info.plist "$staged/Contents/"
+cp Resources/AppIcon.icns "$staged/Contents/Resources/"
 
 # A unique local Apple Development identity is selected by default. Set the variable
 # to a full certificate name or SHA-1 hash if more than one is installed.
