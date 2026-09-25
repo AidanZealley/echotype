@@ -366,18 +366,24 @@ Package.swift
 Sources/
   EchoTypeCore/          decisions: no UI, no global state, no I/O
     SessionMachine.swift
-    TranscriptAssembler.swift
-    STTClient.swift      depends on a WebSocketTransport protocol
+    SessionClock.swift   injected time and the system clock
+    RelayTransport.swift forwards messages read by the session
     Settings.swift
+    STT/
+      TranscriptAssembler.swift
+      STTClient.swift    depends on a WebSocketTransport protocol
   EchoTypeApp/           macOS only
     App.swift            MenuBarExtra, Settings scene
     HotkeyMonitor.swift  CGEventTap
-    AudioCapture.swift   AVAudioEngine
+    AudioCapture.swift   microphone and capture session lifecycle
+    AudioChunker.swift   sample conversion and 100ms chunks
+    DictationController.swift
     Inserter.swift       pasteboard + CGEventPost
     OverlayPanel.swift   NSPanel shim hosting a SwiftUI view
     Keychain.swift
     Views/
 Tests/EchoTypeCoreTests/
+  Support/               session test transport, clock and snapshot log
 Resources/Info.plist
 scripts/run.sh
 scripts/install.sh
