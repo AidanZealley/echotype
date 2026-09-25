@@ -6,6 +6,12 @@ import Observation
 /// Owns the session lifecycle: the hotkey opens a session, the hotkey or a click on the pill
 /// commits it, Escape discards it, and the outcome is inserted at the caret.
 ///
+/// With `batchOnCommit` on, a session that ends with text to insert is transcribed a second
+/// time, in one batch request for the whole recording, and that text is inserted instead. The
+/// pill stays on `Transcribing` with the live text while it runs. If batch fails, times out or
+/// hears nothing, the live text is inserted with no error shown. Escape, the hotkey and a click
+/// do nothing during the pass, because the session has already ended.
+///
 /// The overlay pill shows the session from the press to its end, errors included. `state` is
 /// what the menu bar renders.
 ///
@@ -130,11 +136,25 @@ import Observation
       end()
     case .failed(let error):
       end(showing: error)
-    case .started(let session, let chunks):
+    case .started(let session, let chunks, let apiKey):
       phase = .running(session)
-      let (outcome, audioFailure) = await run(session, streaming: chunks)
+      let (live, audioFailure, recording) = await run(session, streaming: chunks)
+      let outcome = await batchPass(live, recording: recording, settings: settings, apiKey: apiKey)
       finish(outcome, audioFailure: audioFailure)
     }
+  }
+
+  /// With `batchOnCommit` on, replaces the live text of an outcome to insert with a batch
+  /// transcription of the whole recording. Keeps the live text if batch fails, times out or
+  /// returns empty text: the user still gets their words, with the streamed punctuation.
+  private func batchPass(
+    _ outcome: SessionMachine.Outcome, recording: Data, settings: Settings, apiKey: String
+  ) async -> SessionMachine.Outcome {
+    guard settings.batchOnCommit, case .insert = outcome else { return outcome }
+    let batch = try? await BatchTranscriber.transcribe(
+      pcm: recording, settings: settings, apiKey: apiKey)
+    guard let batch, !batch.isEmpty else { return outcome }
+    return .insert(batch)
   }
 
   /// Runs a session as a dictation would, with the same settings and device, and commits it
@@ -152,7 +172,7 @@ import Observation
       return nil
     case .failed(let error):
       return .failed(error)
-    case .started(let started, let stream):
+    case .started(let started, let stream, _):
       (session, chunks) = (started, stream)
     }
 
@@ -160,7 +180,7 @@ import Observation
       try? await Task.sleep(for: .seconds(5))
       if !Task.isCancelled { commit() }
     }
-    let (outcome, audioFailure) = await run(session, streaming: chunks)
+    let (outcome, audioFailure, _) = await run(session, streaming: chunks)
     // A session that ended early must not have a later one committed for it.
     commitAfterFive.cancel()
     return switch (outcome, audioFailure) {
@@ -171,7 +191,8 @@ import Observation
   }
 
   private enum Start {
-    case started(SessionMachine, AsyncThrowingStream<Data, any Error>)
+    /// Carries the API key so the batch pass doesn't read the Keychain a second time.
+    case started(SessionMachine, AsyncThrowingStream<Data, any Error>, apiKey: String)
     /// Escape was pressed while starting. The microphone is released and no socket opened.
     case abandoned
     /// Why the session could not start, worded for the user.
@@ -203,7 +224,7 @@ import Observation
     let transport = URLSessionWebSocketTransport(
       url: STTConnection.streamingURL(settings: settings), apiKey: apiKey)
     let session = SessionMachine(transport: transport, settings: settings, clock: SystemClock())
-    return .started(session, chunks)
+    return .started(session, chunks, apiKey: apiKey)
   }
 
   private var isAbandoned: Bool {
@@ -217,12 +238,13 @@ import Observation
   }
 
   /// Runs the session to its outcome, mirroring it into the menu and the pill and feeding it
-  /// audio. Returns the error that ended capture early, if the microphone failed.
+  /// audio. Returns the error that ended capture early, if the microphone failed, and the
+  /// recording: every chunk the session was sent, held in memory for the batch pass.
   private func run(
     _ session: SessionMachine, streaming chunks: AsyncThrowingStream<Data, any Error>
-  ) async -> (SessionMachine.Outcome, (any Error)?) {
+  ) async -> (SessionMachine.Outcome, (any Error)?, Data) {
     let outcome = Task { await session.run() }
-    var pump: Task<(any Error)?, Never>?
+    var pump: Task<(Data, (any Error)?), Never>?
     for await snapshot in session.snapshots {
       state = snapshot.state
       updatePill { $0.apply(snapshot) }
@@ -235,20 +257,23 @@ import Observation
     // A session that ended on its own (cancel, silence, the hard cap, a failure) still has a
     // stream open. After a commit this is a second `stop()`, which does nothing.
     audio.stop()
-    let audioFailure = await pump?.value ?? nil
+    let (recording, audioFailure) = await pump?.value ?? (Data(), nil)
     state = .idle
-    return (result, audioFailure)
+    return (result, audioFailure, recording)
   }
 
   /// Feeds the session every chunk the stream yields, then commits it. The stream ends on
   /// `stop()`, from a commit or the end of the session, or by throwing if the microphone
-  /// fails. Returns that failure, if any.
+  /// fails. Returns the recording, every chunk it sent including those buffered before
+  /// `listening`, and that failure, if any.
   private func pump(
     _ chunks: AsyncThrowingStream<Data, any Error>, into session: SessionMachine
-  ) async -> (any Error)? {
+  ) async -> (Data, (any Error)?) {
+    var recording = Data()
     var failure: (any Error)?
     do {
       for try await chunk in chunks {
+        recording.append(chunk)
         // A failed send means the socket failed, and the session reports that itself. Keep
         // draining, so the pump only ever ends with the stream and the trigger below.
         try? await session.send(audio: chunk)
@@ -260,7 +285,7 @@ import Observation
     }
     // Does nothing if the session has already ended.
     await session.trigger()
-    return failure
+    return (recording, failure)
   }
 
   private func finish(_ outcome: SessionMachine.Outcome, audioFailure: (any Error)?) {

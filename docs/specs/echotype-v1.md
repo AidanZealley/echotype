@@ -280,7 +280,7 @@ dictation costs under two tenths of a cent, so cost is not a design input.
 ?encoding=pcm
 &sample_rate=16000
 &interim_results=true
-&endpointing=5000
+&endpointing=2000
 &filler_words=false
 &format=true
 &language=en
@@ -291,9 +291,6 @@ dictation costs under two tenths of a cent, so cost is not a design input.
 utterance has ended, closes the segment and sets `speech_final`. It is set high
 deliberately. Utterance boundaries are controlled by the hotkey, and the default
 400ms would chop a prompt into fragments every time the speaker pauses to think.
-It was raised from 2000 to 5000 because `format=true` punctuates each utterance
-on its own, so every boundary tended to end a short sentence with a full stop.
-It stays under the 10s silence timeout.
 
 The number is a floor rather than the boundary. Measured live at
 `endpointing=2000`, the boundary landed 2.73-2.80s after the endpoint's own last

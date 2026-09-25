@@ -39,6 +39,12 @@ private struct GeneralTab: View {
       }
       InputRow(store: store)
       LanguageRow(store: store)
+      VStack(alignment: .leading) {
+        Toggle("Re-transcribe on stop", isOn: $store.settings.batchOnCommit)
+        Text("Better punctuation, slower insertion")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       LaunchAtLoginRow()
       PermissionsRow()
         .padding(.top, 12)

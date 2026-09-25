@@ -3,7 +3,7 @@
 A second transcription of the whole recording, run when the user stops, whose text is
 inserted instead of the streamed text.
 
-Status: drafted 2026-09-25, not yet implemented.
+Status: drafted and implemented 2026-09-25.
 
 ## Problem
 

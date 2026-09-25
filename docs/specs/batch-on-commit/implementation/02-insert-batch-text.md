@@ -1,6 +1,6 @@
 # Workstream 2: Insert the batch text on stop
 
-Status: not started.
+Status: Accepted.
 
 ## Task packet
 
@@ -86,56 +86,166 @@ development bundle. Check the toggle in Settings if you can drive the UI; otherw
 
 ## Implementation handoff
 
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
+- Base commit: `095449f`
+- Outcome: implemented. `pump` appends every chunk it drains to a local `Data` and returns
+  `(recording, failure)`; `run` returns `(outcome, audioFailure, recording)`.
+  `Start.started` carries `apiKey:`. `dictate()` calls a new private `batchPass`, which returns
+  the outcome unchanged unless `settings.batchOnCommit` is on and it is `.insert`, and replaces
+  it with `.insert(batch)` only when `BatchTranscriber.transcribe` returns non-empty text
+  (`try?`, so any throw keeps `live`). `test()` discards the key and the recording. `phase` stays
+  `.running(session)` during the pass, so the hotkey and a click call `commit()` (a repeat
+  `audio.stop()`, a no-op) and Escape calls `session.cancel()`, which returns early once the
+  session has ended. The recording is a local of `dictate()` and is freed when it returns.
+- Files changed: `Sources/EchoTypeApp/DictationController.swift`,
+  `Sources/EchoTypeApp/Views/SettingsView.swift` (`GeneralTab`: a `VStack` with the toggle and a
+  caption styled like the Login Items hint, after `LanguageRow`),
+  `docs/decisions/0017-batch-pass-on-commit.md` (new), `docs/decisions/README.md` (index row),
+  `docs/specs/batch-on-commit.md` (status line).
+- Decisions: whitespace-only batch text counts as non-empty, following the specification
+  literally. Decision 0017's status reads "accepted, 2026-09-25, pending batch-on-commit gate
+  G1", and its Evidence section has a `G1: pending` paragraph for the lead to replace with the
+  findings for `filler_words` and `keyterm`, the inserted text and the spinner time. Update the
+  status line when G1 passes.
+- Decisions after G1: G1 passed on Aidan's answer (steps 1, 2 and 4; step 3 not run and
+  waived). Aidan also approved reverting live `endpointing` from 5000 to 2000 (undoing
+  `4b7578c`), made by this workstream in `EchoTypeCore` with his authorisation and recorded in
+  the plan's decision and drift log. Decision 0017 records the revert and G1's findings.
+- Verification: `swift build` clean, with no warnings. `swift test` passed, 47 tests.
+  `./scripts/run.sh` built, signed and launched `.build/EchoType.app` from this diff; it is
+  still running. The toggle was not checked in the UI.
+- Known limitations or external checks: G1 covers the wiring, the toggle's appearance and the
+  two unconfirmed parameters. The Test path also collects its five-second recording, then
+  drops it.
+- Specification drift: none.
 
 ## Independent review
 
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
+- Reviewer: fresh independent review agent, against base `095449f` plus the uncommitted diff.
+- Verdict: no Required findings. Criteria 1 to 8 hold by reading; 9 holds for `swift build` and
+  `swift test` (not relaunched; the handoff records `./scripts/run.sh`); 10 is G1, still pending.
+  Checks run: `swift build` ("Build complete!"), `swift test` ("Test run with 47 tests in 1
+  suite passed").
+  - Criterion 1: `AudioCapture.start` builds the stream with `AsyncThrowingStream.makeStream(of:)`
+    and the default unbounded buffer (`AudioCapture.swift:49`), so chunks buffered before
+    `listening` are drained by `pump`, which appends each one before sending
+    (`DictationController.swift:276`). The key read in `start` travels in `.started`
+    (`:227`) to `batchPass` (`:142`, `:155`).
+  - Criterion 2: `try?` plus `guard let batch, !batch.isEmpty else { return outcome }` (`:156`)
+    keeps `.insert(live)`, and `finish` then runs the unchanged path with no error.
+  - Criterion 3: `batchPass` returns the outcome untouched unless the setting is on and it is
+    `.insert` (`:153`); `test()` discards the key and the recording.
+  - Criterion 4: `Keychain.apiKey()` is called only in `start`; no second read was added.
+  - Criterion 5: the last snapshots are `inserting` then `idle` (`SessionMachine.settle`), and
+    `Pill.apply` maps `inserting` to `transcribing` and ignores `idle` (`:379`-`:380`); nothing
+    updates the pill between `run` and `finish`. `phase` stays `.running`, so a press or click
+    calls `commit()`, whose `audio.stop()` returns at `guard let session` because `end` cleared
+    it (`AudioCapture.swift:65`, `:108`), and Escape's `session.cancel()` returns at
+    `guard isActive` (`SessionMachine.swift:141`-`142`). `isIdle` is false, so Test stays
+    disabled.
+  - Criterion 6: the recording is a local in `pump`, `run` and `dictate()`, with no file I/O.
+  - Criterion 7: the toggle binds `$store.settings.batchOnCommit` after `LanguageRow`, with the
+    caption in `.caption`/`.secondary` like the Login Items hint (`SettingsView.swift:42`-`47`,
+    `:346`-`348`). Persistence is workstream 1's `Settings` coding (`Settings.swift:136`, `:146`).
+  - Criterion 8: 0017 matches the code and is indexed; the G1 paragraph is pending by design.
+- Required findings: none.
+- Optional observations:
+  1. Whitespace-only batch text replaces the live text. `!batch.isEmpty`
+     (`DictationController.swift:156`) lets `" "` or `"\n"` through, so the user would get
+     whitespace instead of their words, and the resulting `.insert` breaks the "Text to insert.
+     Never empty." contract (`SessionMachine.swift:47`). The handoff reads "non-empty" literally.
+     Checking `batch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty` instead would
+     match the specification's intent ("If batch ... returns empty text, EchoType inserts the
+     live text") at no cost. The response is unlikely to be whitespace-only, so this is not
+     blocking.
+  2. Decision 0017 says the recording "is released when the session ends"
+     (`0017-batch-pass-on-commit.md:49`). It is released when `dictate()` returns, after the
+     pass and the insertion, as acceptance criterion 6 says. A one-word change would make it
+     exact.
+- Questions: none.
 
 ## Resolution
 
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
+- Finding dispositions: no Required findings, so no remediation pass.
+  - Optional 1 (whitespace-only batch text): declined. The specification and the seam say
+    "empty", a whitespace-only response is improbable, and inserting it is harmless. Left for
+    the final review to weigh.
+  - Optional 2 (0017 release wording): accepted as a documentation fix. The lead changed the
+    sentence to say the recording is released once the pass and the insertion are done.
+- Simplification/deletion pass: the diff adds one helper (`batchPass`), one tuple element on
+  `run` and `pump`, and one associated value on `Start.started`. Nothing to remove.
+- Final verification: `swift build` clean and `swift test` 47 passed, run by the implementation
+  agent and the reviewer on this diff.
+- Post-G1 review: Required 1 (drift log row missing) accepted and fixed by the lead in
+  `plan.md`; it was a record gap, not code. Optional 1 (2000 not dictated since the revert)
+  declined: it restores the value that shipped before `4b7578c`, and the batch pass does not
+  depend on it. Final checks on the committed diff: `swift build` clean, `swift test` 47
+  passed, `./scripts/run.sh` built and launched the app.
 
 ## Closure review
 
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
+- Reviewer: fresh closure agent, against base `095449f` plus the uncommitted diff.
+- Verdict: closed. The one accepted finding, Optional 2, is fixed. Decision 0017 now reads "is
+  released once the pass and the insertion are done" (`0017-batch-pass-on-commit.md:49`-`50`).
+  That matches the code: `recording` is a local of `dictate()` that stays alive through
+  `batchPass` and `finish` (`DictationController.swift:141`-`143`), which is what criterion 6
+  says. The fix touches only that sentence, so it adds no release-blocking defect. The source
+  diff has not changed since the independent review, and `swift build` reports "Build
+  complete!". The declined Optional 1 and the pending G1 paragraph are outside this closure.
+- Remaining required findings: none.
+
+### Post-G1 review
+
+- Reviewer: fresh review agent, limited to the post-G1 correction (endpointing revert and
+  decision 0017) against base `095449f` plus the uncommitted diff.
+- Verdict: the revert is exact and complete, and 0017 matches the code and G1. One Required
+  record gap in `plan.md`.
+  - Revert: `git diff` on `STTConnection.swift`, `STTConnectionTests.swift` and
+    `docs/specs/echotype-v1.md` is the line-for-line inverse of `git show 4b7578c` on the same
+    three files (value `5000` to `2000` in code, test and spec URL; the two added comment lines
+    and the three added spec lines removed). The test and the spec are byte-identical to
+    `4b7578c^`. `STTConnection.swift` differs from `4b7578c^` only by workstream 1's committed
+    `keyterms(settings:)` refactor.
+  - No stale claims: `grep -rnE "5000|endpointing"` over `*.md` and `*.swift` finds `5000` for
+    live endpointing only in the batch-on-commit spec's Problem section (intentional), 0017's
+    Context (historical, and says it went back to 2000), and the E1 entry and this packet.
+    `OverlayTests.swift:26` is a screen coordinate. Decision 0002 and `echotype-v1.md` still
+    describe `endpointing=2000`, now correct again.
+  - 0017: status "accepted, 2026-09-25" matches the index row. The Context note on returning to
+    2000 matches the code. The G1 paragraph matches E1: steps 1, 2 and 4 passed, and it says the
+    inserted text was not captured and the one-minute spinner time was not measured. Its
+    `keyterm` and `filler_words=false` conclusion is an inference from joined-up text with no
+    "um", and the paragraph states it as that, with the reasoning.
+  - Checks: `swift build` ("Build complete!"), `swift test` ("Test run with 47 tests in 1 suite
+    passed").
+- Required findings:
+  1. The decision and drift log in `plan.md` still reads "None", though E1 says "record it in
+     the decision and drift log" and this packet's External validation section says "The
+     endpointing revert is in the plan's decision and drift log". Add the row (revert of
+     `4b7578c`, reason, approved by Aidan in E1, workstream 2 touching `EchoTypeCore`) before
+     accepting and removing E1. Record only; no code change.
+- Optional observations:
+  1. G1 ran on the candidate with `endpointing=5000`, so the restored 2000 has not been dictated
+     against since the revert. It restores a value that shipped before `4b7578c`, and the batch
+     pass does not depend on it, so this does not block.
 
 ## External validation
 
 - Gate and placement: G1, after closure and before acceptance.
-- Status: `Pending`
-- Candidate and instructions: `TBD`. The lead records the base, confirms the app running from
-  `./scripts/run.sh` was built from the current diff, and gives Aidan these steps:
-  1. In Settings > General, confirm **Re-transcribe on stop** is on, with its caption. Set a few
-     keyterms if none are set.
-  2. Dictate a sentence or two with long thinking pauses and at least one "um", then stop. The
-     inserted text should read as joined-up sentences with no "um".
-  3. Dictate for about a minute and note how long the spinner stays after stopping.
-  4. Turn the setting off and dictate with pauses. The text should match today's fragmented
-     output, inserted immediately.
-  Opening Settings in the development build moves the login item to it. The installed app takes
-  it back the next time it launches.
-- Required evidence: pass or fail for each step, the inserted text from steps 2 and 4, and the
-  spinner time from step 3. The fallback is not tested by hand; review proves criterion 2 from
-  the code.
-- Troubleshooting: if step 2 still looks fragmented, batch is failing and the live text is being
-  used. Give Aidan a `curl` command to run with their own key that reproduces the
-  request against a short WAV, once with and once without `keyterm` and `filler_words`, to find a
-  rejected parameter.
-  Dropping a parameter changes approved behaviour and needs Aidan's answer.
-- Attempts and lasting decisions: `TBD`
-- Resume condition: Aidan's results are recorded in the plan escalation. A fresh lead audits the
-  candidate, resolves any failure, and marks G1 `Passed` before accepting.
+- Status: `Passed`
+- Candidate: base `095449f` plus the uncommitted workstream 2 diff, launched with
+  `./scripts/run.sh` after closure and put to Aidan through plan escalation E1.
+- Results (Aidan, 2026-09-25): step 1 (toggle and caption in General) passed. Step 2 passed:
+  a dictation with long pauses and an "um" came out as joined-up sentences with no "um", so
+  batch accepted `keyterm` and `filler_words=false` rather than falling back. Step 4 passed:
+  with the setting off, the fragmented streamed text was inserted immediately. Step 3, the
+  spinner time after a one-minute dictation, was not run; Aidan accepted G1 without it. No
+  inserted text or `curl` output was captured. Criterion 2's fallback is proved from the code
+  by review.
+- Post-G1 correction: Aidan approved, in E1, reverting live `endpointing` from 5000 to 2000,
+  undoing commit `4b7578c` in `STTConnection.swift`, its test and `docs/specs/echotype-v1.md`.
+  Applied as `git revert --no-commit 4b7578c`, which applied cleanly. Decision 0017 now records
+  the revert, its G1 paragraph and an accepted status. `swift build` clean, `swift test` 47
+  passed, and `./scripts/run.sh` rebuilt and relaunched `.build/EchoType.app` from this diff.
+  The revert touches an `EchoTypeCore` file, so it had one focused review; see Closure review.
+- Attempts and lasting decisions: one candidate, passed. The endpointing revert is in the plan's
+  decision and drift log.

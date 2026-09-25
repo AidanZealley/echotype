@@ -19,7 +19,7 @@ func connectionURLCarriesTheDocumentedParameters() {
       URLQueryItem(name: "encoding", value: "pcm"),
       URLQueryItem(name: "sample_rate", value: "16000"),
       URLQueryItem(name: "interim_results", value: "true"),
-      URLQueryItem(name: "endpointing", value: "5000"),
+      URLQueryItem(name: "endpointing", value: "2000"),
       URLQueryItem(name: "filler_words", value: "false"),
       URLQueryItem(name: "format", value: "true"),
       URLQueryItem(name: "language", value: "en-GB"),
