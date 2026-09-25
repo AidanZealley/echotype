@@ -1,6 +1,6 @@
 # Settings implementation plan
 
-Status: in progress; workstream 1 accepted.
+Status: in progress; workstreams 1 and 2 accepted.
 
 ## Orchestration record
 
@@ -15,7 +15,7 @@ Status: in progress; workstream 1 accepted.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Persistent settings and the window](01-persistent-settings-and-window.md) | Approved spec | Accepted |
-| 2 | [Input device, key test and system status](02-device-test-and-system-status.md) | 1 | Not started |
+| 2 | [Input device, key test and system status](02-device-test-and-system-status.md) | 1 | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Not started |
 
 ## Why these boundaries
@@ -134,7 +134,7 @@ Required evidence, in Aidan's words:
 
 - Owning workstream: 2
 - Placement: after focused closure, before acceptance
-- Status: `Pending`
+- Status: `Passed`
 - Candidate: the uncommitted workstream 2 state, launched with `./scripts/run.sh`
 - Resume condition: Aidan reports every observation below, or a failure the lead can
   correct and republish
@@ -175,3 +175,7 @@ None open.
 | 2026-09-24 | Launch at login state is read from `SMAppService`, not stored | The system is the source of truth and can be changed in System Settings | Pending approval of this workflow | 2 |
 | 2026-09-25 | EchoType shows a Dock icon and a Cmd+Tab entry while the settings window is open, switching to a regular app and back to accessory when the window closes. The specification says `LSUIElement` keeps it out of the Dock and Cmd+Tab | macOS does not reliably activate an accessory app, so the window opened behind the frontmost app or without focus at G1. Tailscale does the same | Aidan, at G1 (E3) | 1, 2 |
 | 2026-09-24 | The Test button runs a real streaming session through the controller for five seconds and shows the outcome inline. It never inserts and shows no pill. It does not use the batch endpoint | The specification says one click validates the microphone, the device, the key and the socket, and only the streaming path covers the socket | Pending approval of this workflow | 2 |
+| 2026-09-25 | Microphone capture uses an input-only `AVCaptureSession`, not `AVAudioEngine` as the specification's Architecture and Audio sections say. The input picker lists `AVCaptureDevice`s rather than Core Audio devices as the workstream 2 packet says; `Settings.inputDeviceID` stores their unique ID | `AVAudioEngine` stopped itself on every open of Bluetooth earbuds (the profile switch changes the device format) and its restarts looped, and a stale format in one restart crashed the app at G2 | Aidan, at G2 (E6) | 2 |
+| 2026-09-25 | A session keeps the input it opened when the system default changes mid-session, and reopens at most once if that input goes away | Following a new default mid-session would switch a Bluetooth headset's profile mid-dictation. One reopen bounds any loop | Aidan, at G2 (E6) | 2 |
+| 2026-09-25 | The overlay meter measures the audio sent, after the mix to 16 kHz mono, not the loudest channel before conversion as 0009 says | The capture format may not be float, and the sent audio reads the same for every device | Aidan, at G2 (E6) | 2 |
+| 2026-09-25 | While the settings window is open, the menu bar menu does not open from a fullscreen app. Kept as a known gap in 0007 rather than showing the Dock icon only while EchoType is frontmost | A macOS limitation for status items of regular apps, following from the E3 Dock icon decision. The alternative drops the window's Cmd+Tab entry and reopens activation code. Do not reopen the window behaviour unless it becomes a problem | Aidan, at G2 (E7) | 2, Final |

@@ -9,11 +9,22 @@ import Observation
 /// The overlay pill shows the session from the press to its end, errors included. `state` is
 /// what the menu bar renders.
 ///
+/// The settings window's Test button runs the same session through `test()`, which shows no
+/// pill and inserts nothing. The hotkey, Escape and the pill ignore it.
+///
 /// The hotkey and Escape arrive inside the event tap's callback, which must only decide whether
 /// to consume the event. So those handlers change `phase`, which is what that decision reads,
 /// and leave every other piece of work to a task.
 @MainActor @Observable final class DictationController {
   private(set) var state: SessionMachine.State = .idle
+
+  /// What a test heard, for the settings window to show.
+  enum TestOutcome {
+    case heard(String)
+    case heardNothing
+    /// Worded by `describe(_:)`, as the pill would show it.
+    case failed(String)
+  }
 
   private enum Phase {
     case idle
@@ -23,6 +34,13 @@ import Observation
     /// Escape was pressed while starting. The start stops at its next step.
     case abandoned
     case running(SessionMachine)
+    /// A test from the settings window, from its start to its outcome.
+    case testing
+  }
+
+  /// No dictation or test is starting or running, so a test may start.
+  var isIdle: Bool {
+    if case .idle = phase { true } else { false }
   }
 
   /// The monitor reads the hotkey from it live; each session reads a copy of the rest.
@@ -59,7 +77,7 @@ import Observation
     case .idle:
       phase = .starting
       Task { await dictate() }
-    case .starting, .abandoned:
+    case .starting, .abandoned, .testing:
       break
     case .running:
       Task { commit() }
@@ -70,7 +88,7 @@ import Observation
   /// starting or running.
   private func escapePressed() -> Bool {
     switch phase {
-    case .idle:
+    case .idle, .testing:
       return false
     case .starting:
       phase = .abandoned
@@ -107,44 +125,95 @@ import Observation
     // Read once, here, so a change in Settings never reaches a session already running.
     let settings = store.settings
     showStarting()
+    switch await start(settings) {
+    case .abandoned:
+      end()
+    case .failed(let error):
+      end(showing: error)
+    case .started(let session, let chunks):
+      phase = .running(session)
+      let (outcome, audioFailure) = await run(session, streaming: chunks)
+      finish(outcome, audioFailure: audioFailure)
+    }
+  }
 
+  /// Runs a session as a dictation would, with the same settings and device, and commits it
+  /// after five seconds as the hotkey does. Returns nil without starting if a dictation or
+  /// another test is under way.
+  func test() async -> TestOutcome? {
+    guard isIdle else { return nil }
+    phase = .testing
+    defer { phase = .idle }
+    let session: SessionMachine
+    let chunks: AsyncThrowingStream<Data, any Error>
+    switch await start(store.settings) {
+    case .abandoned:
+      // Only Escape abandons, and Escape ignores a test.
+      return nil
+    case .failed(let error):
+      return .failed(error)
+    case .started(let started, let stream):
+      (session, chunks) = (started, stream)
+    }
+
+    let commitAfterFive = Task {
+      try? await Task.sleep(for: .seconds(5))
+      if !Task.isCancelled { commit() }
+    }
+    let (outcome, audioFailure) = await run(session, streaming: chunks)
+    // A session that ended early must not have a later one committed for it.
+    commitAfterFive.cancel()
+    return switch (outcome, audioFailure) {
+    case (_, let error?), (.failed(_, let error as any Error), nil): .failed(describe(error))
+    case (.insert(let text), nil): .heard(text)
+    case (.nothing, nil): .heardNothing
+    }
+  }
+
+  private enum Start {
+    case started(SessionMachine, AsyncThrowingStream<Data, any Error>)
+    /// Escape was pressed while starting. The microphone is released and no socket opened.
+    case abandoned
+    /// Why the session could not start, worded for the user.
+    case failed(String)
+  }
+
+  /// Opens the microphone, reads the key and prepares the socket, which the session opens when
+  /// it runs. The one start sequence for dictation and test alike.
+  private func start(_ settings: Settings) async -> Start {
     // The microphone first: before the socket, so a denied grant never opens a billed
     // connection, and before the key, so the Keychain read is not in the first word's path
     // and the first press raises the Microphone prompt even with no key seeded. Chunks buffer
     // in the stream until the session accepts them.
     let chunks: AsyncThrowingStream<Data, any Error>
     do {
-      chunks = try await audio.start()
+      chunks = try await audio.start(deviceUID: settings.inputDeviceID)
     } catch {
-      return end(showing: isAbandoned ? nil : describe(error))
+      return isAbandoned ? .abandoned : .failed(describe(error))
     }
     guard !isAbandoned else { return abandon() }
     let apiKey = await Task.detached(operation: { Keychain.apiKey() }).value
     guard !isAbandoned else { return abandon() }
     guard let apiKey else {
       audio.stop()
-      return end(showing: "Add your xAI API key in EchoType Settings")
+      return .failed("Add your xAI API key in EchoType Settings")
     }
 
     // The socket opens here, on trigger, because an idle open socket bills streaming time.
     let transport = URLSessionWebSocketTransport(
       url: STTConnection.streamingURL(settings: settings), apiKey: apiKey)
     let session = SessionMachine(transport: transport, settings: settings, clock: SystemClock())
-    phase = .running(session)
-
-    let (outcome, audioFailure) = await run(session, streaming: chunks)
-    state = .idle
-    finish(outcome, audioFailure: audioFailure)
+    return .started(session, chunks)
   }
 
   private var isAbandoned: Bool {
     if case .abandoned = phase { true } else { false }
   }
 
-  /// Escape arrived while starting: release the microphone, open no socket, fade the pill.
-  private func abandon() {
+  /// Escape arrived while starting: release the microphone and open no socket.
+  private func abandon() -> Start {
     audio.stop()
-    end()
+    return .abandoned
   }
 
   /// Runs the session to its outcome, mirroring it into the menu and the pill and feeding it
@@ -166,7 +235,9 @@ import Observation
     // A session that ended on its own (cancel, silence, the hard cap, a failure) still has a
     // stream open. After a commit this is a second `stop()`, which does nothing.
     audio.stop()
-    return (result, await pump?.value ?? nil)
+    let audioFailure = await pump?.value ?? nil
+    state = .idle
+    return (result, audioFailure)
   }
 
   /// Feeds the session every chunk the stream yields, then commits it. The stream ends on
@@ -217,7 +288,7 @@ import Observation
     updatePill { _ in }
   }
 
-  /// A tap buffer arrived: audio is flowing, so a starting pill is now listening.
+  /// A level arrived: audio is flowing, so a starting pill is now listening.
   private func levelChanged(_ level: Double) {
     updatePill { pill in
       pill.level = level
@@ -252,7 +323,7 @@ import Observation
       "Microphone access is off. Allow it in System Settings > Privacy & Security > Microphone"
     case AudioCapture.Failure.noInputDevice:
       "No microphone found"
-    case AudioCapture.Failure.engineFailed(let underlying):
+    case AudioCapture.Failure.captureFailed(let underlying):
       "Microphone failed: \(underlying.localizedDescription)"
     // A wrong key is a 400 from api.x.ai, and 401 means no key reached it at all.
     case SessionError.stt(.badRequest), SessionError.stt(.unauthorized):
