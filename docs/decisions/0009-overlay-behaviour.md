@@ -1,7 +1,8 @@
 # 0009 How the overlay behaves during a session
 
 Status: accepted, 2026-09-24 (overlay gate G2). Supersedes the error surface in
-[0006](0006-api-key-and-error-surface.md).
+[0006](0006-api-key-and-error-surface.md). The meter's input is superseded by
+[0012](0012-capture-with-avcapturesession.md).
 
 ## Context
 
@@ -38,7 +39,8 @@ two differ from it.
   fades. A new Opt+D cancels that fade. Any settled text is still inserted. The menu bar's
   state line shows only the session state.
 - The meter reads the loudest channel's RMS before conversion, mapped linearly from
-  -50 dBFS (empty) to -20 dBFS (full), so ordinary speech sits around two thirds.
+  -50 dBFS (empty) to -20 dBFS (full), so ordinary speech sits around two thirds. (Superseded: the meter
+  now reads the converted mono audio, with the same mapping.)
 - The pill goes on the screen containing the centre of the frontmost app's focused
   window, read through Accessibility. It falls back to the screen under the mouse, then
   the main screen. Each Accessibility read has a 0.25s timeout, because the lookup runs
