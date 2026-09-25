@@ -268,8 +268,8 @@ Server events: `transcript.created` (ready, wait for it before sending audio),
 Client messages: binary frames of raw audio, `{"type":"finalize"}` to force
 finalisation, `{"type":"audio.done"}` to signal end of audio.
 
-Errors: 400 bad request, 401 bad key, 413 over 500 MB, 429 rate limited,
-502 URL download failed, 503 unavailable.
+Errors: 400 bad request, including a wrong API key, 401 no credentials sent,
+413 over 500 MB, 429 rate limited, 502 URL download failed, 503 unavailable.
 
 Pricing is $0.10 per hour for batch and $0.20 per hour for streaming. A 30 second
 dictation costs under two tenths of a cent, so cost is not a design input.
