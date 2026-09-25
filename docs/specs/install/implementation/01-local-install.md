@@ -1,6 +1,6 @@
 # Workstream 1: Install a signed release app
 
-Status: not started.
+Status: accepted.
 
 ## Task packet
 
@@ -54,38 +54,97 @@ Running `./scripts/install.sh` builds EchoType in release mode, installs a signe
 
 ## Implementation handoff
 
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
+- Base commit: `f9820dc`
+- Outcome: `./scripts/install.sh` builds in release mode, assembles and signs the bundle in `.build/EchoType-release.app`, stops every running EchoType, replaces `/Applications/EchoType.app` and opens it. The installed app moves an enabled login item to itself at launch and leaves a disabled one disabled. `./scripts/run.sh` behaves as before, and its arguments still reach the app.
+- Files changed:
+  - `scripts/deploy.sh` (new): the shared build, bundle, sign, stop, replace and launch step. Usage: `deploy.sh <debug|release> <app path> [args...]`. Both paths share it because the plist copy, signing identity selection and stop-before-replace are what must not diverge. It stages and signs before stopping the running app, so a failed build or signature leaves the existing bundle in place.
+  - `scripts/run.sh`: now `deploy.sh debug .build/EchoType.app "$@"`.
+  - `scripts/install.sh` (new): `deploy.sh release /Applications/EchoType.app`.
+  - `Sources/EchoTypeApp/App.swift`: `claimLoginItem()`. Only when the bundle path is `/Applications/EchoType.app`, off the main actor, it calls `SMAppService.mainApp.register()` if `status == .enabled`.
+  - `docs/decisions/0001`: `deploy.sh` is the one build path, used by both scripts. `0013`: the login item's consequence now describes the observed path behaviour and the migration. `0007`: removed the install/login gap.
+- Decisions: I chose the login-item migration from what `sfltool dumpbtm` showed on macOS 27.2 (entry `2.com.aidanzealley.echotype`):
+  - Before this work the item was `[enabled, allowed, notified]` with URL `/Users/501/code/echotype/.build/EchoType.app`. The installed app, built without migration code, showed the toggle on, because `status` answers by bundle identifier while the item still pointed at `.build`. Launching a copy does not move the URL, even after 20 seconds.
+  - Reading `status` from a copy moves the URL to that copy and keeps the enabled or disabled state. Opening Settings in the development bundle moved an enabled `/Applications` item to `.build`. A probe build of the installed app that only read `status` at launch moved it back.
+  - `register()` from the installed copy while the item is enabled leaves it enabled at `/Applications/EchoType.app`. `unregister()` and `register()` from the Settings toggle produce `0xa` (disabled) and `0xb` (enabled) at the calling copy's path.
+  - So the smallest reliable migration is for the installed app to call the documented `register()` at launch when the item is enabled. Relying only on the undocumented side effect of reading `status` would be fragile. Anything done from the script cannot work, because only the app can call `SMAppService.mainApp` for itself. The path guard stops `run.sh` launches from taking the item. The development bundle still takes it if its Settings window is opened, and the next installed launch takes it back. `0013` records this.
+- Verification:
+  - `swift build -c release` passed. `swift test` passed (45 tests). `bash -n scripts/run.sh scripts/install.sh scripts/deploy.sh` passed.
+  - `./scripts/install.sh` ran three times, most recently after the final code change. The installed `Info.plist` is byte-identical to `Resources/Info.plist`, and `plutil -p` shows `com.aidanzealley.echotype` and `EchoTypeApp`. The installed binary has the same `LC_UUID` as `.build/out/Products/Release/EchoTypeApp`.
+  - `codesign --verify --verbose=2` reports the bundle valid and satisfying its designated requirement. The authority is `Apple Development` and the DR includes the bundle identifier.
+  - `ps` and `lsof` show exactly one `EchoTypeApp`, at `/Applications/EchoType.app/Contents/MacOS/EchoTypeApp`, after each install and after installs that followed dev runs. No `EchoType-*.app` staging bundle is left in `.build`.
+  - In the installed app's Settings, both permission rows read Granted and the saved API key shows masked, so TCC and Keychain identity carried over.
+  - `./scripts/run.sh --hud-demo` launched `.build/EchoType.app/Contents/MacOS/EchoTypeApp --hud-demo` and did not move the item at launch. Plain `./scripts/run.sh` also ran.
+  - I drove the login cases through the settings UI with System Events and read the result with `sfltool dumpbtm`:
+    - Enabled at `.build`, then install: enabled at `/Applications`. Proved twice.
+    - Disabled at `.build`, then install: still disabled.
+    - The installed toggle reads the OS state after each change and switches it between `0xa` and `0xb`.
+  - The final candidate is running from `/Applications`, with Launch at login enabled at `/Applications/EchoType.app`, which matches the enabled state the item had before this work.
+- Known limitations or external checks:
+  - G1 must confirm that a real login starts `/Applications/EchoType.app` when the item is enabled and starts nothing when it is disabled. The agent could only prove the BTM record, not a login.
+  - The unified log redacts BTM activity, so I could not check whether `register()` on every installed launch, including at login, shows a login-item notification. G1 should note any repeated "Login item added" notification.
+  - I never saw `requiresApproval`.
+  - The `Package.swift` comment still names only `scripts/run.sh` as the launch path. The file is outside this packet's ownership.
+- Specification drift: The specification's file tree lists `run.sh` and `install.sh`. This adds `scripts/deploy.sh` as their shared step, which matches the specification's "same code path" intent. There is no behaviour drift.
 
 ## Independent review
 
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
+- Reviewer: fresh Claude Code general-purpose agent
+- Verdict: Accept. No Required findings. The diff meets acceptance criteria 1 to 5 as far as an agent can prove them. G1 still has to cover a real login.
+- Evidence checked:
+  - `bash -n` passes on all three scripts. `swift build -c release` passes, and `swift test` passes with 45 tests.
+  - The installed `Info.plist` is byte-identical to `Resources/Info.plist`, with `com.aidanzealley.echotype` and `EchoTypeApp`.
+  - `codesign --verify --verbose=2` reports `/Applications/EchoType.app` valid and satisfying its DR. The DR names the bundle identifier and the `Apple Development` leaf, and it is not ad hoc.
+  - The installed binary's UUID matches `.build/out/Products/Release/EchoTypeApp` (`E8A89FCA-…`).
+  - One `EchoTypeApp` is running, from `/Applications/EchoType.app/Contents/MacOS/EchoTypeApp`. No staged `EchoType-*.app` is left in `.build`.
+  - `sfltool dumpbtm` shows `2.com.aidanzealley.echotype` as `[enabled, allowed, notified]` at `/Applications/EchoType.app`.
+  - `run.sh` keeps `"$@"` passthrough. An empty `"$@"` is safe under `set -u` on the system bash 3.2.
+  - `deploy.sh` signs before it stops the running app, so a failed build or signature leaves the installed bundle and the running app alone.
+  - A missing argument fails at `$1`/`$2` under `set -u` before any build or delete.
+  - The identity selection is copied verbatim from the old `run.sh`, which satisfies 0014.
+  - The login-item approach is minimal and sound. The app is the only process that can act as `SMAppService.mainApp`. The call is the documented `register()`, gated on `.enabled`, so a disabled item is never re-enabled. It runs off the main actor like the settings row, and the path guard keeps `run.sh` launches from claiming the item. `SettingsView.swift` is unchanged, so the toggle still reads and writes the live service status.
+  - The docs agree with the code. 0001 names `deploy.sh`. 0013 records the observed path behaviour and the migration. 0007 removes only the install/login gap. 0011's "`run.sh` stops the running instance" is still true through `deploy.sh`.
+- Required findings: none.
+- Optional observations:
+  - O1, stale comment: `Package.swift:14` still says the app is "Built into a signed .app bundle by scripts/run.sh, which is the only supported way to launch it". It now also goes through `install.sh` via `deploy.sh`. This is outside initial ownership. The lead could extend ownership by one line to name `scripts/deploy.sh`, or leave it for the final review.
+  - O2, specification drift: `docs/specs/echotype-v1.md` lists only `run.sh` and `install.sh` in its file tree (lines 388-389) and development workflow (lines 485-493). The handoff records `deploy.sh` as drift. The lead should decide whether the spec gets a one-line mention or the drift log is enough.
+  - O3, replacement window: `deploy.sh` does `rm -rf "$app"` and then `mv "$staged" "$app"` after killing the app. If `rm` fails part way, for example on a bundle left root-owned by an earlier `sudo` install, the script exits with the old instance stopped and a partial bundle in `/Applications`. Rerunning after fixing ownership recovers it, and the normal admin-user case is fine. Not worth extra machinery. Mention it only if install troubleshooting is documented.
+  - O4, unbounded wait: the `pgrep` loop is carried over unchanged from `run.sh` and never times out. A hung EchoType that ignores SIGTERM would stall `install.sh` silently. This behaviour predates the workstream.
+- Questions:
+  - Q1: `claimLoginItem()` calls `register()` on every installed launch, including launches from the login item. The BTM record stays `notified`, which suggests macOS will not repeat the "Login item added" notification, but the agent cannot prove it. Keep this as an explicit G1 observation, as the handoff already proposes.
 
 ## Resolution
 
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
+- Finding dispositions:
+  - No Required findings, so no correction pass ran.
+  - O1 accepted. The lead extended ownership by one comment line in `Package.swift` so it names `deploy.sh`, `run.sh` and `install.sh`.
+  - O2 accepted. `scripts/deploy.sh` added to the specification's file tree. The workflow prose already says both scripts share one code path, so it stays. Recorded in the plan's drift log.
+  - O3 deferred. A root-owned bundle from a previous `sudo` install is not a supported state, and a rerun after fixing ownership recovers it.
+  - O4 deferred. The wait predates this workstream and a hung app is visible to the person running the script.
+  - Q1 carried into G1 as an explicit observation.
+- Simplification/deletion pass: `run.sh` lost its duplicated build and sign steps to `deploy.sh`. `install.sh` is one line. The Swift change is one guarded call. Nothing further to remove.
+- Final verification: `swift build` passed after the lead's comment edit. The implementation and review checks stand for everything else, since the lead's edits are comments and documentation only.
+- Closure bookkeeping: the `scripts/deploy.sh` row is in the `plan.md` drift log.
+- Acceptance audit (resuming lead, after G1): the uncommitted diff matches this record on base `f9820dc`, and nothing changed after closure. `bash -n` on all three scripts, `swift build -c release` and `swift test` (45 tests) pass. `/Applications/EchoType.app` verifies with `codesign`, its `Info.plist` is byte-identical to `Resources/Info.plist`, its binary UUID `E8A89FCA-…` matches the current release build, and one `EchoTypeApp` is running from `/Applications`.
 
 ## Closure review
 
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
+- Verdict: Pass. The O1 and O2 fixes are correct, and nothing in the workstream blocks release against acceptance criteria 1 to 5. G1 still has to prove a real login. `bash -n scripts/*.sh`, `swift build -c release` and `swift test` (45 tests) pass.
+- Remaining required findings: none. One bookkeeping gap for the lead, which does not block release: the Resolution says O2 is "Recorded in the plan's drift log", but the `plan.md` drift log still reads `None`. Add the `scripts/deploy.sh` row or correct that sentence.
 
 ## External validation
 
 - Gate and placement: G1, after closure and before acceptance.
-- Status: `Pending`
-- Candidate and instructions: `TBD`. Use the installed app's Settings to enable Launch at login. At the next sign-out and login or restart, confirm the running EchoType path is `/Applications/EchoType.app`. Disable the toggle and confirm a later login does not start EchoType. Record if macOS required approval in Login Items.
+- Status: Passed on 2026-09-25.
+- Candidate and instructions: `/Applications/EchoType.app`, installed by `./scripts/install.sh` from the workstream diff on base `f9820dc`. The lead's later edits were comments and documentation only, so the installed binary matches the current code. Local evidence on 2026-09-25:
+  - One `EchoTypeApp` running, from `/Applications/EchoType.app/Contents/MacOS/EchoTypeApp`.
+  - `codesign --verify --verbose=2`: valid on disk and satisfies its designated requirement. `CFBundleIdentifier` is `com.aidanzealley.echotype`.
+  - `sfltool dumpbtm`: `2.com.aidanzealley.echotype` is `[enabled, allowed, notified] (0xb)` at `/Applications/EchoType.app`.
+
+  Developer steps:
+  1. Open Settings in the running EchoType and confirm Launch at login is on. Do not open Settings from a `./scripts/run.sh` build before testing, because that moves the login item to `.build`.
+  2. Sign out and back in, or restart. Confirm EchoType starts, and that `ps -axo command | grep '[E]choTypeApp'` shows `/Applications/EchoType.app/Contents/MacOS/EchoTypeApp`. Note any "Login item added" notification (Q1).
+  3. Turn Launch at login off in Settings. Sign out and back in again. Confirm EchoType does not start.
+  4. Note whether macOS asked for approval in System Settings > General > Login Items at any point.
 - Required evidence: The developer's pass/fail for both enabled and disabled cases, plus the observed app path or concrete failure.
-- Attempts and lasting decisions: `TBD`
+- Attempts and lasting decisions: Attempt 1 offered and passed on 2026-09-25. The developer reported that with Launch at login enabled from the installed app, EchoType started at the next login from `/Applications`, and with it disabled, it did not start. No "Login item added" notification or approval prompt appeared at either login. That answers Q1: calling `register()` at every installed launch does not repeat the notification.
 - Resume condition: Evidence recorded in the plan escalation; a fresh lead audits the candidate and resolves any failure before marking G1 Passed.

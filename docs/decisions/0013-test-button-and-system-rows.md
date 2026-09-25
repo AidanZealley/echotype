@@ -28,5 +28,10 @@ covers the socket.
 ## Consequences
 
 - Test cuts off after five seconds even if the user is still speaking. That is by design.
-- A login item registered from `.build/EchoType.app` points at that path. See
-  [0007](0007-known-gaps.md).
+- The login item records the path of the copy that last registered it or read its status,
+  while `status` answers by bundle identifier, so the development and installed bundles
+  share one item. On macOS 27.2, reading `status` from another copy moved the item to that
+  copy and kept its enabled or disabled state. The installed app registers again at launch
+  when the item is enabled, so the item points back at `/Applications/EchoType.app`, and it
+  leaves a disabled item alone. Opening Settings in the development bundle moves the item to
+  `.build/EchoType.app` until the installed app next launches.
