@@ -11,11 +11,11 @@ which has a team ID. The signing choice in 0001 no longer describes `scripts/run
 
 ## Decision
 
-- `scripts/run.sh` selects the developer's Apple Development identity by default.
+- `scripts/deploy.sh` selects the developer's Apple Development identity by default.
   If the keychain contains multiple matching certificates, set
   `ECHOTYPE_SIGNING_IDENTITY` to the chosen certificate's full name or SHA-1 hash.
   `security find-identity -v -p codesigning` lists available identities.
-- The release `install.sh` must use the same selection as `run.sh`. Both bundles
+- `run.sh` and the release `install.sh` both sign through `deploy.sh`. Both bundles
   keep the identifier from `Resources/Info.plist` and use one signing identity
   per developer. Neither path uses ad hoc signing.
 
