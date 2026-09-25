@@ -132,9 +132,11 @@ which has no tests, and it's quick to check by hand.
    one joined-up sentence with no "um". If it still looks fragmented, batch is failing
    and the live text is being used. The likely cause is a parameter batch rejects, so
    try it with curl.
-3. Turn off Wi-Fi just before stopping, and check that the live text is inserted after
-   the timeout.
-4. Watch the spinner after a one-minute dictation.
+3. Watch the spinner after a one-minute dictation.
+
+The fallback to the live text isn't checked by hand. Making batch fail while streaming
+still works would need a switch added only for the check, and the fallback is a few
+lines that review can confirm by reading.
 
 ## When done
 
