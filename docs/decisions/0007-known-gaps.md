@@ -13,4 +13,16 @@ Status: open. Remove each item as it is resolved.
   insertions within the 800ms pasteboard restore window, and the pill appearing on the
   second display when that display holds the focused window.
 - **Bluetooth input** gives wrong transcripts. See
-  [0005](0005-microphone-per-session.md).
+  [0005](0005-microphone-per-session.md). The settings input picker lets the user choose
+  another microphone, but nothing warns that a Bluetooth input is in use.
+- **Inputs with more than two channels** are not mixed properly. Without a channel
+  layout from the system the session fails to convert; with one, the mix to mono keeps
+  only the first channel.
+- **The menu bar menu does not open from a fullscreen app while the settings window is
+  open.** EchoType is a regular app with a Dock icon while the window is open, and macOS
+  does not open a regular app's status item menu over a fullscreen app. Close the window
+  or go to the desktop first; Opt+D still works. Showing the Dock icon only while
+  EchoType is frontmost would fix it but drop the window's Cmd+Tab entry.
+- **Launch at login and `install.sh`** (build-order step 6). A login item registered from
+  `.build/EchoType.app` points at that path, so once the app is installed in
+  `/Applications` it has to be registered again from there.

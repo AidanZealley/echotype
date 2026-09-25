@@ -32,7 +32,7 @@ struct EchoTypeApp: App {
     }
 
     Settings {
-      SettingsView(store: store)
+      SettingsView(store: store, controller: controller)
         // Hide the Dock icon again once the window closes. See `SettingsButton`.
         .onDisappear { NSApplication.shared.setActivationPolicy(.accessory) }
     }
@@ -50,10 +50,11 @@ struct EchoTypeApp: App {
   }
 }
 
-/// Opens the settings window in front, with keyboard focus. The app is `LSUIElement`, and
-/// macOS does not reliably activate an accessory app, which left the window behind the
-/// frontmost app or without focus. So the app becomes a regular app, with a Dock icon, while
-/// the window is open, as Tailscale does. The scene's `onDisappear` switches it back.
+/// Opens the settings window in front, with keyboard focus, or in front and focused by a
+/// click when macOS declines the activation. The app is `LSUIElement`, and macOS does not
+/// reliably activate an accessory app, which left the window behind the frontmost app or
+/// without focus. So the app becomes a regular app, with a Dock icon, while the window is
+/// open, as Tailscale does. The scene's `onDisappear` switches it back.
 private struct SettingsButton: View {
   @Environment(\.openSettings) private var openSettings
 
@@ -63,7 +64,15 @@ private struct SettingsButton: View {
       openSettings()
       // An activation requested while the menu is still closing can be lost, so wait for it
       // to close.
-      DispatchQueue.main.async { NSApplication.shared.activate() }
+      DispatchQueue.main.async {
+        NSApplication.shared.activate()
+        // Activation is cooperative and macOS occasionally declines it, which left the window
+        // behind the frontmost app. Raising the window regardless keeps it in front; a click
+        // then focuses it. It is the app's only window that can become main: the overlay
+        // panel and the menu bar's windows cannot.
+        NSApplication.shared.windows.first { $0.canBecomeMain && $0.isVisible }?
+          .orderFrontRegardless()
+      }
     }
   }
 }
