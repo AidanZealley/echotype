@@ -1,6 +1,6 @@
 # Settings implementation plan
 
-Status: in progress; workstreams 1 and 2 accepted.
+Status: complete; workstreams 1 and 2 and the whole-feature review accepted.
 
 ## Orchestration record
 
@@ -16,7 +16,7 @@ Status: in progress; workstreams 1 and 2 accepted.
 |---:|---|---|---|
 | 1 | [Persistent settings and the window](01-persistent-settings-and-window.md) | Approved spec | Accepted |
 | 2 | [Input device, key test and system status](02-device-test-and-system-status.md) | 1 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 | Accepted |
 
 ## Why these boundaries
 
