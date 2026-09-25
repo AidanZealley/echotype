@@ -16,9 +16,7 @@ public enum STTConnection {
 
   /// `endpointing` is deliberately far above the 400ms default: utterance boundaries are
   /// controlled by the hotkey, and the default would chop a prompt into fragments every time
-  /// the speaker pauses to think. `format=true` punctuates each utterance on its own, so every
-  /// boundary also tends to end a sentence with a full stop. 5000 keeps ordinary thinking
-  /// pauses inside one utterance while staying under the 10s silence timeout.
+  /// the speaker pauses to think.
   public static func streamingURL(settings: Settings) -> URL {
     var components = URLComponents()
     components.scheme = "wss"
@@ -29,7 +27,7 @@ public enum STTConnection {
         URLQueryItem(name: "encoding", value: "pcm"),
         URLQueryItem(name: "sample_rate", value: "16000"),
         URLQueryItem(name: "interim_results", value: "true"),
-        URLQueryItem(name: "endpointing", value: "5000"),
+        URLQueryItem(name: "endpointing", value: "2000"),
         URLQueryItem(name: "filler_words", value: "false"),
         URLQueryItem(name: "format", value: "true"),
         URLQueryItem(name: "language", value: settings.language),

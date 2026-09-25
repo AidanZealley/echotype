@@ -15,7 +15,7 @@ Status: draft; implementation has not started.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Batch transcriber and setting](01-batch-transcriber.md) | Approved spec | Accepted |
-| 2 | [Insert the batch text on stop](02-insert-batch-text.md) | 1 | Not started |
+| 2 | [Insert the batch text on stop](02-insert-batch-text.md) | 1 | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G1 | Not started |
 
 Statuses: `Not started`, `Implementing`, `Review`, `Remediation`, `Closure review`, `Blocked`,
@@ -71,7 +71,7 @@ Gate status is separate from workstream status: `Pending`, `Testing`, `Troublesh
 
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
-| G1 Dictation on the Mac | Workstream 2 | After closure, before acceptance | Pending | Development app from `./scripts/run.sh`, built from the workstream 2 diff | Aidan reports pass or fail for each step in the packet's External validation section |
+| G1 Dictation on the Mac | Workstream 2 | After closure, before acceptance | Passed | Development app from `./scripts/run.sh`, built from the workstream 2 diff | Aidan reports pass or fail for each step in the packet's External validation section |
 
 ## Escalations
 
@@ -95,4 +95,4 @@ the decision and drift log when the final review depends on it, then removes the
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-09-25 | Live STT `endpointing` reverted from 5000 to 2000, undoing `4b7578c` in `STTConnection.swift`, its test and `docs/specs/echotype-v1.md`. Workstream 2 made this `EchoTypeCore` edit outside its ownership. | 5000 only served to stop false full stops in the inserted text, which the batch pass now fixes; 2000 suits the live pill better. G1 ran at 5000; 2000 is the value that shipped before. | Aidan (G1 escalation) | 2, Final |
