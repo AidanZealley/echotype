@@ -146,14 +146,14 @@ import Observation
 
   /// With `batchOnCommit` on, replaces the live text of an outcome to insert with a batch
   /// transcription of the whole recording. Keeps the live text if batch fails, times out or
-  /// returns empty text: the user still gets their words, with the streamed punctuation.
+  /// returns only whitespace: the user still gets their words, with the streamed punctuation.
   private func batchPass(
     _ outcome: SessionMachine.Outcome, recording: Data, settings: Settings, apiKey: String
   ) async -> SessionMachine.Outcome {
     guard settings.batchOnCommit, case .insert = outcome else { return outcome }
     let batch = try? await BatchTranscriber.transcribe(
       pcm: recording, settings: settings, apiKey: apiKey)
-    guard let batch, !batch.isEmpty else { return outcome }
+    guard let batch, !batch.allSatisfy(\.isWhitespace) else { return outcome }
     return .insert(batch)
   }
 
