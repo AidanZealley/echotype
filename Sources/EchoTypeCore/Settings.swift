@@ -27,8 +27,17 @@ public struct Settings: Equatable, Sendable {
     /// why this is not the default.
     public static let controlOptionD = Hotkey(keyCode: 0x02, modifiers: [.control, .option])
 
-    /// The chords the settings window offers.
+    /// The chords the settings window offers for dictation.
     public static let presets = [optionD, controlOptionD]
+
+    /// Opt+S, the read-aloud default. `0x01` is `kVK_ANSI_S`.
+    public static let optionS = Hotkey(keyCode: 0x01, modifiers: .option)
+
+    /// Ctrl+Opt+S, mirroring the dictation alternative.
+    public static let controlOptionS = Hotkey(keyCode: 0x01, modifiers: [.control, .option])
+
+    /// The chords the settings window offers for reading aloud.
+    public static let readAloudPresets = [optionS, controlOptionS]
 
     /// Whether a key press is this chord: the same key, with the configured modifiers held and
     /// no others, so Cmd+Opt+D and Ctrl+Opt+D pass through an Opt+D hotkey untouched.
@@ -89,6 +98,15 @@ public struct Settings: Equatable, Sendable {
   /// instead of the streamed text. The batch pass punctuates across pauses much better.
   public var batchOnCommit: Bool
 
+  /// The chord that reads the selection aloud, and stops a reading.
+  public var readAloudHotkey: Hotkey
+
+  /// The text to speech voice id, one of `Speech.voices`.
+  public var voice: String
+
+  /// The speaking rate, from 0.7 to 1.5, the endpoint's range.
+  public var speechSpeed: Double
+
   public init(
     hotkey: Hotkey = .optionD,
     keyterms: [String] = [],
@@ -97,7 +115,10 @@ public struct Settings: Equatable, Sendable {
     hardCap: TimeInterval = 300,
     finalizeTimeout: TimeInterval = 8,
     inputDeviceID: String? = nil,
-    batchOnCommit: Bool = true
+    batchOnCommit: Bool = true,
+    readAloudHotkey: Hotkey = .optionS,
+    voice: String = "ara",
+    speechSpeed: Double = 1.0
   ) {
     self.hotkey = hotkey
     self.keyterms = keyterms
@@ -107,6 +128,9 @@ public struct Settings: Equatable, Sendable {
     self.finalizeTimeout = finalizeTimeout
     self.inputDeviceID = inputDeviceID
     self.batchOnCommit = batchOnCommit
+    self.readAloudHotkey = readAloudHotkey
+    self.voice = voice
+    self.speechSpeed = speechSpeed
   }
 }
 
@@ -121,6 +145,7 @@ public struct Settings: Equatable, Sendable {
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
     case hotkey, keyterms, language, inputDeviceID, batchOnCommit
+    case readAloudHotkey, voice, speechSpeed
   }
 
   public init(from decoder: any Decoder) throws {
@@ -135,6 +160,12 @@ extension Settings: Codable {
     inputDeviceID = try? container.decodeIfPresent(String.self, forKey: .inputDeviceID)
     batchOnCommit =
       (try? container.decodeIfPresent(Bool.self, forKey: .batchOnCommit)) ?? defaults.batchOnCommit
+    readAloudHotkey =
+      (try? container.decodeIfPresent(Hotkey.self, forKey: .readAloudHotkey))
+      ?? defaults.readAloudHotkey
+    voice = (try? container.decodeIfPresent(String.self, forKey: .voice)) ?? defaults.voice
+    speechSpeed =
+      (try? container.decodeIfPresent(Double.self, forKey: .speechSpeed)) ?? defaults.speechSpeed
   }
 
   public func encode(to encoder: any Encoder) throws {
@@ -144,6 +175,9 @@ extension Settings: Codable {
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)
     try container.encode(batchOnCommit, forKey: .batchOnCommit)
+    try container.encode(readAloudHotkey, forKey: .readAloudHotkey)
+    try container.encode(voice, forKey: .voice)
+    try container.encode(speechSpeed, forKey: .speechSpeed)
   }
 
   /// Decodes a stored value. Missing or unreadable data gives the defaults.
@@ -153,7 +187,7 @@ extension Settings: Codable {
 
   /// The value to store.
   public func encoded() -> Data {
-    // Strings, integers and booleans always encode.
+    // Strings, integers, booleans and finite doubles always encode.
     try! JSONEncoder().encode(self)
   }
 }

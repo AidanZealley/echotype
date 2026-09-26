@@ -9,7 +9,10 @@ func settingsRoundTrip() {
     keyterms: ["shadcn", "TanStack Start"],
     language: "en-GB",
     inputDeviceID: "BuiltInMicrophoneDevice",
-    batchOnCommit: false
+    batchOnCommit: false,
+    readAloudHotkey: .controlOptionS,
+    voice: "altair",
+    speechSpeed: 1.25
   )
 
   #expect(Settings(decoding: settings.encoded()) == settings)
@@ -18,12 +21,13 @@ func settingsRoundTrip() {
 /// The bytes this version stores. If this fails, a key name, the hotkey's shape or a modifier's
 /// bit has changed and existing installs would lose that setting on upgrade. Opt+D is pinned too
 /// because it is what most installs store; Ctrl+Opt+D alone would not notice control and option
-/// swapping bits, and Opt+D alone would not notice a fallback to the default.
+/// swapping bits, and Opt+D alone would not notice a fallback to the default. Ctrl+Opt+S pins
+/// the read-aloud hotkey's key code.
 @Test("A stored value from this version decodes to the settings it was written from")
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","batchOnCommit":false}
+    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","batchOnCommit":false,"readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
     """#.utf8)
 
   #expect(
@@ -33,7 +37,10 @@ func storedValueDecodes() {
         keyterms: ["shadcn", "TanStack Start"],
         language: "en-GB",
         inputDeviceID: "BuiltInMicrophoneDevice",
-        batchOnCommit: false
+        batchOnCommit: false,
+        readAloudHotkey: .controlOptionS,
+        voice: "altair",
+        speechSpeed: 1.25
       )
   )
   #expect(
@@ -46,6 +53,22 @@ func missingFieldsDefault() {
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
   #expect(Settings(decoding: stored).batchOnCommit)
+  #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
+  #expect(Settings(decoding: stored).voice == "ara")
+  #expect(Settings(decoding: stored).speechSpeed == 1.0)
+}
+
+@Test("A payload stored before read aloud decodes unchanged, with the read-aloud defaults")
+func payloadBeforeReadAloudDecodes() {
+  let stored = Data(
+    #"""
+    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn"],"language":"en-GB","batchOnCommit":false}
+    """#.utf8)
+
+  #expect(
+    Settings(decoding: stored)
+      == Settings(
+        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB", batchOnCommit: false))
 }
 
 @Test("Unreadable data decodes to the defaults")

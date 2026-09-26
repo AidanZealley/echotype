@@ -14,8 +14,9 @@ Keychain item the app cannot read without a prompt.
 
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
-  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`) and `batchOnCommit`. The key
-  names and the modifier bit positions are the upgrade contract.
+  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`), `batchOnCommit`,
+  `readAloudHotkey` (shaped like `hotkey`), `voice` and `speechSpeed`. The key names and
+  the modifier bit positions are the upgrade contract.
 - Each field decodes on its own and falls back to its default, so a missing or unreadable
   field resets only itself and adding a field never resets the hotkey. Data that is not a
   JSON object gives all defaults.
@@ -26,6 +27,7 @@ Keychain item the app cannot read without a prompt.
   editor exists, keyterms are the user's data.
 - The hotkey dropdown offers Opt+D and Ctrl+Opt+D (`Settings.Hotkey.presets`). The right
   Option double tap is deferred to [0007](0007-known-gaps.md).
+- The read-aloud hotkey offers Opt+S and Ctrl+Opt+S (`Settings.Hotkey.readAloudPresets`).
 - `SettingsStore` in the app is the only writer of `UserDefaults`. The hotkey monitor
   reads the current hotkey on every key event, so a change applies without a relaunch.
   The controller snapshots the settings once at the start of each session.

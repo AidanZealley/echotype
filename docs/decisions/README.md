@@ -28,3 +28,4 @@ delete it.
 | 0015 | [Settings in tabs, with a masked saved key](0015-settings-window-layout.md) | Accepted |
 | 0016 | [Install to /Applications and claim the login item there](0016-install-and-claim-the-login-item.md) | Accepted |
 | 0017 | [Re-transcribe the whole recording when a dictation stops](0017-batch-pass-on-commit.md) | Accepted |
+| 0018 | [Read aloud fetches audio over REST](0018-read-aloud-audio-fetch.md) | Accepted |
