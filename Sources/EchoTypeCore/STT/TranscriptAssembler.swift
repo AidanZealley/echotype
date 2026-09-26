@@ -21,7 +21,7 @@ public struct TranscriptAssembler: Equatable, Sendable {
 
   /// Runs of the current utterance that arrived with `is_final`, joined. Settled, but not
   /// committed until the utterance's `speech_final` arrives.
-  private var utterance: String = ""
+  public private(set) var utterance: String = ""
 
   /// The committed transcript plus the settled runs of the current utterance, shown solid. The
   /// utterance's `speech_final` text replaces its runs wholesale, so this is not guaranteed to

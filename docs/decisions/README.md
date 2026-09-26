@@ -26,7 +26,7 @@ delete it.
 | 0014 | [Sign with Apple Development](0014-sign-with-apple-development.md) | Accepted |
 | 0015 | [Settings in tabs, with a masked saved key](0015-settings-window-layout.md) | Accepted |
 | 0016 | [Install to /Applications and claim the login item there](0016-install-and-claim-the-login-item.md) | Accepted |
-| 0017 | [Re-transcribe the whole recording when a dictation stops](0017-batch-pass-on-commit.md) | Accepted |
+| 0017 | [Re-transcribe the whole recording when a dictation stops](0017-batch-pass-on-commit.md) | Superseded by [live revision](../specs/live-revision.md) |
 | 0018 | [Read aloud fetches audio over REST](0018-read-aloud-audio-fetch.md) | Accepted |
 | 0019 | [Build a native macOS app with a small testable core](0019-native-macos-app-and-core-boundary.md) | Accepted |
 | 0020 | [Insert through the pasteboard and copy selections after pending pastes](0020-pasteboard-insertion-and-selection-copy.md) | Accepted |

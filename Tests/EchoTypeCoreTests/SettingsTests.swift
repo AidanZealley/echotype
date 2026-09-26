@@ -9,7 +9,7 @@ func settingsRoundTrip() {
     keyterms: ["shadcn", "TanStack Start"],
     language: "en-GB",
     inputDeviceID: "BuiltInMicrophoneDevice",
-    batchOnCommit: false,
+    cleanUp: false,
     readAloudHotkey: .controlOptionS,
     voice: "altair",
     speechSpeed: 1.25
@@ -27,7 +27,7 @@ func settingsRoundTrip() {
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","batchOnCommit":false,"readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
+    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","cleanUp":false,"readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
     """#.utf8)
 
   #expect(
@@ -37,7 +37,7 @@ func storedValueDecodes() {
         keyterms: ["shadcn", "TanStack Start"],
         language: "en-GB",
         inputDeviceID: "BuiltInMicrophoneDevice",
-        batchOnCommit: false,
+        cleanUp: false,
         readAloudHotkey: .controlOptionS,
         voice: "altair",
         speechSpeed: 1.25
@@ -52,13 +52,13 @@ func missingFieldsDefault() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6}}"#.utf8)
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
-  #expect(Settings(decoding: stored).batchOnCommit)
+  #expect(Settings(decoding: stored).cleanUp)
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
   #expect(Settings(decoding: stored).voice == "ara")
   #expect(Settings(decoding: stored).speechSpeed == 1.0)
 }
 
-@Test("A payload stored before read aloud decodes unchanged, with the read-aloud defaults")
+@Test("An old batch preference is ignored while other fields survive")
 func payloadBeforeReadAloudDecodes() {
   let stored = Data(
     #"""
@@ -68,7 +68,7 @@ func payloadBeforeReadAloudDecodes() {
   #expect(
     Settings(decoding: stored)
       == Settings(
-        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB", batchOnCommit: false))
+        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB"))
 }
 
 @Test("Unreadable data decodes to the defaults")

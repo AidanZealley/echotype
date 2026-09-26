@@ -19,8 +19,8 @@ struct Pill: Equatable {
   }
 
   var phase: Phase
-  /// Rendered solid. `SessionMachine.Snapshot.settled`, which is not append-only. While
-  /// reading, the notice that the selection was cut.
+  /// Rendered solid. Committed text, revised when cleanup is on, followed by settled utterance runs. While reading,
+  /// the notice that the selection was cut.
   var settled = ""
   /// Rendered dimmed after `settled`. `SessionMachine.Snapshot.provisional`.
   var provisional = ""

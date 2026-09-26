@@ -68,29 +68,35 @@ do not claim endpoint or dictation verification here.
 
 ## Implementation handoff
 
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
+- Base commit: `4c54c61d74bad82c316b0cbe192627fbe28faaaf`.
+- Outcome: Committed text revises in the pill while current utterance runs remain visible. Stop cancels the live call and uses one final revision for the pill and insertion. Failed sessions insert the available revised text without a final call. Test sessions bypass revision. The recording buffer and batch path are removed.
+- Files changed: `SessionMachine.swift`, `TranscriptAssembler.swift`, `Settings.swift`, new `Reviser.swift` and `RevisionRequest.swift`, `DictationController.swift`, `SettingsView.swift`, related core tests, and decision 0017. Deleted `BatchTranscriber.swift` and its test. Adjacent ownership exceptions: `Pill.swift` updates a settled-text comment that referred to the removed snapshot field, and `docs/decisions/README.md` marks 0017 superseded to match its record.
+- Decisions: The reviser keeps `revised`, `covered`, and the last attempted commit length. The latter prevents an immediate retry loop after a failed request; a later commit can retry that text. The app passes separate live and final request closures so the final call uses the specified shorter resource timeout. The old stored `batchOnCommit` key is ignored, with `cleanUp` defaulting on. Revision updates carry only a signal; the controller reads current reviser text and discards a render if its snapshot changed while awaiting that read.
+- Verification: `swift build` passed after implementation, cleanup, and race remediation. `swift build --build-tests` compiled the new tests and prompt cases. `rg` found no active `batchOnCommit` or `BatchTranscriber` references in `Sources` or `Tests`; the old key remains only in a settings migration fixture. The test suite was not run, as the packet reserves it for the final gate.
+- Known limitations or external checks: The final gate still needs `swift test`, the live prompt cases with `XAI_API_KEY`, endpoint latency measurement, and Mac dictation with pill versus inserted text comparison. These have no recorded result here.
+- Specification drift: None.
 
 ## Independent review
 
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
+- Reviewer: Independent workstream reviewer.
+- Verdict: Required fix before acceptance.
+- Required findings:
+  - `DictationController.run` consumes the text carried by `Reviser.updates` and applies it to `currentSnapshot` (`DictationController.swift:303-308`). An update can wait in the stream while a later snapshot adds another committed segment. The snapshot path then shows the new remainder (`:311-317`), but the queued older update can run afterward and replace that display with text that predates the segment. The unrevised segment disappears from the pill until another update or the final call, which breaks the spec's visible remainder requirement. Treat an update as a signal to read the reviser's current `shown` text for the latest snapshot, or otherwise keep the text and snapshot at the same commit version. Add a focused test for this ordering if the controller seam permits it.
+- Optional observations:
+  - `docs/decisions/README.md` still lists 0017 as Accepted, though the record now says superseded. Updating the index would keep its status accurate. The older key list in 0010 reads as historical context and need not be rewritten for this workstream.
+- Questions: None.
+
+Review checks: Read the full diff against `4c54c61d74bad82c316b0cbe192627fbe28faaaf`, the approved spec, packet, and relevant decisions. `git diff --check` passed; `rg` found no active batch references in Sources or Tests. I did not run tests because this packet reserves them for the final gate.
 
 ## Resolution
 
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
+- Finding dispositions: Fixed the required queued-update race by publishing a revision signal and reading the reviser's current text for the current snapshot. Promoted the 0017 index mismatch because the required superseded status should agree across the record and index; fixed it. No questions remained.
+- Simplification/deletion pass: Removed the batch request, its test, the recording buffer, and the old settings path. Revision updates no longer carry a second copy of the displayed text. No additional abstraction was needed for the controller ordering fix.
+- Final verification: `swift build` and `swift build --build-tests` passed after remediation. `git diff --check` passed. No active batch references remain in `Sources` or `Tests`; the old settings key appears only in the migration fixture. `swift test`, real endpoint prompts, latency, and dictation remain assigned to the final gate.
 
 ## Closure review
 
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
+- Verdict: The accepted fixes are sound. No remaining required findings from this closure.
+- Queued revision update: `Reviser.updates` now carries a signal, and the controller reads `reviser.shown` for its current snapshot. After the actor read, it checks that the snapshot is still current before rendering (`DictationController.swift:303-321`). A newer snapshot renders its own committed remainder, so an older queued update cannot leave that remainder hidden.
+- Decision 0017: The record and `docs/decisions/README.md` both mark it superseded by live revision.
+- Checks: Read the affected controller and reviser paths, the approved spec, and the relevant diff. `git diff --check` passed. No tests were run; the packet reserves the suite for the final gate.
