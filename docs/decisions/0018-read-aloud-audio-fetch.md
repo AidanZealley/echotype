@@ -36,6 +36,14 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
   change reading, and the tests can pin both.
 - `Speech.request(text:settings:apiKey:)` in `EchoTypeCore` builds the request. The app
   streams the response and maps a non-2xx status with `STTError(httpStatus:)`.
+- Read Aloud has its own Opt+S or Ctrl+Opt+S hotkey, Ara or Altair voice, and speed
+  from 0.7 to 1.5. It uses the General tab's language. The reading hotkey,
+  Escape or a pill click stops playback; the dictation hotkey stops playback and
+  starts dictation. A reading press during dictation or a settings test is ignored.
+- Copy the focused selection through the pasteboard as [0020](0020-pasteboard-insertion-and-selection-copy.md)
+  describes. An empty copy shows "Nothing selected". Audio plays as 24 kHz mono
+  PCM in roughly 100 ms buffers. The pill's meter and glow follow playback on
+  dictation's level scale.
 
 ## Consequences
 
@@ -43,7 +51,8 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
   app's playback buffering.
 - Markdown and code are read as written, fence hints included. Cleaning them up is out of
   scope.
-- A reading is capped at the REST limit of 60,000 characters.
+- A reading is capped at the REST limit of 60,000 characters, and the pill names
+  the cut. The cap was not exercised with a real selection at G2.
 
 ## G2 on the Mac
 

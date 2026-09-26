@@ -31,7 +31,7 @@ public enum SessionError: Error, Equatable, Sendable {
 /// than the socket: a WebSocket message is delivered to exactly one reader, so a second read
 /// would take frames away from this one.
 public actor SessionMachine {
-  /// The specification's states. `listening` and `paused` differ only in what is rendered;
+  /// Session states. `listening` and `paused` differ only in what is rendered;
   /// audio streams in both.
   public enum State: Equatable, Sendable {
     case idle

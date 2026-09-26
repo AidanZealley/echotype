@@ -1,8 +1,8 @@
 import AppKit
 
-/// Inserts text at the focused caret via the pasteboard and a synthetic Cmd+V, following the
-/// specification's Insertion sequence. The user's pasteboard is saved first and put back
-/// afterwards through `Pasteboard`, which `Reader` also uses to copy the selection.
+/// Inserts text at the focused caret via the pasteboard and a synthetic Cmd+V. The user's
+/// pasteboard is saved first and put back through `Pasteboard`, which `Reader` also uses
+/// to copy the selection.
 @MainActor final class Inserter {
   /// The restore still waiting to run: what the user had, and the `changeCount` from before
   /// the transcript was written. That count identifies the insertion, so a later one can

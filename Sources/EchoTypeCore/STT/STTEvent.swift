@@ -122,7 +122,7 @@ public enum STTError: Error, Equatable, Sendable {
   /// An `error` event on an otherwise healthy socket.
   case server(STTEvent.ServerError)
 
-  /// Maps the statuses the specification documents onto distinguishable cases.
+  /// Maps the endpoint's documented statuses onto distinguishable cases.
   public init(httpStatus: Int) {
     switch httpStatus {
     case 400: self = .badRequest

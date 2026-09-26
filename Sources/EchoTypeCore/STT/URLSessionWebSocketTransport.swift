@@ -7,7 +7,7 @@ import Foundation
 public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked Sendable {
   private let task: URLSessionWebSocketTask
 
-  /// Opens the socket immediately, since the specification opens it on trigger rather than at
+  /// Opens the socket immediately, since a session opens it on trigger rather than at
   /// launch: an idle open socket bills streaming time.
   public init(url: URL, apiKey: String, session: URLSession = .shared) {
     var request = URLRequest(url: url)
