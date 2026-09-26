@@ -68,6 +68,18 @@ import AppKit
     panel.hide()
     await pause(1.5)
 
+    // Reading a long selection, the glow following the voice, then the audio ends and the pill
+    // fades.
+    pill = Pill(phase: .reading, settled: "Reading the first 60,000 characters", startedAt: .now)
+    await speak(&pill, for: 3, show: show)
+    panel.hide()
+    await pause(1.5)
+
+    show(Pill(phase: .error("Nothing selected"), startedAt: .now))
+    await pause(3)
+    panel.hide()
+    await pause(1.5)
+
     // Nothing heard: the pill fades away silently.
     show(Pill(phase: .listening, startedAt: .now))
     await pause(3)
@@ -75,7 +87,7 @@ import AppKit
     await pause(2)
   }
 
-  /// Moves the level as if someone were talking.
+  /// Moves the level as if someone were speaking.
   private static func speak(
     _ pill: inout Pill, for seconds: Double, show: (Pill) -> Void
   ) async {

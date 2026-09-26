@@ -18,6 +18,11 @@ import Observation
 /// The settings window's Test button runs the same session through `test()`, which shows no
 /// pill and inserts nothing. The hotkey, Escape and the pill ignore it.
 ///
+/// The read-aloud hotkey starts a `Reader`, which reads the selection aloud under a `Reading`
+/// pill. The read-aloud hotkey, Escape or a click stops it, and the dictation hotkey stops it and
+/// starts a dictation. The read-aloud hotkey does nothing while a dictation or a test is starting
+/// or running, and a test cannot start while reading.
+///
 /// The hotkey and Escape arrive inside the event tap's callback, which must only decide whether
 /// to consume the event. So those handlers change `phase`, which is what that decision reads,
 /// and leave every other piece of work to a task.
@@ -42,9 +47,11 @@ import Observation
     case running(SessionMachine)
     /// A test from the settings window, from its start to its outcome.
     case testing
+    /// Reading the selection aloud, from the press until the reader ends.
+    case reading(Reader)
   }
 
-  /// No dictation or test is starting or running, so a test may start.
+  /// No dictation, test or reading is under way, so a test may start.
   var isIdle: Bool {
     if case .idle = phase { true } else { false }
   }
@@ -68,7 +75,12 @@ import Observation
     audio.onLevel = { [weak self] level in self?.levelChanged(level) }
     let monitor = HotkeyMonitor(
       store: store,
-      onHotkey: { [weak self] in self?.hotkeyPressed() },
+      onHotkey: { [weak self] hotkey in
+        switch hotkey {
+        case .dictation: self?.hotkeyPressed()
+        case .readAloud: self?.readAloudPressed()
+        }
+      },
       onEscape: { [weak self] in self?.escapePressed() ?? false }
     )
     monitor.start()
@@ -87,15 +99,47 @@ import Observation
       break
     case .running:
       Task { commit() }
+    case .reading(let reader):
+      // The reading ends on its own once stopped, and leaves the pill to the dictation.
+      phase = .starting
+      Task {
+        reader.stop()
+        await dictate()
+      }
+    }
+  }
+
+  /// Called inside the event tap.
+  private func readAloudPressed() {
+    switch phase {
+    case .idle:
+      errorFade?.cancel()
+      screen = NSScreen.forFocusedWindow()
+      // Shown only once the reader has the text, so an empty selection goes straight to its
+      // error.
+      pill = Pill(phase: .reading, startedAt: .now)
+      let reader = Reader(
+        settings: store.settings,
+        onStart: { [weak self] wasCut in self?.readingStarted(wasCut: wasCut) },
+        onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
+      phase = .reading(reader)
+      Task { await read(reader) }
+    case .reading(let reader):
+      Task { reader.stop() }
+    case .starting, .abandoned, .running, .testing:
+      break
     }
   }
 
   /// Called inside the event tap. Escape belongs to the focused app unless a session is
-  /// starting or running.
+  /// starting or running, or a reading is under way.
   private func escapePressed() -> Bool {
     switch phase {
     case .idle, .testing:
       return false
+    case .reading(let reader):
+      Task { reader.stop() }
+      return true
     case .starting:
       phase = .abandoned
       Task { end() }
@@ -110,10 +154,13 @@ import Observation
 
   /// A click commits a running session, as Opt+D does. It never opens one, so clicking an
   /// error pill, or a pill fading after a session, never starts the microphone. Only Opt+D
-  /// starts a session.
+  /// starts a session. A click also stops a reading.
   private func clicked() {
-    guard case .running = phase else { return }
-    commit()
+    switch phase {
+    case .running: commit()
+    case .reading(let reader): reader.stop()
+    case .idle, .starting, .abandoned, .testing: break
+    }
   }
 
   /// Commits by ending capture rather than triggering the session here. The pump sends what is
@@ -217,7 +264,7 @@ import Observation
     guard !isAbandoned else { return abandon() }
     guard let apiKey else {
       audio.stop()
-      return .failed("Add your xAI API key in EchoType Settings")
+      return .failed(Self.noAPIKey)
     }
 
     // The socket opens here, on trigger, because an idle open socket bills streaming time.
@@ -302,6 +349,29 @@ import Observation
     end(showing: failure.map(describe))
   }
 
+  // MARK: Reading
+
+  /// One reading, from the press until the audio ends, it is stopped or it fails. The reader
+  /// reads the settings once, when it is created at the press, which also sets up its pill.
+  private func read(_ reader: Reader) async {
+    var failure: (any Error)?
+    do { try await reader.finished() } catch { failure = error }
+    // A dictation took over, and owns the phase and the pill now.
+    guard isReading(reader) else { return }
+    phase = .idle
+    end(showing: failure.map(describe))
+  }
+
+  private func readingStarted(wasCut: Bool) {
+    updatePill { pill in
+      if wasCut { pill.settled = "Reading the first 60,000 characters" }
+    }
+  }
+
+  private func isReading(_ reader: Reader) -> Bool {
+    if case .reading(let current) = phase { current === reader } else { false }
+  }
+
   // MARK: Pill
 
   /// Shows the pill in its starting state on the screen holding the focused window, replacing
@@ -342,8 +412,17 @@ import Observation
     }
   }
 
+  private static let noAPIKey = "Add your xAI API key in EchoType Settings"
+
+  /// Words a dictation or reading failure for the pill.
   private func describe(_ error: any Error) -> String {
     switch error {
+    case Reader.Failure.nothingSelected:
+      "Nothing selected"
+    case Reader.Failure.noAPIKey:
+      Self.noAPIKey
+    case Reader.Failure.playback(let underlying):
+      "Audio output failed: \(underlying.localizedDescription)"
     case AudioCapture.Failure.microphoneDenied:
       "Microphone access is off. Allow it in System Settings > Privacy & Security > Microphone"
     case AudioCapture.Failure.noInputDevice:
@@ -351,16 +430,22 @@ import Observation
     case AudioCapture.Failure.captureFailed(let underlying):
       "Microphone failed: \(underlying.localizedDescription)"
     // A wrong key is a 400 from api.x.ai, and 401 means no key reached it at all.
-    case SessionError.stt(.badRequest), SessionError.stt(.unauthorized):
+    // Reading throws `STTError` itself, where dictation wraps it in `SessionError`.
+    case SessionError.stt(.badRequest), SessionError.stt(.unauthorized),
+      STTError.badRequest, STTError.unauthorized:
       "xAI rejected the API key"
-    case SessionError.stt(.rateLimited):
+    case SessionError.stt(.rateLimited), STTError.rateLimited:
       "xAI rate limit reached"
-    case SessionError.stt(.unavailable):
+    case SessionError.stt(.unavailable), STTError.unavailable:
       "xAI is unavailable"
     case SessionError.stt(.server(let serverError)):
       "xAI error: \(serverError.message)"
     case SessionError.socket(let description):
       "Connection failed: \(description)"
+    case let error as STTError:
+      "xAI error: \(error)"
+    case let error as URLError:
+      "Connection failed: \(error.localizedDescription)"
     default:
       "Dictation failed: \(error)"
     }

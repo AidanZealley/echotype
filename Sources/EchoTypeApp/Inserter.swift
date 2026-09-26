@@ -1,7 +1,8 @@
 import AppKit
 
 /// Inserts text at the focused caret via the pasteboard and a synthetic Cmd+V, following the
-/// specification's Insertion sequence.
+/// specification's Insertion sequence. The user's pasteboard is saved first and put back
+/// afterwards through `Pasteboard`, which `Reader` also uses to copy the selection.
 @MainActor final class Inserter {
   /// The restore still waiting to run: what the user had, and the `changeCount` from before
   /// the transcript was written. That count identifies the insertion, so a later one can
@@ -33,7 +34,7 @@ import AppKit
   /// saved, not its transcript.
   private func savedContents(of pasteboard: NSPasteboard) -> [NSPasteboardItem] {
     if let pending, pasteboard.changeCount == pending.before + 1 { return pending.saved }
-    return (pasteboard.pasteboardItems ?? []).map(copy)
+    return Pasteboard.saved()
   }
 
   private func restore(after before: Int) {
@@ -45,16 +46,6 @@ import AppKit
     guard pasteboard.changeCount == before + 1 else { return }
     // Nothing to put back: leave the transcript rather than clearing to an empty pasteboard.
     guard !pending.saved.isEmpty else { return }
-    pasteboard.clearContents()
-    pasteboard.writeObjects(pending.saved)
+    Pasteboard.restore(pending.saved)
   }
-}
-
-/// Pasteboard items cannot be rewritten once read, so restore from a copy.
-private func copy(_ item: NSPasteboardItem) -> NSPasteboardItem {
-  let copy = NSPasteboardItem()
-  for type in item.types {
-    if let data = item.data(forType: type) { copy.setData(data, forType: type) }
-  }
-  return copy
 }

@@ -44,3 +44,10 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
 - Markdown and code are read as written, fence hints included. Cleaning them up is out of
   scope.
 - A reading is capped at the REST limit of 60,000 characters.
+
+## G2 on the Mac
+
+Aidan checked the finished app on 2026-09-26. Reading passed every check, including a
+reading with the `en-GB` language tag, which the endpoint accepted. Time to first audio
+from the hotkey was under half a second and felt instant. The 60,000-character cap was not
+exercised with a real selection.

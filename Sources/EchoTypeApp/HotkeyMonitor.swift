@@ -1,23 +1,30 @@
 import AppKit
 import EchoTypeCore
 
-/// An active keyDown tap that consumes the configured hotkey, and Escape while the caller says
-/// a session is open. It reads the hotkey from the store on every key event, so a change in
-/// Settings applies at once without reinstalling the tap.
+/// An active keyDown tap that consumes the dictation and read-aloud hotkeys, reporting which was
+/// pressed, and Escape while the caller says a dictation or a reading takes it. It reads both
+/// hotkeys from the store on every key event, so a change in Settings applies at once without
+/// reinstalling the tap.
 ///
 /// Created once and kept for the life of the app: the tap holds an unretained pointer to it.
 @MainActor final class HotkeyMonitor {
   private static let escapeKeyCode: UInt16 = 53  // kVK_Escape
 
+  enum Hotkey {
+    case dictation
+    case readAloud
+  }
+
   private let store: SettingsStore
-  private let onHotkey: () -> Void
-  /// Returns whether a session took the press. Escape passes through when it did not.
+  private let onHotkey: (Hotkey) -> Void
+  /// Returns whether a dictation or a reading took the press. Escape passes through when it
+  /// did not.
   private let onEscape: () -> Bool
   private var tap: CFMachPort?
 
   init(
     store: SettingsStore,
-    onHotkey: @escaping () -> Void,
+    onHotkey: @escaping (Hotkey) -> Void,
     onEscape: @escaping () -> Bool
   ) {
     self.store = store
@@ -75,13 +82,20 @@ import EchoTypeCore
     case .keyDown:
       let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
       let modifiers = Settings.ModifierFlags(event.flags)
-      if store.settings.hotkey.matches(keyCode: keyCode, modifiers: modifiers) {
-        // Repeats are consumed too, so no character leaks while the chord is held, but only
-        // the initial press counts.
-        if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { onHotkey() }
-        return true
-      }
-      return keyCode == Self.escapeKeyCode && onEscape()
+      let settings = store.settings
+      let hotkey: Hotkey? =
+        if settings.hotkey.matches(keyCode: keyCode, modifiers: modifiers) {
+          .dictation
+        } else if settings.readAloudHotkey.matches(keyCode: keyCode, modifiers: modifiers) {
+          .readAloud
+        } else {
+          nil
+        }
+      guard let hotkey else { return keyCode == Self.escapeKeyCode && onEscape() }
+      // Repeats are consumed too, so no character leaks while the chord is held, but only the
+      // initial press counts.
+      if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { onHotkey(hotkey) }
+      return true
     default:
       return false
     }

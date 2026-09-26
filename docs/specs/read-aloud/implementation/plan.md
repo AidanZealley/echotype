@@ -15,7 +15,7 @@ Status: draft; implementation has not started.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Speech request, PCM decoding and settings](01-speech-core.md) | Approved spec and gate G1 | Accepted |
-| 2 | [Read aloud in the app](02-read-aloud-app.md) | 1 | Not started |
+| 2 | [Read aloud in the app](02-read-aloud-app.md) | 1 | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G2 | Not started |
 
 Statuses: `Not started`, `Implementing`, `Review`, `Remediation`, `Closure review`, `Blocked`,
@@ -90,7 +90,7 @@ Gate status is separate from workstream status: `Pending`, `Testing`, `Troublesh
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
 | G1 The spike | Workstream 1 | Before implementation | Passed | The curl commands in the specification's Spike section | Aidan reports all four facts listed in the README's G1 section |
-| G2 Reading on the Mac | Workstream 2 | After closure, before acceptance | Pending | Development app from `./scripts/run.sh`, built from the workstream 2 diff | Aidan reports pass or fail for each step in the packet's External validation section |
+| G2 Reading on the Mac | Workstream 2 | After closure, before acceptance | Passed | Development app from `./scripts/run.sh`, built from the workstream 2 diff | Aidan reports pass or fail for each step in the packet's External validation section |
 
 ## Escalations
 
@@ -116,4 +116,5 @@ removes the entry.
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
 | 2026-09-26 | Reading fetches audio over REST (`POST /v1/tts`), sending `optimize_streaming_latency: 0` and `text_normalization: false`. Not drift: the specification left this to the spike. | G1: REST streams, first audio +0.59s; latency setting gave no gain; normalisation misread Markdown. Decision 0018. | Aidan (G1, E1) | 2, Final |
-| 2026-09-26 | Reading passes the General tab's `language` unchanged, as specified. xAI's TTS docs list a fixed set of tags (`en`, `pt-BR`, ...) without `en-GB`, so a regional tag may get a 400. Unverified; G2 should read once with a regional tag. Mapping tags would be a specification change for Aidan. | Workstream 1 review Q1 | Workstream 1 lead | 2, Final |
+| 2026-09-26 | Reading passes the General tab's `language` unchanged, as specified. xAI's TTS docs list a fixed set of tags (`en`, `pt-BR`, ...) without `en-GB`, so a regional tag might get a 400. G2 read with `en-GB` without error, so no mapping is needed. | Workstream 1 review Q1 | Workstream 1 lead | 2, Final |
+| 2026-09-26 | Approved drift: the pill's waveform glow also shows during a reading, driven by the audio as it plays. The specification (`read-aloud.md`, "The level glow stays at zero while reading") and packet said otherwise; workstream 2 does not own that line, so the final review should bring it in line. | Aidan asked for it at G2 (E2) and passed its look (E3): it moves with the voice on dictation's scale. | Aidan (G2, E2, E3) | 2, Final |
