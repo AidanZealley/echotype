@@ -21,13 +21,15 @@ two differ from it.
   `.ignoresCycle` to the specification's collection behaviour.
 - A click is taken in the panel's `sendEvent` and not forwarded, so no SwiftUI view
   handles it.
-- A click commits a running session and does nothing otherwise. The specification says
+- A click commits a running session, stops a reading (added with read aloud) and does
+  nothing otherwise. The specification says
   a click "does the same as Opt+D". Here a click never starts a session, so clicking a
   red error pill or a fading pill never opens the microphone. The second click of a
   double click does nothing.
 - The event tap callback only changes the controller's phase, which the consume decision
   reads, and starts tasks for everything else. The next key event is still judged against
-  the right phase.
+  the right phase. (Read aloud: a reading press also finds the pill's screen in the
+  callback, so the pill is ready before the reader reports.)
 - Escape during the starting state is consumed and abandons the start: the pill fades at
   once, the microphone is released and no socket opens. Opt+D is ignored until the
   abandoned start unwinds.
@@ -40,7 +42,8 @@ two differ from it.
   state line shows only the session state.
 - The meter reads the loudest channel's RMS before conversion, mapped linearly from
   -50 dBFS (empty) to -20 dBFS (full), so ordinary speech sits around two thirds. (Superseded: the meter
-  now reads the converted mono audio, with the same mapping.)
+  now reads the converted mono audio, with the same mapping. While reading, it reads the
+  player's output as it plays, with the same mapping.)
 - The pill goes on the screen containing the centre of the frontmost app's focused
   window, read through Accessibility. It falls back to the screen under the mouse, then
   the main screen. Each Accessibility read has a 0.25s timeout, because the lookup runs

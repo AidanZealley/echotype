@@ -16,7 +16,7 @@ struct PillView: View {
       }
       .font(.system(size: 11, weight: .medium))
       Transcript(pill: pill).font(.system(size: 16))
-      Text(verbatim: "⌥D stop · esc cancel")
+      Text(verbatim: pill.phase == .reading ? "esc stop" : "⌥D stop · esc cancel")
         .font(.system(size: 11))
         .foregroundStyle(.tertiary)
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -42,13 +42,15 @@ extension Pill.Phase {
     case .listening: "Listening"
     case .paused: "Paused"
     case .transcribing: "Transcribing"
+    case .reading: "Reading"
     case .error: "Error"
     }
   }
 }
 
-/// Small vertical bars that rise with the input level. Flat and faint while the microphone
-/// opens, dimmed while paused, a spinner while transcribing.
+/// Small vertical bars that rise with the level, the microphone's or, while reading, the
+/// playback's. Flat and faint while the microphone opens, dimmed while paused, a spinner while
+/// transcribing.
 private struct LevelMeter: View {
   let pill: Pill
 
@@ -63,7 +65,7 @@ private struct LevelMeter: View {
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.red)
         .frame(width: 18, height: 14)
-    case .starting, .listening, .paused:
+    case .starting, .listening, .paused, .reading:
       HStack(alignment: .center, spacing: 1.5) {
         ForEach(Self.weights.indices, id: \.self) { index in
           Capsule()
@@ -148,10 +150,11 @@ private struct Elapsed: View {
   }
 }
 
-/// A blurred blue wave hanging from the pill's top edge, as deep as the input level. Its
-/// ripples roll while listening, but it flattens to a faint line when the voice is quiet, so
-/// it moves only in proportion to the voice. Faint and grey while the microphone opens,
-/// dimmed and still while paused, gone once the session is committed or fails.
+/// A blurred blue wave hanging from the pill's top edge, as deep as the level. Its ripples roll
+/// while listening or reading, but it flattens to a faint line when the voice is quiet, so it
+/// moves only in proportion to the voice, the user's or the one reading. Faint and grey while
+/// the microphone opens, dimmed and still while paused, gone once the session is committed or
+/// fails.
 private struct LevelGlow: View {
   let pill: Pill
 
@@ -159,7 +162,7 @@ private struct LevelGlow: View {
   @State private var history = Array(repeating: 0.0, count: 4)
 
   var body: some View {
-    TimelineView(.animation(paused: pill.phase != .listening)) { timeline in
+    TimelineView(.animation(paused: pill.phase != .listening && pill.phase != .reading)) { timeline in
       let time = timeline.date.timeIntervalSinceReferenceDate
       Canvas { context, size in
         let colour: Color = pill.phase == .starting ? .gray : .blue
@@ -177,14 +180,14 @@ private struct LevelGlow: View {
   private var opacity: Double {
     switch pill.phase {
     case .starting: 0.25
-    case .listening: 0.4
+    case .listening, .reading: 0.4
     case .paused: 0.15
     case .transcribing, .error: 0
     }
   }
 
   /// How far the glow reaches into the pill at full level, and at silence, so a live session
-  /// always shows a faint line.
+  /// or reading always shows a faint line.
   private func depth(_ level: Double, in size: CGSize) -> CGFloat {
     size.height * (0.08 + 0.62 * level)
   }

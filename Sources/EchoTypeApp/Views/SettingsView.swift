@@ -4,8 +4,8 @@ import EchoTypeCore
 import ServiceManagement
 import SwiftUI
 
-/// The settings window: a tab per concern. The hotkey applies at once; the rest apply from the
-/// next session.
+/// The settings window: a tab per concern. The hotkeys apply at once; the rest apply from the
+/// next dictation or reading.
 struct SettingsView: View {
   @Bindable var store: SettingsStore
   /// Nil in the overlay demo, which has no controller and so no Test button.
@@ -18,6 +18,9 @@ struct SettingsView: View {
       }
       Tab("Keyterms", systemImage: "character.book.closed") {
         KeytermsTab(store: store)
+      }
+      Tab("Read Aloud", systemImage: "speaker.wave.2") {
+        ReadAloudTab(store: store)
       }
       Tab("API Key", systemImage: "key") {
         APIKeyTab(controller: controller)
@@ -34,7 +37,7 @@ private struct GeneralTab: View {
     Form {
       Picker("Hotkey", selection: $store.settings.hotkey) {
         ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { hotkey in
-          Text(verbatim: Self.label(hotkey)).tag(hotkey)
+          Text(verbatim: hotkey.label).tag(hotkey)
         }
       }
       InputRow(store: store)
@@ -53,9 +56,48 @@ private struct GeneralTab: View {
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
   }
+}
 
-  private static func label(_ hotkey: EchoTypeCore.Settings.Hotkey) -> String {
-    hotkey == .controlOptionD ? "⌃⌥D" : "⌥D"
+private struct ReadAloudTab: View {
+  @Bindable var store: SettingsStore
+
+  var body: some View {
+    Form {
+      Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
+        ForEach(EchoTypeCore.Settings.Hotkey.readAloudPresets, id: \.self) { hotkey in
+          Text(verbatim: hotkey.label).tag(hotkey)
+        }
+      }
+      Picker("Voice", selection: $store.settings.voice) {
+        ForEach(Speech.voices, id: \.self) { voice in
+          Text(verbatim: voice.capitalized).tag(voice)
+        }
+      }
+      LabeledContent("Speed") {
+        HStack {
+          // The endpoint's range.
+          Slider(value: $store.settings.speechSpeed, in: 0.7...1.5, step: 0.1)
+          Text(store.settings.speechSpeed, format: .number.precision(.fractionLength(1)))
+            .monospacedDigit()
+            .frame(width: 28, alignment: .trailing)
+        }
+      }
+    }
+    .formStyle(.columns)
+    .padding(20)
+    .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+extension EchoTypeCore.Settings.Hotkey {
+  /// The label for one of the dictation or read-aloud presets.
+  fileprivate var label: String {
+    switch self {
+    case .controlOptionD: "⌃⌥D"
+    case .optionS: "⌥S"
+    case .controlOptionS: "⌃⌥S"
+    default: "⌥D"
+    }
   }
 }
 

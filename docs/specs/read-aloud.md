@@ -2,8 +2,7 @@
 
 Select text in any app, press a hotkey, and EchoType reads it out in a Grok voice.
 
-Status: draft, 2026-09-26. Not implemented. The spike below comes first and decides how
-audio is fetched.
+Status: implemented, 2026-09-26. The spike chose REST; see decision 0018.
 
 ## Problem
 
