@@ -2,8 +2,7 @@ import Foundation
 
 /// Everything the overlay pill shows. The pill renders this value and nothing else, so the
 /// `--hud-demo` loop and the dictation controller, for dictation and reading alike, drive it the
-/// same way: build a `Pill` and
-/// hand it to `OverlayPanel.show(_:on:)`.
+/// same way: build a `Pill` and hand it to `OverlayPanel.show(_:on:)`.
 struct Pill: Equatable {
   enum Phase: Equatable {
     /// The microphone is opening. Anything said now is lost, so the pill looks not ready.
