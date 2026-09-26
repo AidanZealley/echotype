@@ -37,6 +37,12 @@ import AppKit
     return Pasteboard.saved()
   }
 
+  /// A reading waits for the pending paste window before sending Cmd+C. Otherwise its copy
+  /// can replace the transcript before Cmd+V lands or prevent the previous contents returning.
+  func waitForRestore() async throws {
+    while pending != nil { try await Task.sleep(for: .milliseconds(10)) }
+  }
+
   private func restore(after before: Int) {
     // A later insertion superseded this restore and carries the saved contents forward.
     guard let pending, pending.before == before else { return }

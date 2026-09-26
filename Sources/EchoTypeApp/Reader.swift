@@ -16,14 +16,17 @@ import Foundation
   private static let bufferBytes = Speech.sampleRate / 10 * 2
 
   private let player: SpeechPlayer
+  private let inserter: Inserter
   private var task: Task<Void, any Error>?
 
   /// `onStart` runs once the text is known, just before it is fetched, with whether it was cut
   /// to `Speech.maximumCharacters`. `onLevel` receives the level of the audio as it plays.
   init(
-    settings: Settings, onStart: @escaping @MainActor (_ wasCut: Bool) -> Void,
+    settings: Settings, inserter: Inserter,
+    onStart: @escaping @MainActor (_ wasCut: Bool) -> Void,
     onLevel: @escaping @MainActor (Double) -> Void
   ) {
+    self.inserter = inserter
     player = SpeechPlayer(onLevel: onLevel)
     task = Task { try await read(settings, onStart: onStart) }
   }
@@ -45,6 +48,7 @@ import Foundation
   }
 
   private func read(_ settings: Settings, onStart: (Bool) -> Void) async throws {
+    try await inserter.waitForRestore()
     let selection = await Pasteboard.copySelection()
     try Task.checkCancellation()
     guard let selection else { throw Failure.nothingSelected }

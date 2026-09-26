@@ -120,6 +120,7 @@ import Observation
       pill = Pill(phase: .reading, startedAt: .now)
       let reader = Reader(
         settings: store.settings,
+        inserter: inserter,
         onStart: { [weak self] wasCut in self?.readingStarted(wasCut: wasCut) },
         onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
       phase = .reading(reader)
