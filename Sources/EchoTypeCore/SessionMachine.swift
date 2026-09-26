@@ -57,16 +57,17 @@ public actor SessionMachine {
   /// What an overlay renders at one moment of the session.
   public struct Snapshot: Equatable, Sendable {
     public var state: State
-    /// Committed text plus the settled runs of the current utterance, rendered solid. The
-    /// utterance's `speech_final` text replaces its runs wholesale, so this is not guaranteed
-    /// to only grow at its end.
-    public var settled: String
-    /// The tail the model may still rewrite, rendered dimmed after `settled`.
+    /// Text closed by `speech_final` or `transcript.done`; it only grows at the end.
+    public var committed: String
+    /// Settled runs in the current utterance, which `speech_final` can replace.
+    public var utterance: String
+    /// The unsettled run, rendered dimmed.
     public var provisional: String
 
-    public init(state: State, settled: String, provisional: String) {
+    public init(state: State, committed: String, utterance: String, provisional: String) {
       self.state = state
-      self.settled = settled
+      self.committed = committed
+      self.utterance = utterance
       self.provisional = provisional
     }
   }
@@ -336,7 +337,8 @@ public actor SessionMachine {
   /// Publishes the current snapshot unless it is the one already published.
   private func publish() {
     let snapshot = Snapshot(
-      state: state, settled: transcript.settled, provisional: transcript.provisional)
+      state: state, committed: transcript.text, utterance: transcript.utterance,
+      provisional: transcript.provisional)
     guard snapshot != published else { return }
     published = snapshot
     publisher.yield(snapshot)

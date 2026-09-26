@@ -246,10 +246,10 @@ struct SessionMachineTests {
     await transport.emit(Fixture.created)
 
     await transport.emit(Fixture.partial("tan stock"))
-    #expect(await log.snapshot() == .init(state: .listening, settled: "", provisional: "tan stock"))
+    #expect(await log.snapshot() == .init(state: .listening, committed: "", utterance: "", provisional: "tan stock"))
     await transport.emit(Fixture.partial("tanstack is", isFinal: true))
     #expect(
-      await log.snapshot() == .init(state: .listening, settled: "tanstack is", provisional: ""))
+      await log.snapshot() == .init(state: .listening, committed: "", utterance: "tanstack is", provisional: ""))
 
     await session.cancel()
     _ = await running.value
@@ -271,10 +271,10 @@ struct SessionMachineTests {
     for _ in 0..<4 { if let next = await log.snapshot() { shown.append(next) } }
     #expect(
       shown == [
-        .init(state: .listening, settled: "", provisional: "install pnpm"),
-        .init(state: .listening, settled: "install pnpm", provisional: ""),
-        .init(state: .listening, settled: "install pnpm", provisional: "then add"),
-        .init(state: .listening, settled: "install pnpm then add shadcn", provisional: ""),
+        .init(state: .listening, committed: "", utterance: "", provisional: "install pnpm"),
+        .init(state: .listening, committed: "", utterance: "install pnpm", provisional: ""),
+        .init(state: .listening, committed: "install pnpm", utterance: "", provisional: "then add"),
+        .init(state: .listening, committed: "install pnpm then add shadcn", utterance: "", provisional: ""),
       ])
 
     await session.trigger()
@@ -290,21 +290,21 @@ struct SessionMachineTests {
 
     await clock.advance(by: 10)
     #expect(await log.next() == .paused)
-    #expect(await log.latest == .init(state: .paused, settled: "one", provisional: ""))
+    #expect(await log.latest == .init(state: .paused, committed: "one", utterance: "", provisional: ""))
 
     await transport.emit(Fixture.partial("tw"))
     #expect(await log.next() == .listening)
-    #expect(await log.latest == .init(state: .listening, settled: "one", provisional: "tw"))
+    #expect(await log.latest == .init(state: .listening, committed: "one", utterance: "", provisional: "tw"))
     await transport.emit(Fixture.partial("two", isFinal: true, speechFinal: true))
 
     await clock.advance(by: 10)
     #expect(await log.next() == .paused)
-    #expect(await log.latest == .init(state: .paused, settled: "one two", provisional: ""))
+    #expect(await log.latest == .init(state: .paused, committed: "one two", utterance: "", provisional: ""))
 
     await transport.emit(Fixture.partial("three", isFinal: true, speechFinal: true))
     #expect(await log.next() == .listening)
     #expect(
-      await log.latest == .init(state: .listening, settled: "one two three", provisional: ""))
+      await log.latest == .init(state: .listening, committed: "one two three", utterance: "", provisional: ""))
 
     await session.cancel()
     _ = await running.value
@@ -322,13 +322,13 @@ struct SessionMachineTests {
     await transport.emit(Fixture.partial("then some"))
     #expect(
       await log.snapshot()
-        == .init(state: .finalizing, settled: "said and done", provisional: "then some"))
+        == .init(state: .finalizing, committed: "said and done", utterance: "", provisional: "then some"))
     await transport.emit(Fixture.partial("then some", isFinal: true, speechFinal: true))
     await transport.emit(Fixture.done)
 
     #expect(await running.value == .insert("said and done then some"))
     #expect(await log.rest() == [.inserting, .idle])
     #expect(
-      await log.latest == .init(state: .idle, settled: "said and done then some", provisional: ""))
+      await log.latest == .init(state: .idle, committed: "said and done then some", utterance: "", provisional: ""))
   }
 }

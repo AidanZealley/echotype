@@ -4,8 +4,8 @@ Status: draft; implementation has not started.
 
 ## Orchestration record
 
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `live-revision`
+- Starting commit: `4c54c61d74bad82c316b0cbe192627fbe28faaaf`
 - Review method: fresh lead subagents
 - Approved specification commit: `TBD`
 - Started: `TBD`
@@ -14,7 +14,7 @@ Status: draft; implementation has not started.
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Live revision pipeline](01-revision-pipeline.md) | Approved spec | Not started |
+| 1 | [Live revision pipeline](01-revision-pipeline.md) | Approved spec | Accepted |
 | 2 | [Scrollable pill](02-scrollable-pill.md) | Workstream 1 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1 and 2 | Not started |
 

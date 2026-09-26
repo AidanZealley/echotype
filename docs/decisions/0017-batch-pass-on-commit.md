@@ -1,6 +1,8 @@
 # 0017 Re-transcribe the whole recording when a dictation stops
 
-Status: accepted, 2026-09-25.
+Status: superseded by [live revision](../specs/live-revision.md), 2026-09-26.
+
+This record describes the former batch pass. The live revision spec replaces it.
 
 ## Context
 

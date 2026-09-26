@@ -43,8 +43,8 @@ private struct GeneralTab: View {
       InputRow(store: store)
       LanguageRow(store: store)
       VStack(alignment: .leading) {
-        Toggle("Re-transcribe on stop", isOn: $store.settings.batchOnCommit)
-        Text("Better punctuation, slower insertion")
+        Toggle("Clean up text", isOn: $store.settings.cleanUp)
+        Text("Joins sentences split by pauses and drops what you take back")
           .font(.caption)
           .foregroundStyle(.secondary)
       }
