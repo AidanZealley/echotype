@@ -85,6 +85,8 @@ up to 300ms.
 - If it doesn't, nothing was selected.
 
 `Inserter`'s save and restore moves into a small pasteboard helper that both use.
+If a dictation paste is still in its 800ms restore window, reading waits for that window to
+finish before copying the selection.
 
 Some editors, VS Code among them, copy the current line when nothing is selected. In those
 apps, pressing the hotkey with nothing selected reads the current line. That's fine.
