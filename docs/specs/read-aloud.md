@@ -130,7 +130,8 @@ What feeds the player depends on the spike:
   the tap and the panel, so it owns the `Reader` too. It routes the read-aloud hotkey to
   the reader. Escape and pill clicks go to the reader while it's reading. Starting a
   dictation stops the reader first.
-- `Pill.Phase` gains `.reading`. The level glow stays at zero while reading.
+- `Pill.Phase` gains `.reading`. The level glow and meter follow the audio as it plays, on
+  dictation's scale.
 - `SettingsView` gains a `ReadAloudTab` with a `speaker.wave.2` icon, placed after
   Keyterms.
 

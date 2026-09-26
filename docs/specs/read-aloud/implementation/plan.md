@@ -1,6 +1,6 @@
 # Read aloud implementation plan
 
-Status: draft; implementation has not started.
+Status: complete; every workstream and the final review are accepted.
 
 ## Orchestration record
 
@@ -16,7 +16,7 @@ Status: draft; implementation has not started.
 |---:|---|---|---|
 | 1 | [Speech request, PCM decoding and settings](01-speech-core.md) | Approved spec and gate G1 | Accepted |
 | 2 | [Read aloud in the app](02-read-aloud-app.md) | 1 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G2 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-2 and gate G2 | Accepted |
 
 Statuses: `Not started`, `Implementing`, `Review`, `Remediation`, `Closure review`, `Blocked`,
 `Accepted`. One workstream is active at a time.
@@ -118,3 +118,4 @@ removes the entry.
 | 2026-09-26 | Reading fetches audio over REST (`POST /v1/tts`), sending `optimize_streaming_latency: 0` and `text_normalization: false`. Not drift: the specification left this to the spike. | G1: REST streams, first audio +0.59s; latency setting gave no gain; normalisation misread Markdown. Decision 0018. | Aidan (G1, E1) | 2, Final |
 | 2026-09-26 | Reading passes the General tab's `language` unchanged, as specified. xAI's TTS docs list a fixed set of tags (`en`, `pt-BR`, ...) without `en-GB`, so a regional tag might get a 400. G2 read with `en-GB` without error, so no mapping is needed. | Workstream 1 review Q1 | Workstream 1 lead | 2, Final |
 | 2026-09-26 | Approved drift: the pill's waveform glow also shows during a reading, driven by the audio as it plays. The specification (`read-aloud.md`, "The level glow stays at zero while reading") and packet said otherwise; workstream 2 does not own that line, so the final review should bring it in line. | Aidan asked for it at G2 (E2) and passed its look (E3): it moves with the voice on dictation's scale. | Aidan (G2, E2, E3) | 2, Final |
+| 2026-09-26 | The final review changed the specification's `.reading` line to say the glow and meter follow the audio as it plays, on dictation's scale, closing the glow drift above. | Final review R1 | Final-review lead, under Aidan's approval at E2 and E3 | Final |
