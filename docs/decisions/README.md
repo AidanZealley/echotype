@@ -1,9 +1,8 @@
 # Decisions
 
-Short records of decisions made while building EchoType that the specification
-doesn't explain on its own. The specification in `docs/specs/` is still the source of
-truth for behaviour. These files record why things are the way they are, what was
-observed that led there, and which known gaps are handed to later milestones.
+Short records of why EchoType works as it does, what observations led to those
+choices, and which gaps remain. The code and tests define current behavior. Draft
+specifications in `docs/specs/` describe possible future work.
 
 Each record has a status, the context, the decision and its consequences. When a
 decision is reversed, mark the old record superseded and link the new one. Don't
@@ -29,3 +28,5 @@ delete it.
 | 0016 | [Install to /Applications and claim the login item there](0016-install-and-claim-the-login-item.md) | Accepted |
 | 0017 | [Re-transcribe the whole recording when a dictation stops](0017-batch-pass-on-commit.md) | Accepted |
 | 0018 | [Read aloud fetches audio over REST](0018-read-aloud-audio-fetch.md) | Accepted |
+| 0019 | [Build a native macOS app with a small testable core](0019-native-macos-app-and-core-boundary.md) | Accepted |
+| 0020 | [Insert through the pasteboard and copy selections after pending pastes](0020-pasteboard-insertion-and-selection-copy.md) | Accepted |

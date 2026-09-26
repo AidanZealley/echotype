@@ -6,9 +6,8 @@ let package = Package(
   name: "EchoType",
   platforms: [.macOS(.v26)],
   targets: [
-    // No UI, no global state, no I/O. That is what keeps the whole suite running in
-    // milliseconds against an injected clock and recorded event streams, rather than a
-    // signed bundle and a real socket.
+    // Session and protocol code without AppKit or TCC. Tests use an injected clock and
+    // recorded event streams instead of a signed bundle or a live socket.
     .target(name: "EchoTypeCore"),
     .testTarget(name: "EchoTypeCoreTests", dependencies: ["EchoTypeCore"]),
     // Built into a signed .app bundle by scripts/deploy.sh, through run.sh for development

@@ -27,6 +27,10 @@ Keychain item the app cannot read without a prompt.
   editor exists, keyterms are the user's data.
 - The hotkey dropdown offers Opt+D and Ctrl+Opt+D (`Settings.Hotkey.presets`). The right
   Option double tap is deferred to [0007](0007-known-gaps.md).
+  Opt+D was chosen over Option dead keys, which can leave a pending accent when the
+  tap is unavailable, and Fn, whose system action fires below the event tap.
+  Ctrl+Opt+D is an alternative rather than the default because Ctrl+Opt is
+  VoiceOver's modifier.
 - The read-aloud hotkey offers Opt+S and Ctrl+Opt+S (`Settings.Hotkey.readAloudPresets`).
 - `SettingsStore` in the app is the only writer of `UserDefaults`. The hotkey monitor
   reads the current hotkey on every key event, so a change applies without a relaunch.
