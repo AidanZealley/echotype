@@ -1,25 +1,17 @@
 import SwiftUI
 
-/// The overlay pill. Renders one `Pill` and nothing else: a slim strip with the level meter,
-/// the phase and elapsed time above a larger transcript, the hint at the foot, and the level
-/// glowing inside the pill from its top edge.
+private let supportingTextOpacity = 0.65
+private let indicatorOpacity = 0.4
+
+/// The overlay pill: a status strip, a growing transcript, and a shortcut hint.
 struct PillView: View {
   let pill: Pill
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 8) {
-        LevelMeter(pill: pill)
-        Text(pill.phase.name).foregroundStyle(.secondary)
-        Spacer()
-        Elapsed(pill: pill)
-      }
-      .font(.system(size: 11, weight: .medium))
+      statusRow
       Transcript(pill: pill).font(.system(size: 16))
-      Text(verbatim: pill.phase == .reading ? "esc stop" : "⌥D stop · esc cancel")
-        .font(.system(size: 11))
-        .foregroundStyle(.tertiary)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+      hint
     }
     .padding(.horizontal, 18)
     .padding(.vertical, 12)
@@ -31,6 +23,90 @@ struct PillView: View {
     .glassEffect(in: .rect(cornerRadius: 22))
     // Room for the glass's own edge and shadow, which the window does not draw.
     .padding(16)
+  }
+
+  private var statusRow: some View {
+    HStack(spacing: 8) {
+      LevelMeter(pill: pill)
+      Text(pill.phase.name).foregroundStyle(.primary.opacity(supportingTextOpacity))
+      Spacer()
+      Elapsed(pill: pill)
+    }
+    .font(.system(size: 11, weight: .medium))
+  }
+
+  private var hint: some View {
+    Text(verbatim: pill.phase == .reading ? "esc stop" : "⌥D stop · esc cancel")
+      .font(.system(size: 11))
+      .foregroundStyle(.primary.opacity(supportingTextOpacity))
+      .frame(maxWidth: .infinity, alignment: .trailing)
+  }
+}
+
+/// The transcript grows to a height cap, then keeps the newest text visible at the bottom.
+private struct Transcript: View {
+  let pill: Pill
+  private let maximumHeight: CGFloat = 184
+  private let fadeHeight: CGFloat = 20
+  @State private var overflows = false
+
+  var body: some View {
+    Group {
+      if case .error(let message) = pill.phase {
+        Text(message).foregroundStyle(.red).lineLimit(2)
+      } else {
+        TailLayout(maximumHeight: maximumHeight) {
+          text.lineHeight(.multiple(factor: 1.5))
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: Bool.self) { $0.size.height > maximumHeight } action: {
+              overflows = $0
+            }
+        }
+        .clipped()
+        // Fade only when text exceeds the cap; shorter transcripts stay fully opaque.
+        .mask(alignment: .bottom) {
+          if overflows {
+            LinearGradient(
+              stops: [
+                .init(color: .white.opacity(0.35), location: 0),
+                .init(color: .white, location: fadeHeight / maximumHeight),
+                .init(color: .white, location: 1),
+              ],
+              startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: maximumHeight)
+          } else {
+            Rectangle()
+          }
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private var text: Text {
+    if pill.settled.isEmpty && pill.provisional.isEmpty { return Text(verbatim: " ") }
+    let gap = pill.settled.isEmpty || pill.provisional.isEmpty ? "" : " "
+    return Text("\(pill.settled)\(gap)\(Text(pill.provisional).foregroundStyle(.primary.opacity(supportingTextOpacity)))")
+  }
+}
+
+/// Measures one text view and anchors its bottom when it exceeds the visible height.
+private struct TailLayout: Layout {
+  let maximumHeight: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let content = subviews[0].sizeThatFits(.init(width: proposal.width, height: nil))
+    return CGSize(width: content.width, height: min(content.height, maximumHeight))
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    let height = subviews[0].sizeThatFits(.init(width: bounds.width, height: nil)).height
+    subviews[0].place(
+      at: CGPoint(x: bounds.minX, y: bounds.maxY), anchor: .bottomLeading,
+      proposal: .init(width: bounds.width, height: height))
   }
 }
 
@@ -60,11 +136,15 @@ private struct LevelMeter: View {
   var body: some View {
     switch pill.phase {
     case .transcribing:
-      ProgressView().controlSize(.mini).frame(width: 18, height: 14)
+      ProgressView()
+        .controlSize(.mini)
+        .tint(Color.primary.opacity(indicatorOpacity))
+        .scaleEffect(1.15)
+        .frame(height: 14)
     case .error:
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.red)
-        .frame(width: 18, height: 14)
+        .frame(height: 14)
     case .starting, .listening, .paused, .reading:
       HStack(alignment: .center, spacing: 1.5) {
         ForEach(Self.weights.indices, id: \.self) { index in
@@ -72,65 +152,12 @@ private struct LevelMeter: View {
             .frame(width: 2, height: 2.5 + 11.5 * min(1, pill.level * Self.weights[index]))
         }
       }
-      .frame(width: 18, height: 14)
-      .foregroundStyle(pill.phase == .starting ? .tertiary : .primary)
+      .frame(height: 14)
+      .foregroundStyle(Color.primary.opacity(
+        pill.phase == .starting ? indicatorOpacity * 0.7 : indicatorOpacity))
       .opacity(pill.phase == .paused ? 0.35 : 1)
       .animation(.easeOut(duration: 0.12), value: pill.level)
     }
-  }
-}
-
-/// Settled text solid and provisional text dimmed, at most two lines, losing its beginning
-/// rather than the words just spoken. An error replaces it in red, also at most two lines but
-/// losing its end, because its start says what failed. With no text yet it keeps one empty
-/// line, since the strip above already names the phase.
-private struct Transcript: View {
-  let pill: Pill
-
-  var body: some View {
-    Group {
-      if case .error(let message) = pill.phase {
-        Text(message).foregroundStyle(.red).lineLimit(2)
-      } else {
-        TailLayout {
-          text.fixedSize(horizontal: false, vertical: true)
-          Text(verbatim: "A\nA").hidden()
-        }
-        .clipped()
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  @ViewBuilder private var text: some View {
-    if pill.settled.isEmpty && pill.provisional.isEmpty {
-      Text(verbatim: " ")
-    } else {
-      let gap = pill.settled.isEmpty || pill.provisional.isEmpty ? "" : " "
-      Text("\(pill.settled)\(gap)\(Text(pill.provisional).foregroundStyle(.secondary))")
-    }
-  }
-}
-
-/// Shows the bottom of its first subview, no taller than its second, so overflow falls off the
-/// top. The second subview only sets that height; hide it. Clip the result.
-private struct TailLayout: Layout {
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let unbounded = ProposedViewSize(width: proposal.width, height: nil)
-    let content = subviews[0].sizeThatFits(unbounded)
-    let limit = subviews[1].sizeThatFits(unbounded)
-    return CGSize(width: content.width, height: min(content.height, limit.height))
-  }
-
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
-    let unbounded = ProposedViewSize(width: bounds.width, height: nil)
-    let height = subviews[0].sizeThatFits(unbounded).height
-    subviews[0].place(
-      at: CGPoint(x: bounds.minX, y: bounds.maxY), anchor: .bottomLeading,
-      proposal: ProposedViewSize(width: bounds.width, height: height))
-    subviews[1].place(at: bounds.origin, proposal: .zero)
   }
 }
 
@@ -144,7 +171,7 @@ private struct Elapsed: View {
       let seconds = max(0, Int(context.date.timeIntervalSince(pill.startedAt)))
       Text(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
         .monospacedDigit()
-        .foregroundStyle(seconds >= 4 * 60 ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+        .foregroundStyle(seconds >= 4 * 60 ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary.opacity(supportingTextOpacity)))
     }
     .opacity(pill.phase == .paused ? 0.4 : 1)
   }
@@ -157,6 +184,8 @@ private struct Elapsed: View {
 /// fails.
 private struct LevelGlow: View {
   let pill: Pill
+  /// The approximate height of the pill with one transcript line.
+  private static let referenceHeight: CGFloat = 96
 
   /// Recent levels, oldest first, averaged so the wave swells rather than jitters.
   @State private var history = Array(repeating: 0.0, count: 4)
@@ -186,10 +215,9 @@ private struct LevelGlow: View {
     }
   }
 
-  /// How far the glow reaches into the pill at full level, and at silence, so a live session
-  /// or reading always shows a faint line.
-  private func depth(_ level: Double, in size: CGSize) -> CGFloat {
-    size.height * (0.08 + 0.62 * level)
+  /// Keep the wave at its one-line depth as the transcript grows.
+  private func depth(_ level: Double) -> CGFloat {
+    Self.referenceHeight * (0.08 + 0.62 * level)
   }
 
   private func drawWave(
@@ -202,7 +230,7 @@ private struct LevelGlow: View {
       let phase = x / size.width * .pi * 2
       let ripple =
         0.5 + 0.3 * sin(phase * 1.5 + time * 1.3) + 0.2 * sin(phase * 2.7 - time * 0.9)
-      path.addLine(to: CGPoint(x: x, y: depth(level * ripple, in: size)))
+      path.addLine(to: CGPoint(x: x, y: depth(level * ripple)))
     }
     path.addLine(to: CGPoint(x: size.width, y: 0))
     path.closeSubpath()
@@ -210,6 +238,6 @@ private struct LevelGlow: View {
       path,
       with: .linearGradient(
         Gradient(colors: [colour, colour.opacity(0.6)]), startPoint: .zero,
-        endPoint: CGPoint(x: 0, y: size.height)))
+        endPoint: CGPoint(x: 0, y: Self.referenceHeight)))
   }
 }

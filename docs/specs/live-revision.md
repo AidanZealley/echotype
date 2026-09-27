@@ -4,7 +4,7 @@ While the user speaks, an LLM revises the recent transcript into what they meant
 shows the revised text, and exactly that text is inserted on stop. It replaces the batch
 pass from [0017](../decisions/0017-batch-pass-on-commit.md).
 
-Status: draft, 2026-09-25. Not implemented.
+Status: approved, 2026-09-26. Implementation in progress.
 
 ## Problem
 
@@ -44,30 +44,24 @@ that you're being heard rather than a preview.
 - The batch pass is removed: `BatchTranscriber`, its tests, the in-memory recording,
   the `batchOnCommit` setting and its toggle. 0017 is marked superseded.
 
-## Pill layout and scrolling
+## Pill preview
 
-The pill currently shows only the last two lines. A revision above them is invisible,
-even though the pill is meant to preview what will be inserted. Let the transcript grow
-from one to eight wrapped lines at the existing width; keep the status row and hint
-visible. The panel stays anchored to the bottom of the screen, so its top edge moves up
-as it grows. Check the eight-line limit on a small Mac screen when choosing the layout.
+The pill previews the newest text at the existing width. It starts at the natural height of
+one transcript line. Only the transcript area grows, up to a 184pt cap, then
+holds that height while new text stays visible at the bottom. The full revised transcript
+still goes to insertion. A correction to older text can leave the preview. The panel stays
+anchored to the bottom of the visible screen, so its top edge moves up as it grows. Check
+the pixel cap on a small Mac screen.
 
-At that limit, the transcript stops growing and scrolls vertically inside the pill.
-It starts at the bottom and follows new text while the user is at the bottom. If the user
-scrolls up, keep their reading position as text arrives or a revision changes earlier
-text; do not jump to the bottom. Resume following only when they scroll back to the
-bottom. Reset this position for each new dictation session.
-
-Trackpad, mouse-wheel and scrollbar scrolling must not stop dictation. If the current
-click-to-stop behaviour conflicts with scrolling, remove it rather than adding special
-cases to distinguish scrollbar clicks. The stop hotkey remains available. Choose the
-layout from A/B/C variants before implementation.
-
-Keep the status row and shortcut hint fixed while the transcript scrolls beneath them.
-Use the native macOS soft scroll edge effect at the top and bottom of the transcript,
-so overflowing text fades and blurs as it passes under those rows. Keep the pill's
-existing glass surface; check the effect in the custom panel rather than adding
-separate glass backgrounds to the rows by default.
+Use the original pill's shared status, transcript, and hint layout in every phase. Keep an
+8pt gap from each status indicator to its label without reserving a common indicator width.
+At the height cap, fade older transcript lines over the top 20pt and clip them at the container
+edge. Keep the newest text at the bottom and short transcripts fully opaque. Do not measure
+a line count or animate panel height. Use 1.5 line height. Provisional text, status, time,
+and hint share 0.65 opacity in the normal listening state; the original-size meter and
+transcribing spinner use 0.40. Keep the existing pill glass and the blue level glow at its
+one-line depth as the transcript grows. The preview does not accept user scrolling.
+Opt+D and Escape remain available; click-to-stop was removed.
 
 ## Faithfulness check
 
@@ -166,9 +160,9 @@ In `DictationController`:
 2. `batchPass` becomes a call to `finish(committed:)` for `.insert` outcomes.
 3. `pump` stops collecting the recording.
 
-`PillView` replaces the two-line tail with a growing transcript and a scrollable area
-at the eight-line limit. `OverlayPanel` keeps the pill anchored to the screen bottom
-as its height changes and allows scrolling without stopping the session.
+`PillView` keeps the original tail layout but caps it at 184pt instead of two lines.
+It shows the newest text at the bottom. `OverlayPanel` keeps the pill anchored to the
+screen bottom as its height changes.
 
 ## Open questions
 
@@ -207,8 +201,7 @@ their results. Rerun this gate when the prompt or model changes.
 On the Mac, run `swift test` and the prompt tests with a key, then dictate with long
 pauses and self-corrections. The pill's final text should match the inserted text. Record
 the gap from stop to insertion and check whether the final timeout holds up. Check that
-the pill grows to eight lines, follows new text at the bottom, holds its position when
-scrolled up through new words and revisions, and resumes following when scrolled back
-to the bottom. Scrolling must not stop dictation. Show the overflow in `--hud-demo` in
-light and dark mode and have the user verify the top and bottom scroll edge effect in
-the actual pill before considering the layout complete.
+the pill starts at one natural line, grows to its pixel cap, and continues to show the
+newest text through new words and revisions. Show overflow in `--hud-demo` in light and
+dark mode. Have the user check the faded top edge and shared layout in the actual pill
+in both themes before considering the layout complete.

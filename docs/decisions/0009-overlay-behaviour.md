@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-09-24 (overlay gate G2). Supersedes the error surface in
 [0006](0006-api-key-and-error-surface.md). The meter's input is superseded by
-[0012](0012-capture-with-avcapturesession.md).
+[0012](0012-capture-with-avcapturesession.md). Live revision superseded click-to-stop
+on 2026-09-26 during the preview redesign.
 
 ## Context
 
@@ -19,13 +20,12 @@ two differ from it.
   is shown only with `orderFrontRegardless()`. `hidesOnDeactivate` is false, because
   this app is never active and the panel would otherwise never appear. It adds
   `.ignoresCycle` to the specification's collection behaviour.
-- A click is taken in the panel's `sendEvent` and not forwarded, so no SwiftUI view
-  handles it.
-- A click commits a running session, stops a reading (added with read aloud) and does
-  nothing otherwise. The specification says
-  a click "does the same as Opt+D". Here a click never starts a session, so clicking a
-  red error pill or a fading pill never opens the microphone. The second click of a
-  double click does nothing.
+- Originally, the panel took clicks in `sendEvent` and committed a running session or
+  stopped a reading. Live revision removed that interception. The later approved
+  preview follows the newest text without user scrolling. Its transcript area grows to a
+  184pt cap, then fades and clips older text at the top while the panel's lower edge stays
+  anchored, with no height animation. Opt+D still commits, and the read-aloud hotkey or
+  Escape still stops reading.
 - The event tap callback only changes the controller's phase, which the consume decision
   reads, and starts tasks for everything else. The next key event is still judged against
   the right phase. (Read aloud: a reading press also finds the pill's screen in the
@@ -52,7 +52,6 @@ two differ from it.
 ## Consequences
 
 - Never taking focus was verified by hand at G2 in TextEdit, a terminal and an Electron
-  app. Nothing automated guards it, so any change to the panel or its click handling
-  needs the same check.
+  app. Nothing automated guards it, so the live revision preview needs the same check.
 - Placement on a second display is verified only by reading (see
   [0007](0007-known-gaps.md)).

@@ -3,8 +3,8 @@ import EchoTypeCore
 import Foundation
 import Observation
 
-/// Owns the session lifecycle: the hotkey opens a session, the hotkey or a click on the pill
-/// commits it, Escape discards it, and the outcome is inserted at the caret.
+/// Owns the session lifecycle: the hotkey opens and commits a session, Escape discards it,
+/// and the outcome is inserted at the caret.
 ///
 /// With cleanup on, committed text revises in the pill and the final revision is inserted.
 /// A failed revision leaves the streamed words available.
@@ -16,7 +16,7 @@ import Observation
 /// pill and inserts nothing. The hotkey, Escape and the pill ignore it.
 ///
 /// The read-aloud hotkey starts a `Reader`, which reads the selection aloud under a `Reading`
-/// pill. The read-aloud hotkey, Escape or a click stops it, and the dictation hotkey stops it and
+/// pill. The read-aloud hotkey or Escape stops it, and the dictation hotkey stops it and
 /// starts a dictation. The read-aloud hotkey does nothing while a dictation or a test is starting
 /// or running, and a test cannot start while reading.
 ///
@@ -37,7 +37,7 @@ import Observation
   private enum Phase {
     case idle
     /// Opening the microphone, reading the key and opening the socket, which takes a noticeable
-    /// moment every session. Presses and clicks are ignored; Escape abandons the start.
+    /// moment every session. Hotkey presses are ignored; Escape abandons the start.
     case starting
     /// Escape was pressed while starting. The start stops at its next step.
     case abandoned
@@ -57,7 +57,7 @@ import Observation
   private let store: SettingsStore
   private let audio = AudioCapture()
   private let inserter = Inserter()
-  @ObservationIgnored private lazy var panel = OverlayPanel { [weak self] in self?.clicked() }
+  @ObservationIgnored private let panel = OverlayPanel()
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
 
@@ -148,17 +148,6 @@ import Observation
     case .running(let session):
       Task { await session.cancel() }
       return true
-    }
-  }
-
-  /// A click commits a running session, as Opt+D does. It never opens one, so clicking an
-  /// error pill, or a pill fading after a session, never starts the microphone. Only Opt+D
-  /// starts a session. A click also stops a reading.
-  private func clicked() {
-    switch phase {
-    case .running: commit()
-    case .reading(let reader): reader.stop()
-    case .idle, .starting, .abandoned, .testing: break
     }
   }
 
