@@ -268,11 +268,12 @@ struct SessionMachineTests {
     await transport.emit(Fixture.partial("then add shadcn", isFinal: true, speechFinal: true))
 
     var shown: [SessionMachine.Snapshot] = []
-    for _ in 0..<4 { if let next = await log.snapshot() { shown.append(next) } }
+    for _ in 0..<5 { if let next = await log.snapshot() { shown.append(next) } }
     #expect(
       shown == [
         .init(state: .listening, committed: "", utterance: "", provisional: "install pnpm"),
         .init(state: .listening, committed: "", utterance: "install pnpm", provisional: ""),
+        .init(state: .listening, committed: "install pnpm", utterance: "", provisional: ""),
         .init(state: .listening, committed: "install pnpm", utterance: "", provisional: "then add"),
         .init(state: .listening, committed: "install pnpm then add shadcn", utterance: "", provisional: ""),
       ])

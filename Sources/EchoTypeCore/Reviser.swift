@@ -91,6 +91,7 @@ public actor Reviser {
   }
 
   private static func join(_ head: String, _ tail: String) -> String {
+    let tail = tail.trimmingCharacters(in: .whitespacesAndNewlines)
     if head.isEmpty { return tail }
     if tail.isEmpty { return head }
     return head + " " + tail
