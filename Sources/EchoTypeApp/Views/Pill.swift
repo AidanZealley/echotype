@@ -14,6 +14,8 @@ struct Pill: Equatable {
     case transcribing
     /// Reading the selection aloud. The level is the audio's as it plays.
     case reading
+    /// Reading is paused by the user, with its place in the audio retained.
+    case readingPaused
     /// Shown inline in red.
     case error(String)
   }
@@ -29,4 +31,7 @@ struct Pill: Equatable {
   var level = 0.0
   /// The pill derives elapsed time from this.
   var startedAt: Date
+  /// Holds the displayed time still while reading is paused.
+  var pausedAt: Date?
+  var pausedDuration: TimeInterval = 0
 }

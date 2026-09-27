@@ -55,6 +55,11 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
 
+      pill.phase = .readingPaused
+      pill.pausedAt = .now
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(2)
+
       pill = Pill(phase: .error("Nothing selected"), startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)

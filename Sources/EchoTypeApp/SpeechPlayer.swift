@@ -30,6 +30,10 @@ import EchoTypeCore
     node.play()
   }
 
+  func pause() { node.pause() }
+
+  func resume() { node.play() }
+
   /// Queues samples to play after those already scheduled.
   func schedule(_ samples: [Float]) {
     guard let buffer = buffer(samples) else { return }
@@ -40,7 +44,7 @@ import EchoTypeCore
   func finished() async {
     // Buffers play in order, so one silent frame queued last finishes after all the audio.
     // `stop()` completes it early. A stopped node would never complete it, so don't wait.
-    guard node.isPlaying, let silence = buffer([0]) else { return }
+    guard engine.isRunning, let silence = buffer([0]) else { return }
     await node.scheduleBuffer(silence, completionCallbackType: .dataPlayedBack)
   }
 

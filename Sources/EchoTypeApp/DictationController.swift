@@ -16,7 +16,7 @@ import Observation
 /// pill and inserts nothing. The hotkey, Escape and the pill ignore it.
 ///
 /// The read-aloud hotkey starts a `Reader`, which reads the selection aloud under a `Reading`
-/// pill. The read-aloud hotkey or Escape stops it, and the dictation hotkey stops it and
+/// pill. Space pauses or resumes it. The read-aloud hotkey or Escape stops it, and the dictation hotkey stops it and
 /// starts a dictation. The read-aloud hotkey does nothing while a dictation or a test is starting
 /// or running, and a test cannot start while reading.
 ///
@@ -79,7 +79,8 @@ import Observation
         case .readAloud: self?.readAloudPressed()
         }
       },
-      onEscape: { [weak self] in self?.escapePressed() ?? false }
+      onEscape: { [weak self] in self?.escapePressed() ?? false },
+      onSpace: { [weak self] repeated in self?.spacePressed(repeated: repeated) ?? false }
     )
     monitor.start()
     self.monitor = monitor
@@ -148,6 +149,29 @@ import Observation
     case .running(let session):
       Task { await session.cancel() }
       return true
+    }
+  }
+
+  /// Space belongs to the focused app except during a reading.
+  private func spacePressed(repeated: Bool) -> Bool {
+    guard case .reading(let reader) = phase else { return false }
+    if !repeated { Task { toggleReadingPause(reader) } }
+    return true
+  }
+
+  private func toggleReadingPause(_ reader: Reader) {
+    guard isReading(reader) else { return }
+    let paused = reader.togglePause()
+    updatePill {
+      let now = Date.now
+      if paused {
+        $0.pausedAt = now
+      } else if let pausedAt = $0.pausedAt {
+        $0.pausedDuration += now.timeIntervalSince(pausedAt)
+        $0.pausedAt = nil
+      }
+      $0.phase = paused ? .readingPaused : .reading
+      $0.level = 0
     }
   }
 
