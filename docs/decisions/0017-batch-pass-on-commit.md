@@ -1,8 +1,9 @@
 # 0017 Re-transcribe the whole recording when a dictation stops
 
-Status: superseded by [live revision](../specs/live-revision.md), 2026-09-26.
+Status: superseded by [0021](0021-revise-committed-dictation.md), 2026-09-27.
 
-This record describes the former batch pass. The live revision spec replaces it.
+This record describes the former batch pass. [0021](0021-revise-committed-dictation.md)
+records its replacement.
 
 ## Context
 

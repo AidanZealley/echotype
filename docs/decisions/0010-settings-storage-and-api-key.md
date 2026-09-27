@@ -1,7 +1,7 @@
 # 0010 How settings and the API key are stored
 
-Status: accepted, 2026-09-25 (settings gate G1). Replaces the hand-seeded key in
-[0006](0006-api-key-and-error-surface.md).
+Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-27 for cleanup.
+Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 ## Context
 
@@ -14,12 +14,15 @@ Keychain item the app cannot read without a prompt.
 
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
-  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`), `batchOnCommit`,
+  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`), `cleanUp`,
   `readAloudHotkey` (shaped like `hotkey`), `voice` and `speechSpeed`. The key names and
   the modifier bit positions are the upgrade contract.
 - Each field decodes on its own and falls back to its default, so a missing or unreadable
   field resets only itself and adding a field never resets the hotkey. Data that is not a
   JSON object gives all defaults.
+- `cleanUp` defaults to `true`. The former `batchOnCommit` key is ignored, so an old
+  batch preference does not govern the new revision behavior (see
+  [0021](0021-revise-committed-dictation.md)).
 - Only fields the window edits are persisted. `silenceTimeout`, `hardCap` and
   `finalizeTimeout` stay code defaults, so today's values are not frozen into every
   install.
