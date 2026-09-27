@@ -1,0 +1,45 @@
+# 0021 Revise committed dictation during the session
+
+Status: accepted, 2026-09-27. Supersedes the batch pass in
+[0017](0017-batch-pass-on-commit.md).
+
+## Context
+
+The streaming transcript can put a full stop at a thinking pause and preserve words the
+speaker later takes back. The former batch pass could join sentences after stop, but the
+pill showed different text from what it inserted and the pass did not reliably remove
+self-corrections. It also kept the whole recording in memory and delayed every insertion.
+
+## Decision
+
+- **Clean up text** is on by default. After each `speech_final`, revise committed text
+  while the current utterance's settled and provisional runs continue to appear as
+  streamed. The pill shows accepted revisions, and its final text is what gets inserted.
+  With cleanup off, insert the streamed transcript. The Test button never revises.
+- Send a recent window: the revised text from its second-to-last sentence onward, plus
+  committed text not yet revised. Keep one request in flight and combine commits that
+  arrive while it runs. At stop, cancel the live request and make one final revision of
+  the remaining window. A failed session keeps accepted revisions and the unrevised
+  committed tail without a final call.
+- Accept a revision only when its words appear in the input in the same order after
+  lowercasing and stripping punctuation at word edges. This permits deletions and
+  punctuation changes but rejects added, substituted, or reordered words. If the call
+  fails, times out, returns empty text, or fails this check, keep the streamed input for
+  that stretch without showing an error.
+- Replace **Re-transcribe on stop** and its `batchOnCommit` setting with **Clean up text**.
+  Ignore the old stored key and default the new setting on. Remove the batch request and
+  in-memory recording buffer.
+
+## Consequences
+
+- Requests normally cover recent sentences rather than the whole dictation, and the user
+  can see corrections before stopping. A long unpunctuated or unrevised tail can still
+  make a large window. The final request can delay insertion; live and final requests
+  have separate resource timeouts. Aidan reported insertion under one second after stop
+  in the final Mac check.
+- The word check deliberately rejects some useful rewrites, such as `four pm` to `4pm`,
+  and can permit excessive deletion. Scripted tests and real prompt cases cover the
+  expected corrections and unchanged inputs; an uncertain or rejected result leaves the
+  spoken words in place.
+- [0003](0003-transcript-assembly.md) separates append-only committed text from the
+  current utterance so revision cannot mistake a replaced partial run for a new commit.

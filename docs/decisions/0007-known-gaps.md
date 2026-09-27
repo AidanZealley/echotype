@@ -2,6 +2,9 @@
 
 Status: open. Remove each item as it is resolved.
 
+- **The five-minute dictation cap** was chosen to limit the old batch upload in
+  [0017](0017-batch-pass-on-commit.md). The upload is gone under
+  [0021](0021-revise-committed-dictation.md); revisit the cap if longer dictation matters.
 - **The right Option double-tap hotkey** from the original design is deferred. The
   settings dropdown offers Opt+D and Ctrl+Opt+D only. A double tap is not a
   keycode-plus-modifiers chord, so it needs `flagsChanged` events in the tap, a timing
