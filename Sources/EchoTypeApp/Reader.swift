@@ -18,6 +18,8 @@ import Foundation
   private let player: SpeechPlayer
   private let inserter: Inserter
   private var task: Task<Void, any Error>?
+  private var isPaused = false
+  private var playbackStarted = false
 
   /// `onStart` runs once the text is known, just before it is fetched, with whether it was cut
   /// to `Speech.maximumCharacters`. `onLevel` receives the level of the audio as it plays.
@@ -47,6 +49,14 @@ import Foundation
     player.stop()
   }
 
+  func togglePause() -> Bool {
+    isPaused.toggle()
+    if playbackStarted {
+      if isPaused { player.pause() } else { player.resume() }
+    }
+    return isPaused
+  }
+
   private func read(_ settings: Settings, onStart: (Bool) -> Void) async throws {
     try await inserter.waitForRestore()
     let selection = await Pasteboard.copySelection()
@@ -66,6 +76,8 @@ import Foundation
     try Task.checkCancellation()
 
     do { try player.start() } catch { throw Failure.playback(error) }
+    playbackStarted = true
+    if isPaused { player.pause() }
     defer { player.stop() }
     var decoder = PCMDecoder()
     var chunk = Data(capacity: Self.bufferBytes)

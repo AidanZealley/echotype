@@ -41,7 +41,7 @@ forms, and finally opacity and placement.
   half of a clipped lowercase line remains visible near the top edge. Short
   transcripts stay opaque. The full transcript still goes to insertion. Error text
   replaces the preview in red and keeps its two-line limit, because the start says what
-  failed. All phases use the same status and hint layout. The final layout has no scroll view
+  failed. Dictation phases use the same status and hint layout. The layout has no scroll view
   or separate phase header.
 - Provisional text, status, time, and hint share 0.65 opacity in the normal listening state.
 - Everything the pill shows comes from one value, `Pill`. `--hud-demo` and the live
@@ -55,3 +55,12 @@ forms, and finally opacity and placement.
   read the level from.
 - Tune the glow in `LevelGlow` and the meter mapping in `Overlay.level(rms:)`, and check
   both with `./scripts/run.sh --hud-demo` before dictating.
+
+## Reading update, 2026-09-27
+
+Reading uses a 280pt wide, two-line pill. The top line holds the level meter, state
+and elapsed time. The second gives the Space pause or resume and Escape stop hints.
+There is no empty transcript line. A notice appears underneath only when the selection
+was capped at 60,000 characters. Aidan chose variant B of three demos. While reading
+is paused, the meter and time retain 80% of their normal opacity and the displayed
+time holds still.

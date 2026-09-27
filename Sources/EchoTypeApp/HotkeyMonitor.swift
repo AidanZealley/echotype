@@ -2,13 +2,14 @@ import AppKit
 import EchoTypeCore
 
 /// An active keyDown tap that consumes the dictation and read-aloud hotkeys, reporting which was
-/// pressed, and Escape while the caller says a dictation or a reading takes it. It reads both
+/// pressed, Escape while a session takes it, and Space while reading. It reads both
 /// hotkeys from the store on every key event, so a change in Settings applies at once without
 /// reinstalling the tap.
 ///
 /// Created once and kept for the life of the app: the tap holds an unretained pointer to it.
 @MainActor final class HotkeyMonitor {
   private static let escapeKeyCode: UInt16 = 53  // kVK_Escape
+  private static let spaceKeyCode: UInt16 = 49  // kVK_Space
 
   enum Hotkey {
     case dictation
@@ -20,16 +21,19 @@ import EchoTypeCore
   /// Returns whether a dictation or a reading took the press. Escape passes through when it
   /// did not.
   private let onEscape: () -> Bool
+  private let onSpace: (_ repeated: Bool) -> Bool
   private var tap: CFMachPort?
 
   init(
     store: SettingsStore,
     onHotkey: @escaping (Hotkey) -> Void,
-    onEscape: @escaping () -> Bool
+    onEscape: @escaping () -> Bool,
+    onSpace: @escaping (_ repeated: Bool) -> Bool
   ) {
     self.store = store
     self.onHotkey = onHotkey
     self.onEscape = onEscape
+    self.onSpace = onSpace
   }
 
   /// Installs the tap. If it cannot be created yet (the input grant not given), retries every
@@ -91,7 +95,13 @@ import EchoTypeCore
         } else {
           nil
         }
-      guard let hotkey else { return keyCode == Self.escapeKeyCode && onEscape() }
+      guard let hotkey else {
+        if keyCode == Self.escapeKeyCode { return onEscape() }
+        if keyCode == Self.spaceKeyCode && modifiers.isEmpty {
+          return onSpace(event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+        }
+        return false
+      }
       // Repeats are consumed too, so no character leaks while the chord is held, but only the
       // initial press counts.
       if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { onHotkey(hotkey) }

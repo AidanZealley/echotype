@@ -3,19 +3,24 @@ import SwiftUI
 private let supportingTextOpacity = 0.65
 private let indicatorOpacity = 0.4
 
-/// The overlay pill: a status strip, a growing transcript, and a shortcut hint.
+/// The overlay pill: a growing transcript for dictation, or a compact reading status.
 struct PillView: View {
   let pill: Pill
 
   var body: some View {
+    let reading = pill.phase == .reading || pill.phase == .readingPaused
     VStack(alignment: .leading, spacing: 8) {
-      statusRow
-      Transcript(pill: pill).font(.system(size: 16))
-      hint
+      if reading {
+        readingLayout
+      } else {
+        statusRow
+        Transcript(pill: pill).font(.system(size: 16))
+        hint
+      }
     }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 12)
-    .frame(width: 420)
+    .padding(.horizontal, reading ? 16 : 18)
+    .padding(.vertical, reading ? 10 : 12)
+    .frame(width: reading ? 280 : 420)
     // Drawn on the glass, beneath the text, and cut off by the pill's outline.
     // Identity per session, so the glow's smoothing starts fresh rather than at the last
     // session's level.
@@ -36,10 +41,37 @@ struct PillView: View {
   }
 
   private var hint: some View {
-    Text(verbatim: pill.phase == .reading ? "esc stop" : "⌥D stop · esc cancel")
+    Text(verbatim: "⌥D stop · esc cancel")
       .font(.system(size: 11))
       .foregroundStyle(.primary.opacity(supportingTextOpacity))
       .frame(maxWidth: .infinity, alignment: .trailing)
+  }
+
+  private var readingHint: String {
+    "space \(pill.phase == .readingPaused ? "resume" : "pause") · esc stop"
+  }
+
+  private var readingLayout: some View {
+    VStack(spacing: 6) {
+      HStack(spacing: 8) {
+        LevelMeter(pill: pill)
+        Text(pill.phase.name).fontWeight(.medium)
+        Spacer()
+        Elapsed(pill: pill)
+      }
+      Text(verbatim: readingHint)
+        .foregroundStyle(.primary.opacity(supportingTextOpacity))
+        .frame(maxWidth: .infinity, alignment: .leading)
+      if !pill.settled.isEmpty { readingNotice }
+    }
+    .font(.system(size: 11))
+  }
+
+  private var readingNotice: some View {
+    Text(pill.settled)
+      .font(.system(size: 11))
+      .foregroundStyle(.primary.opacity(supportingTextOpacity))
+      .lineLimit(1)
   }
 }
 
@@ -119,6 +151,7 @@ extension Pill.Phase {
     case .paused: "Paused"
     case .transcribing: "Transcribing"
     case .reading: "Reading"
+    case .readingPaused: "Paused"
     case .error: "Error"
     }
   }
@@ -145,7 +178,7 @@ private struct LevelMeter: View {
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.red)
         .frame(height: 14)
-    case .starting, .listening, .paused, .reading:
+    case .starting, .listening, .paused, .reading, .readingPaused:
       HStack(alignment: .center, spacing: 1.5) {
         ForEach(Self.weights.indices, id: \.self) { index in
           Capsule()
@@ -155,25 +188,26 @@ private struct LevelMeter: View {
       .frame(height: 14)
       .foregroundStyle(Color.primary.opacity(
         pill.phase == .starting ? indicatorOpacity * 0.7 : indicatorOpacity))
-      .opacity(pill.phase == .paused ? 0.35 : 1)
+      .opacity(pill.phase == .paused ? 0.35 : pill.phase == .readingPaused ? 0.8 : 1)
       .animation(.easeOut(duration: 0.12), value: pill.level)
     }
   }
 }
 
-/// Minutes and seconds since the session started, amber from four minutes as the five minute
-/// cap approaches, dimmed while paused.
+/// Minutes and seconds since the session started, excluding reading pauses. Amber from four
+/// minutes as dictation's five minute cap approaches, dimmed while paused.
 private struct Elapsed: View {
   let pill: Pill
 
   var body: some View {
     TimelineView(.periodic(from: pill.startedAt, by: 1)) { context in
-      let seconds = max(0, Int(context.date.timeIntervalSince(pill.startedAt)))
+      let seconds = max(0, Int(
+        (pill.pausedAt ?? context.date).timeIntervalSince(pill.startedAt) - pill.pausedDuration))
       Text(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
         .monospacedDigit()
         .foregroundStyle(seconds >= 4 * 60 ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary.opacity(supportingTextOpacity)))
     }
-    .opacity(pill.phase == .paused ? 0.4 : 1)
+    .opacity(pill.phase == .paused ? 0.4 : pill.phase == .readingPaused ? 0.8 : 1)
   }
 }
 
@@ -210,7 +244,7 @@ private struct LevelGlow: View {
     switch pill.phase {
     case .starting: 0.25
     case .listening, .reading: 0.4
-    case .paused: 0.15
+    case .paused, .readingPaused: 0.15
     case .transcribing, .error: 0
     }
   }
