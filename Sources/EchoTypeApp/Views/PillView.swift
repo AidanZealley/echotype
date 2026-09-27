@@ -46,7 +46,7 @@ struct PillView: View {
 /// The transcript grows to a height cap, then keeps the newest text visible at the bottom.
 private struct Transcript: View {
   let pill: Pill
-  private let maximumHeight: CGFloat = 184
+  private let maximumHeight: CGFloat = 183
   private let fadeHeight: CGFloat = 20
   @State private var overflows = false
 
@@ -68,7 +68,7 @@ private struct Transcript: View {
           if overflows {
             LinearGradient(
               stops: [
-                .init(color: .white.opacity(0.35), location: 0),
+                .init(color: .white.opacity(0.1), location: 0),
                 .init(color: .white, location: fadeHeight / maximumHeight),
                 .init(color: .white, location: 1),
               ],
