@@ -1,7 +1,7 @@
 # 0008 The pill: a text-first layout with a level glow
 
-Status: accepted, 2026-09-24 (overlay gate G1). Departs from the specification's Overlay
-layout.
+Status: accepted, 2026-09-24 (overlay gate G1). Live revision raised the transcript's
+two-line cap to 184pt on 2026-09-27. Departs from the specification's Overlay layout.
 
 ## Context
 
@@ -17,23 +17,33 @@ forms, and finally opacity and placement.
 ## Decision
 
 - Text first. A slim strip holds the bar meter, the phase word and elapsed time. The
-  transcript sits below it in a larger font, up to two lines. The hint
+  transcript originally sat below it in a larger font, up to two lines. The hint
   `⌥D stop · esc cancel` sits right-aligned at the foot. The pill is 420pt wide, Liquid
   Glass in a 22pt rounded rectangle.
 - The bar meter stays as the specification describes: five small bars driven by RMS. It
   is flat and faint while starting, dimmed while paused, a spinner while transcribing and
-  a red triangle on error.
+  a red triangle on error. Its original bar dimensions remain. The meter and spinner use
+  0.40 opacity, below the status text's 0.65.
+- Each indicator keeps its natural width with an 8pt gap to its status label. Labels need
+  not share a fixed starting position across phases.
 - A blue wave glow sits inside the pill, clipped by its edge, hanging from the top edge.
-  Its depth follows the recent level, from about 8% of the pill's height at silence to
-  about 70% at full level, averaged over the last four levels so it swells rather than
-  jitters. It is blurred and fades lighter downward. Its ripples move only while
-  listening, and it flattens to a faint line when the user is quiet.
+  Its depth follows the recent level against the original one-line pill height, from
+  about 8% of that height at silence to about 70% at full level. It keeps that scale as
+  the transcript grows. The level is averaged over the last four samples so it swells
+  rather than jitters. It is blurred and fades lighter downward. Its ripples move only
+  while listening, and it flattens to a faint line when the user is quiet.
 - Glow opacity: 0.4 listening, 0.25 and grey while starting, 0.15 and still while paused,
   gone once transcribing or failed. The author asked for it more subtle than the candidates
   twice. The values were then picked without him naming a number, and he raised nothing
   about them at G2.
-- The transcript truncates from the left. Error text replaces it in red and truncates
-  from the end, because the start of an error says what failed.
+- The transcript starts at one natural line and grows to a 184pt cap. At overflow it
+  fades and clips older lines at the top and keeps the newest text at the bottom. About
+  half of a clipped lowercase line remains visible near the top edge. Short
+  transcripts stay opaque. The full transcript still goes to insertion. Error text
+  replaces the preview in red and keeps its two-line limit, because the start says what
+  failed. All phases use the same status and hint layout. The final layout has no scroll view
+  or separate phase header.
+- Provisional text, status, time, and hint share 0.65 opacity in the normal listening state.
 - Everything the pill shows comes from one value, `Pill`. `--hud-demo` and the live
   controller both drive it through the same `OverlayPanel` calls. The demo is a permanent
   part of the app.

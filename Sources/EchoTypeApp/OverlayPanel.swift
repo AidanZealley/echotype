@@ -6,21 +6,19 @@ import SwiftUI
 ///
 /// It must never take focus: if it became key or main, the target field would lose focus and
 /// the insertion would go nowhere. So the window is private, cannot become key or main, is
-/// non-activating, and is only ever ordered front with `orderFrontRegardless()`. Clicks reach
-/// it without activating the app and are reported to the owner rather than handled.
+/// non-activating, and is only ever ordered front with `orderFrontRegardless()`.
 @MainActor final class OverlayPanel {
   private let panel: Panel
   private let hosting: NSHostingView<PillView>
   /// Set while the fade-out runs, so a `show` during it keeps the panel on screen.
   private var isHiding = false
 
-  init(onClick: @escaping @MainActor () -> Void) {
+  init() {
     // Replaced by the first `show`, before the panel is ever on screen.
     hosting = NSHostingView(rootView: PillView(pill: Pill(phase: .starting, startedAt: .now)))
     panel = Panel(
       contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
       defer: true)
-    panel.onClick = onClick
     panel.isFloatingPanel = true
     panel.level = .screenSaver
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
@@ -69,19 +67,8 @@ import SwiftUI
 }
 
 private final class Panel: NSPanel {
-  var onClick: @MainActor () -> Void = {}
-
   override var canBecomeKey: Bool { false }
   override var canBecomeMain: Bool { false }
-
-  /// Any click on the pill goes to the owner. Nothing inside the pill handles clicks itself.
-  override func sendEvent(_ event: NSEvent) {
-    if event.type == .leftMouseDown {
-      onClick()
-    } else {
-      super.sendEvent(event)
-    }
-  }
 }
 
 extension NSScreen {

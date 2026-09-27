@@ -1,100 +1,65 @@
 import AppKit
 
-/// `--hud-demo`: plays the pill through every state with made-up transcripts, on a loop, so
-/// the overlay can be reviewed in one launch. It drives `OverlayPanel` exactly as the dictation
-/// controller does, and never touches the hotkey or the microphone.
+/// `--hud-demo` drives the same panel as dictation, including preview overflow and compact states.
 @MainActor enum PillDemo {
+  private static let lines = [
+    "The transcript starts on one line.",
+    "Each sentence adds another readable line.",
+    "The pill grows around the transcript.",
+    "New words keep arriving in the preview.",
+    "The text approaches the pixel height limit.",
+    "The preview reaches its height cap.",
+    "This line makes the transcript overflow.",
+    "The newest words remain in view.",
+    "Older words fade and clip at the top.",
+    "The newest words stay at the bottom.",
+    "No wheel or trackpad input is required.",
+    "The final line remains visible at the bottom.",
+  ]
+
   static func run() async {
-    // Clicks do nothing here: committing a session is the controller's job.
-    let panel = OverlayPanel(onClick: {})
+    let panel = OverlayPanel()
     while !Task.isCancelled {
-      await play(on: panel)
-    }
-  }
-
-  private static let sentence =
-    "Rename the session snapshot and update every call site, then run the tests again."
-  private static let jargon = """
-    so the AVAudioEngine tap resamples to 16 kHz linear PCM, the WebSocket to api.x.ai \
-    streams it with interim_results on, the CGEventTap swallows Opt+D and Escape, and \
-    NSPanel stays nonactivating at the screenSaver level while SwiftUI renders glassEffect
-    """
-
-  /// One pass through every state, about three seconds each.
-  private static func play(on panel: OverlayPanel) async {
-    func show(_ pill: Pill) {
+      var pill = Pill(
+        phase: .listening, settled: lines[0], startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
-    }
-    var pill = Pill(phase: .starting, startedAt: .now)
-    show(pill)
-    await pause(3)
+      await pause(3)
 
-    // Words arrive dimmed and turn solid every few words.
-    pill.phase = .listening
-    for (index, word) in sentence.split(separator: " ").enumerated() {
-      pill.provisional += (pill.provisional.isEmpty ? "" : " ") + word
-      if index % 4 == 3 {
-        pill.settled += (pill.settled.isEmpty ? "" : " ") + pill.provisional
+      // Words arrive dimmed, then the settled run takes their place every few words.
+      for (index, word) in lines.dropFirst().joined(separator: " ").split(separator: " ").enumerated() {
+        pill.provisional += (pill.provisional.isEmpty ? "" : " ") + word
+        if index % 6 == 5 {
+          pill.settled += " " + pill.provisional
+          pill.provisional = ""
+        }
+        pill.level = .random(in: 0.2...0.9)
+        if let screen = NSScreen.main { panel.show(pill, on: screen) }
+        await pause(0.24)
+      }
+
+      // An earlier correction can leave the preview while the newest text stays visible.
+      if !pill.provisional.isEmpty {
+        pill.settled += " " + pill.provisional
         pill.provisional = ""
       }
-      pill.level = .random(in: 0.3...0.9)
-      show(pill)
-      await pause(0.2)
-    }
+      pill.settled = pill.settled.replacingOccurrences(of: "The pill grows", with: "The preview grows")
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
 
-    // Too long for two lines, so it loses its beginning.
-    pill.settled += " " + pill.provisional + " " + jargon
-    pill.provisional = "and the pill truncates from the left"
-    await speak(&pill, for: 3, show: show)
+      pill.phase = .transcribing
+      pill.level = 0
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(2)
 
-    pill.phase = .paused
-    pill.level = 0
-    show(pill)
-    await pause(3)
+      pill = Pill(phase: .reading, settled: "Reading the first 60,000 characters", startedAt: .now)
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
 
-    // Past four minutes the elapsed time turns amber.
-    pill.phase = .listening
-    pill.startedAt = .now - 4 * 60 - 5
-    await speak(&pill, for: 3, show: show)
-
-    pill.phase = .transcribing
-    pill.level = 0
-    show(pill)
-    await pause(3)
-
-    pill.phase = .error("xAI is unavailable")
-    show(pill)
-    await pause(3)
-    panel.hide()
-    await pause(1.5)
-
-    // Reading a long selection, the glow following the voice, then the audio ends and the pill
-    // fades.
-    pill = Pill(phase: .reading, settled: "Reading the first 60,000 characters", startedAt: .now)
-    await speak(&pill, for: 3, show: show)
-    panel.hide()
-    await pause(1.5)
-
-    show(Pill(phase: .error("Nothing selected"), startedAt: .now))
-    await pause(3)
-    panel.hide()
-    await pause(1.5)
-
-    // Nothing heard: the pill fades away silently.
-    show(Pill(phase: .listening, startedAt: .now))
-    await pause(3)
-    panel.hide()
-    await pause(2)
-  }
-
-  /// Moves the level as if someone were speaking.
-  private static func speak(
-    _ pill: inout Pill, for seconds: Double, show: (Pill) -> Void
-  ) async {
-    for _ in 0..<Int(seconds * 10) {
-      pill.level = .random(in: 0.2...0.9)
-      show(pill)
-      await pause(0.1)
+      pill = Pill(phase: .error("Nothing selected"), startedAt: .now)
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
+      panel.hide()
+      await pause(1.5)
     }
   }
 
