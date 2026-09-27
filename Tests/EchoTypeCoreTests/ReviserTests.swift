@@ -16,15 +16,15 @@ func revisionFaithfulness() {
 func revisionWindow() async {
   let calls = RevisionCalls()
   let reviser = Reviser(request: { await calls.record($0); return $0 })
-  _ = await reviser.submit(committed: "First. Second. Third.")
-  await calls.wait(for: 1)
-  _ = await reviser.submit(committed: "First. Second. Third. Fourth.")
-  await calls.wait(for: 2)
   var updates = reviser.updates.makeAsyncIterator()
+  _ = await reviser.submit(committed: "First. Second. Third.")
   _ = await updates.next()
+  _ = await reviser.submit(committed: "First. Second. Third. Fourth.")
   _ = await updates.next()
-  #expect(await calls.all == ["First. Second. Third.", "Second. Third. Fourth."])
-  #expect(await reviser.shown == "First. Second. Third. Fourth.")
+  let inputs = await calls.all
+  let shown = await reviser.shown
+  #expect(inputs == ["First. Second. Third.", "Second. Third. Fourth."])
+  #expect(shown == "First. Second. Third. Fourth.")
   await reviser.stop()
 }
 
@@ -37,7 +37,8 @@ func revisionSingleFlight() async {
   _ = await reviser.submit(committed: "One. Two.")
   _ = await reviser.submit(committed: "One. Two. Three.")
   await calls.reply("One.")
-  #expect(await calls.next() == "One. Two. Three.")
+  let nextInput = await calls.next()
+  #expect(nextInput == "One. Two. Three.")
   await calls.reply("One. Two. Three.")
   var updates = reviser.updates.makeAsyncIterator()
   _ = await updates.next()
@@ -117,13 +118,15 @@ private actor RevisionGate {
   private var response: CheckedContinuation<String, any Error>?
 
   func request(_ input: String) async throws -> String {
-    if let inputWaiter {
-      self.inputWaiter = nil
-      inputWaiter.resume(returning: input)
-    } else {
-      inputs.append(input)
+    try await withCheckedThrowingContinuation { continuation in
+      response = continuation
+      if let inputWaiter {
+        self.inputWaiter = nil
+        inputWaiter.resume(returning: input)
+      } else {
+        inputs.append(input)
+      }
     }
-    return try await withCheckedThrowingContinuation { response = $0 }
   }
 
   func next() async -> String {

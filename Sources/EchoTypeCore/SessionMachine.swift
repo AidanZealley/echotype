@@ -132,7 +132,7 @@ public actor SessionMachine {
     try await client.send(audio: audio)
   }
 
-  /// Opt+D or a click on the overlay: commit what has accumulated.
+  /// Finalizes the session after Opt+D ends capture and the remaining audio is sent.
   public func trigger() async {
     guard isActive else { return }
     await beginFinalizing()

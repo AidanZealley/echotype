@@ -4,7 +4,7 @@ While the user speaks, an LLM revises the recent transcript into what they meant
 shows the revised text, and exactly that text is inserted on stop. It replaces the batch
 pass from [0017](../decisions/0017-batch-pass-on-commit.md).
 
-Status: approved, 2026-09-26. Implementation in progress.
+Status: approved, 2026-09-26. Implemented, 2026-09-27.
 
 ## Problem
 

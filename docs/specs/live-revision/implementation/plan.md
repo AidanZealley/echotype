@@ -1,14 +1,12 @@
 # Live revision implementation plan
 
-Status: workstreams 01 and 02 accepted; whole-feature review is next.
+Status: accepted. Whole-feature review and the final endpoint and dictation gate passed.
 
 ## Orchestration record
 
 - Integration branch: `live-revision`
 - Starting commit: `4c54c61d74bad82c316b0cbe192627fbe28faaaf`
 - Review method: fresh lead subagents
-- Approved specification commit: `TBD`
-- Started: `TBD`
 
 ## Workstream order
 
@@ -16,7 +14,7 @@ Status: workstreams 01 and 02 accepted; whole-feature review is next.
 |---:|---|---|---|
 | 1 | [Live revision pipeline](01-revision-pipeline.md) | Approved spec | Accepted |
 | 2 | [Pill layout](02-scrollable-pill.md) | Workstream 1 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1 and 2 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1 and 2 | Accepted |
 
 ## Why these boundaries
 
@@ -62,14 +60,11 @@ Run them sequentially because both touch the pill's input contract.
 |---|---|---|---|---|
 | Pill variant choice | 02 | Before implementation | Passed: A | Aidan chose A and requested translucent blur under the rows and looser line height. |
 | Pill visual check | 02 | After closure, before acceptance | Passed | Aidan approved the 184pt candidate's fade, newest-line readability, and indicator-to-label gaps in light and dark appearance. |
-| Final endpoint and dictation | Final | After whole-feature closure, before acceptance | Pending | Final Mac build, prompt cases using `XAI_API_KEY`, timed real dictation; resume when evidence passes or Aidan decides a required adjustment. |
+| Final endpoint and dictation | Final | After whole-feature closure, before acceptance | Passed | Aidan reports prompt tests passed, insertion took under one second, and all requested manual observations passed. |
 
 ## Escalations
 
-Empty until a lead blocks. Each entry holds the decision needed, realistic options,
-recommendation, evidence, what it unblocks, and the user's answer. The resuming lead records
-the lasting decision in its packet and the log below when later streams depend on it, then
-removes the entry.
+None open. The answered final gate is recorded in [final-review.md](final-review.md).
 
 ## Decision and drift log
 
@@ -88,3 +83,4 @@ removes the entry.
 | 2026-09-27 | Approve the simplified pill design for final review and document its final behavior in the existing spec and decisions, with no new ADR | E02-visual answer; light-appearance verification remains open | Aidan | 02, Final |
 | 2026-09-27 | Keep a consistent icon-to-label gap and show about half of clipped lowercase glyphs at a 184pt cap | E02-light visual corrections; 180pt and 188pt clipped too much and too little | Aidan | 02, Final |
 | 2026-09-27 | Approve the 184pt pill in light and dark appearance | E02-light final visual check passed for the fade, newest line, and indicator gaps | Aidan | 02, Final |
+| 2026-09-27 | Final review found no specification drift; endpoint and dictation gate passed | Local checks and independent review passed; Aidan confirmed the endpoint, timing, and manual observations | Aidan | Final |
