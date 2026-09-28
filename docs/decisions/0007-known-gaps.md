@@ -18,7 +18,8 @@ Status: open. Remove each item as it is resolved.
 - **Bluetooth input** runs in the headset profile, which gave wrong transcripts before
   [0012](0012-capture-with-avcapturesession.md). See
   [0005](0005-microphone-per-session.md). The settings input picker lets the user choose
-  another microphone, but nothing warns that a Bluetooth input is in use.
+  another microphone, and the pill shows the active input with a headphones icon when
+  it is Bluetooth. It does not measure audio quality.
 - **Every 400 is worded as a key problem.** Language is free text, saved on every
   keystroke. If `api.x.ai` answers an unsupported language tag (say "english") with 400,
   every dictation and Test blames the key; a read-aloud 400 does too. Unverified
