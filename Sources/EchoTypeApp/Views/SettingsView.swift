@@ -278,6 +278,7 @@ private struct APIKeyTab: View {
     guard !key.isEmpty, !writing else { return }
     guard await write("Couldn't save the key", { Keychain.save(key) }) else { return }
     savedKey = key
+    await controller?.refreshAPIKeyStatus(clearError: true)
     draft = ""
     replacing = false
     revealed = false
@@ -286,6 +287,7 @@ private struct APIKeyTab: View {
   private func remove() async {
     guard await write("Couldn't remove the key", Keychain.clear) else { return }
     savedKey = nil
+    await controller?.refreshAPIKeyStatus(clearError: true)
     revealed = false
   }
 

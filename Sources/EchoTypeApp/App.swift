@@ -39,12 +39,18 @@ struct EchoTypeApp: App {
     MenuBarExtra {
       Text(statusLine)
       Divider()
+      if controller != nil {
+        Toggle("Enable hotkeys", isOn: $store.hotkeysActive)
+          .disabled(!(controller?.isIdle ?? false))
+        Divider()
+      }
       SettingsButton()
       Button("Quit EchoType") {
         NSApplication.shared.terminate(nil)
       }
     } label: {
-      Image(systemName: (controller?.state ?? .idle) == .idle ? "waveform" : "waveform.circle.fill")
+      Image(nsImage: statusImage)
+        .accessibilityLabel(statusLine)
     }
 
     Settings {
@@ -56,6 +62,10 @@ struct EchoTypeApp: App {
 
   private var statusLine: String {
     guard let controller else { return "Overlay demo" }
+    if !store.hotkeysActive { return "Inactive" }
+    if controller.hasAPIKey == false { return "Add your xAI API key in Settings" }
+    if let error = controller.lastError { return error }
+    if controller.hasAPIKey == nil { return "Checking API key…" }
     return switch controller.state {
     case .idle: "Ready"
     case .listening: "Listening"
@@ -63,6 +73,23 @@ struct EchoTypeApp: App {
     case .finalizing, .inserting: "Finishing"
     case .cancelled: "Cancelled"
     }
+  }
+
+  /// Draw the opacity into the image so the menu bar gets one template icon.
+  private var statusImage: NSImage {
+    let dimmed = !store.hotkeysActive || controller?.hasAPIKey == false
+      || controller?.lastError != nil
+    let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+      guard let waveform = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
+        .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+      else { return false }
+      waveform.draw(
+        in: NSRect(x: 0, y: 2, width: 18, height: 14), from: .zero,
+        operation: .sourceOver, fraction: dimmed ? 0.5 : 1)
+      return true
+    }
+    image.isTemplate = true
+    return image
   }
 }
 
