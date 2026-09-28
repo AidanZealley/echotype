@@ -71,6 +71,7 @@ import Observation
   init(store: SettingsStore) {
     self.store = store
     audio.onLevel = { [weak self] level in self?.levelChanged(level) }
+    audio.onDevice = { [weak self] device in self?.updatePill { $0.inputDevice = device } }
     let monitor = HotkeyMonitor(
       store: store,
       onHotkey: { [weak self] hotkey in
@@ -116,7 +117,7 @@ import Observation
       screen = NSScreen.forFocusedWindow()
       // Shown only once the reader has the text, so an empty selection goes straight to its
       // error.
-      pill = Pill(phase: .reading, startedAt: .now)
+      pill = Pill(phase: .reading, isReading: true, startedAt: .now)
       let reader = Reader(
         settings: store.settings,
         inserter: inserter,

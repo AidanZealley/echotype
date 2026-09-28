@@ -21,7 +21,9 @@ import AppKit
     let panel = OverlayPanel()
     while !Task.isCancelled {
       var pill = Pill(
-        phase: .listening, settled: lines[0], startedAt: .now)
+        phase: .listening,
+        inputDevice: InputDevice(uid: "demo", name: "Between 3ANC", isBluetooth: true),
+        settled: lines[0], startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
 
@@ -43,6 +45,8 @@ import AppKit
         pill.provisional = ""
       }
       pill.settled = pill.settled.replacingOccurrences(of: "The pill grows", with: "The preview grows")
+      pill.inputDevice = InputDevice(
+        uid: "demo", name: "Between 3ANC Hands-Free Audio Microphone", isBluetooth: true)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
 
@@ -51,7 +55,9 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)
 
-      pill = Pill(phase: .reading, settled: "Reading the first 60,000 characters", startedAt: .now)
+      pill = Pill(
+        phase: .reading, isReading: true, settled: "Reading the first 60,000 characters",
+        startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
 
@@ -60,7 +66,7 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)
 
-      pill = Pill(phase: .error("Nothing selected"), startedAt: .now)
+      pill = Pill(phase: .error("Nothing selected"), isReading: true, startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
       panel.hide()

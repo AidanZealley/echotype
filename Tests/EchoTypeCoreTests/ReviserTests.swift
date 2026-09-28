@@ -12,19 +12,35 @@ func revisionFaithfulness() {
   #expect(!Reviser.isFaithful("Ship we should", to: "We should ship"))
 }
 
-@Test("The second-to-last sentence is revised and earlier text stays frozen")
-func revisionWindow() async {
+@Test("The 100-word window includes its whole starting sentence")
+func revisionWindowKeepsRecentWords() async {
+  let words = (1...105).map { "word\($0)" }
+  let recentSentence = words.joined(separator: " ") + "."
+  let first = "Old. " + recentSentence + " Wait. No."
   let calls = RevisionCalls()
   let reviser = Reviser(request: { await calls.record($0); return $0 })
   var updates = reviser.updates.makeAsyncIterator()
-  _ = await reviser.submit(committed: "First. Second. Third.")
+  _ = await reviser.submit(committed: first)
   _ = await updates.next()
-  _ = await reviser.submit(committed: "First. Second. Third. Fourth.")
+  _ = await reviser.submit(committed: first + " Use the second one.")
   _ = await updates.next()
   let inputs = await calls.all
-  let shown = await reviser.shown
-  #expect(inputs == ["First. Second. Third.", "Second. Third. Fourth."])
-  #expect(shown == "First. Second. Third. Fourth.")
+  #expect(inputs == [first, recentSentence + " Wait. No. Use the second one."])
+  await reviser.stop()
+}
+
+@Test("Two long sentences stay together even when they exceed 100 words")
+func revisionWindowKeepsSentences() async {
+  let longSentence = (1...110).map { "word\($0)" }.joined(separator: " ") + "."
+  let first = "First. " + longSentence + " Third."
+  let calls = RevisionCalls()
+  let reviser = Reviser(request: { await calls.record($0); return $0 })
+  var updates = reviser.updates.makeAsyncIterator()
+  _ = await reviser.submit(committed: first)
+  _ = await updates.next()
+  _ = await reviser.submit(committed: first + " Fourth.")
+  _ = await updates.next()
+  #expect(await calls.all == [first, longSentence + " Third. Fourth."])
   await reviser.stop()
 }
 

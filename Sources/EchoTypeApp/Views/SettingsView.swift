@@ -324,23 +324,23 @@ private struct LanguageRow: View {
   }
 }
 
-/// One term per line. The editor holds its own text while the user types; writing the parsed
-/// list back into it would eat the newline being typed.
+/// The editor holds its own text while the user types, so adding a separator does not rewrite
+/// the text around the cursor.
 private struct KeytermsTab: View {
   let store: SettingsStore
   @State private var text: String
 
   init(store: SettingsStore) {
     self.store = store
-    _text = State(initialValue: store.settings.keyterms.joined(separator: "\n"))
+    _text = State(initialValue: store.settings.keyterms.joined(separator: ", "))
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("Names and jargon to spell your way, one per line")
+        Text("Separate with commas")
         Spacer()
-        Text(verbatim: "\(store.settings.keyterms.count) of \(STTConnection.maximumKeyterms)")
+        Text(verbatim: "\(store.settings.keyterms.count) of \(STTConnection.maximumKeyterms) keyterms used")
           .monospacedDigit()
       }
       .foregroundStyle(.secondary)
@@ -352,10 +352,10 @@ private struct KeytermsTab: View {
         .padding(.horizontal, 4)
         .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
-        .frame(height: 260)
+        .frame(height: 120)
         .onChange(of: text) {
-          store.settings.keyterms = text.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+          store.settings.keyterms = text.split { $0 == "," || $0.isNewline }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         }
     }

@@ -34,7 +34,7 @@ public actor Reviser {
 
   public var shown: String { Self.join(revised, String(committed.dropFirst(covered))) }
 
-  /// Cancels the live call before asking for one last revision of everything committed.
+  /// Cancels the live call before asking for one last revision of the recent window.
   public func finish(committed: String) async -> String {
     finishing = true
     working?.cancel()
@@ -86,7 +86,12 @@ public actor Reviser {
       }
       index = next
     }
-    let tailStart = starts.count > 1 ? starts[starts.count - 2] : text.startIndex
+    let sentenceStart = starts.count > 1 ? starts[starts.count - 2] : text.startIndex
+    // Short fragments can contain sentence punctuation without providing enough context.
+    let words = text.split(whereSeparator: \.isWhitespace)
+    let wordStart = words.count > 100 ? words[words.count - 100].startIndex : text.startIndex
+    let wordSentenceStart = starts.last(where: { $0 <= wordStart }) ?? text.startIndex
+    let tailStart = min(sentenceStart, wordSentenceStart)
     return (String(text[..<tailStart]).trimmingCharacters(in: .whitespaces), String(text[tailStart...]))
   }
 

@@ -35,6 +35,9 @@ import AVFoundation
   /// first call means audio is flowing.
   var onLevel: @MainActor (Double) -> Void = { _ in }
 
+  /// Reports the input that opened, including a fallback after a disconnect.
+  var onDevice: @MainActor (InputDevice) -> Void = { _ in }
+
   /// The session in progress, nil between sessions.
   private var session: Session?
 
@@ -75,12 +78,13 @@ import AVFoundation
     // opened: the close queues behind the open on the microphone's executor.
     let microphone = Microphone()
     session.microphone = microphone
-    try await microphone.open(session.deviceUID, delivering: session.chunker) {
+    let device = try await microphone.open(session.deviceUID, delivering: session.chunker) {
       [weak self, weak session, weak microphone] error in
       Task { @MainActor in
         if let session, let microphone { self?.deviceLost(microphone, of: session, error) }
       }
     }
+    if session === self.session, microphone === session.microphone { onDevice(device) }
   }
 
   /// The device in use went away or the capture session failed. Reopen once, on the chosen
@@ -156,7 +160,7 @@ private actor Microphone {
   func open(
     _ deviceUID: String?, delivering chunker: AudioChunker,
     onLost: @escaping @Sendable (any Error) -> Void
-  ) throws(AudioCapture.Failure) {
+  ) throws(AudioCapture.Failure) -> InputDevice {
     guard let device = Self.device(deviceUID) else { throw .noInputDevice }
     let input: AVCaptureDeviceInput
     do {
@@ -189,6 +193,7 @@ private actor Microphone {
       close()
       throw .captureFailed(CaptureError("\(device.localizedName) did not start"))
     }
+    return InputDevice(device)
   }
 
   func close() {

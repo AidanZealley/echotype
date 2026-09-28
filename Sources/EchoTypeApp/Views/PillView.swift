@@ -8,7 +8,7 @@ struct PillView: View {
   let pill: Pill
 
   var body: some View {
-    let reading = pill.phase == .reading || pill.phase == .readingPaused
+    let reading = pill.isReading
     VStack(alignment: .leading, spacing: 8) {
       if reading {
         readingLayout
@@ -41,28 +41,61 @@ struct PillView: View {
   }
 
   private var hint: some View {
-    Text(verbatim: "⌥D stop · esc cancel")
-      .font(.system(size: 11))
-      .foregroundStyle(.primary.opacity(supportingTextOpacity))
-      .frame(maxWidth: .infinity, alignment: .trailing)
+    HStack(spacing: 8) {
+      if let device = pill.inputDevice {
+        Image(systemName: device.isBluetooth ? "headphones" : "mic")
+          .accessibilityHidden(true)
+        deviceName(device.name)
+      }
+      Spacer(minLength: 8)
+      Text(verbatim: "⌥D stop · esc cancel").fixedSize()
+    }
+    .font(.system(size: 11))
+    .foregroundStyle(.primary.opacity(supportingTextOpacity))
+  }
+
+  private func deviceName(_ name: String) -> some View {
+    ViewThatFits(in: .horizontal) {
+      Text(verbatim: name).fixedSize(horizontal: true, vertical: false)
+      Text(verbatim: name)
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(width: 160, alignment: .leading)
+        .clipped()
+        .mask {
+          LinearGradient(
+            stops: [.init(color: .white, location: 0.75), .init(color: .clear, location: 1)],
+            startPoint: .leading, endPoint: .trailing)
+        }
+    }
+    .frame(maxWidth: 160, alignment: .leading)
   }
 
   private var readingHint: String {
     "space \(pill.phase == .readingPaused ? "resume" : "pause") · esc stop"
   }
 
+  private var readingTitle: String {
+    if case .error = pill.phase { "Error reading" } else { pill.phase.name }
+  }
+
   private var readingLayout: some View {
     VStack(spacing: 6) {
       HStack(spacing: 8) {
         LevelMeter(pill: pill)
-        Text(pill.phase.name).fontWeight(.medium)
+        Text(readingTitle).fontWeight(.medium)
         Spacer()
         Elapsed(pill: pill)
       }
-      Text(verbatim: readingHint)
-        .foregroundStyle(.primary.opacity(supportingTextOpacity))
-        .frame(maxWidth: .infinity, alignment: .leading)
-      if !pill.settled.isEmpty { readingNotice }
+      if case .error(let message) = pill.phase {
+        Text(message)
+          .foregroundStyle(.red)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      } else {
+        Text(verbatim: readingHint)
+          .foregroundStyle(.primary.opacity(supportingTextOpacity))
+          .frame(maxWidth: .infinity, alignment: .trailing)
+        if !pill.settled.isEmpty { readingNotice }
+      }
     }
     .font(.system(size: 11))
   }
@@ -152,7 +185,7 @@ extension Pill.Phase {
     case .transcribing: "Transcribing"
     case .reading: "Reading"
     case .readingPaused: "Paused"
-    case .error: "Error"
+    case .error: "Error transcribing"
     }
   }
 }
