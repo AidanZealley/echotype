@@ -8,7 +8,7 @@ struct PillView: View {
   let pill: Pill
 
   var body: some View {
-    let reading = pill.phase == .reading || pill.phase == .readingPaused
+    let reading = pill.isReading
     VStack(alignment: .leading, spacing: 8) {
       if reading {
         readingLayout
@@ -51,18 +51,28 @@ struct PillView: View {
     "space \(pill.phase == .readingPaused ? "resume" : "pause") · esc stop"
   }
 
+  private var readingTitle: String {
+    if case .error = pill.phase { "Error reading" } else { pill.phase.name }
+  }
+
   private var readingLayout: some View {
     VStack(spacing: 6) {
       HStack(spacing: 8) {
         LevelMeter(pill: pill)
-        Text(pill.phase.name).fontWeight(.medium)
+        Text(readingTitle).fontWeight(.medium)
         Spacer()
         Elapsed(pill: pill)
       }
-      Text(verbatim: readingHint)
-        .foregroundStyle(.primary.opacity(supportingTextOpacity))
-        .frame(maxWidth: .infinity, alignment: .leading)
-      if !pill.settled.isEmpty { readingNotice }
+      if case .error(let message) = pill.phase {
+        Text(message)
+          .foregroundStyle(.red)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      } else {
+        Text(verbatim: readingHint)
+          .foregroundStyle(.primary.opacity(supportingTextOpacity))
+          .frame(maxWidth: .infinity, alignment: .trailing)
+        if !pill.settled.isEmpty { readingNotice }
+      }
     }
     .font(.system(size: 11))
   }
@@ -152,7 +162,7 @@ extension Pill.Phase {
     case .transcribing: "Transcribing"
     case .reading: "Reading"
     case .readingPaused: "Paused"
-    case .error: "Error"
+    case .error: "Error transcribing"
     }
   }
 }

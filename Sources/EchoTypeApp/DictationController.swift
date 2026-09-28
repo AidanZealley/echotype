@@ -116,7 +116,7 @@ import Observation
       screen = NSScreen.forFocusedWindow()
       // Shown only once the reader has the text, so an empty selection goes straight to its
       // error.
-      pill = Pill(phase: .reading, startedAt: .now)
+      pill = Pill(phase: .reading, isReading: true, startedAt: .now)
       let reader = Reader(
         settings: store.settings,
         inserter: inserter,
