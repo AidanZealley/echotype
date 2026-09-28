@@ -71,6 +71,7 @@ import Observation
   init(store: SettingsStore) {
     self.store = store
     audio.onLevel = { [weak self] level in self?.levelChanged(level) }
+    audio.onDevice = { [weak self] device in self?.updatePill { $0.inputDevice = device } }
     let monitor = HotkeyMonitor(
       store: store,
       onHotkey: { [weak self] hotkey in

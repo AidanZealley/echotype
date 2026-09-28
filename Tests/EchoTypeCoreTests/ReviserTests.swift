@@ -12,10 +12,11 @@ func revisionFaithfulness() {
   #expect(!Reviser.isFaithful("Ship we should", to: "We should ship"))
 }
 
-@Test("Short sentences do not push recent words out of the revision window")
+@Test("The 100-word window includes its whole starting sentence")
 func revisionWindowKeepsRecentWords() async {
   let words = (1...105).map { "word\($0)" }
-  let first = words.joined(separator: " ") + ". Wait. No."
+  let recentSentence = words.joined(separator: " ") + "."
+  let first = "Old. " + recentSentence + " Wait. No."
   let calls = RevisionCalls()
   let reviser = Reviser(request: { await calls.record($0); return $0 })
   var updates = reviser.updates.makeAsyncIterator()
@@ -24,7 +25,7 @@ func revisionWindowKeepsRecentWords() async {
   _ = await reviser.submit(committed: first + " Use the second one.")
   _ = await updates.next()
   let inputs = await calls.all
-  #expect(inputs == [first, words.dropFirst(7).joined(separator: " ") + ". Wait. No. Use the second one."])
+  #expect(inputs == [first, recentSentence + " Wait. No. Use the second one."])
   await reviser.stop()
 }
 

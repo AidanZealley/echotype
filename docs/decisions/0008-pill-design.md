@@ -1,7 +1,8 @@
 # 0008 The pill: a text-first layout with a level glow
 
 Status: accepted, 2026-09-24 (overlay gate G1). Live revision raised the transcript's
-two-line cap to 184pt on 2026-09-27. Departs from the specification's Overlay layout.
+two-line cap to 184pt on 2026-09-27. The active microphone was added on 2026-09-28.
+Departs from the specification's Overlay layout.
 
 ## Context
 
@@ -47,6 +48,10 @@ forms, and finally opacity and placement.
 - Everything the pill shows comes from one value, `Pill`. `--hud-demo` and the live
   controller both drive it through the same `OverlayPanel` calls. The demo is a permanent
   part of the app.
+- During dictation, the footer shows the microphone that actually opened, opposite the
+  hotkey hint. Bluetooth inputs use a headphones icon and other inputs use a mic icon.
+  Names fit naturally up to 160pt, then clip with a right-edge fade. A fallback after
+  a device disconnect updates the displayed input.
 
 ## Consequences
 
