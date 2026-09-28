@@ -25,6 +25,9 @@ import Observation
 /// and leave every other piece of work to a task.
 @MainActor @Observable final class DictationController {
   private(set) var state: SessionMachine.State = .idle
+  private(set) var hasAPIKey: Bool?
+  private(set) var lastError: String?
+  private var keyStatusGeneration = 0
 
   /// What a test heard, for the settings window to show.
   enum TestOutcome {
@@ -85,6 +88,16 @@ import Observation
     )
     monitor.start()
     self.monitor = monitor
+    Task { await refreshAPIKeyStatus() }
+  }
+
+  func refreshAPIKeyStatus(clearError: Bool = false) async {
+    keyStatusGeneration += 1
+    let generation = keyStatusGeneration
+    let available = await Task.detached { Keychain.apiKey() != nil }.value
+    guard generation == keyStatusGeneration else { return }
+    hasAPIKey = available
+    if clearError { lastError = nil }
   }
 
   // MARK: Input
@@ -113,6 +126,7 @@ import Observation
   private func readAloudPressed() {
     switch phase {
     case .idle:
+      lastError = nil
       errorFade?.cancel()
       screen = NSScreen.forFocusedWindow()
       // Shown only once the reader has the text, so an empty selection goes straight to its
@@ -410,6 +424,7 @@ import Observation
   /// Shows the pill in its starting state on the screen holding the focused window, replacing
   /// an error still showing from the last session.
   private func showStarting() {
+    lastError = nil
     errorFade?.cancel()
     screen = NSScreen.forFocusedWindow()
     pill = Pill(phase: .starting, startedAt: .now)
@@ -434,6 +449,7 @@ import Observation
 
   /// Ends the session's pill: fades it, or shows `error` in red for three seconds first.
   private func end(showing error: String? = nil) {
+    lastError = error
     guard var pill, let screen else { return }
     self.pill = nil
     guard let error else { return panel.hide() }
