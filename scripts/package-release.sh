@@ -12,9 +12,10 @@ image="$output/EchoType-$version.dmg"
 ./scripts/build-app.sh release "$app"
 
 contents=$(mktemp -d .build/EchoType-dmg-XXXXXX)
-trap 'rm -rf "$contents"' EXIT
+trap 'rm -rf "$contents" "$contents.dmg"' EXIT
 cp -R "$app" "$contents/"
 ln -s /Applications "$contents/Applications"
-hdiutil create -volname EchoType -srcfolder "$contents" -format UDZO -ov "$image"
+diskutil image create from --volumeName EchoType --format UDZO "$contents" "$contents.dmg"
+mv -f "$contents.dmg" "$image"
 
 echo "Created $app and $image"
