@@ -45,7 +45,7 @@ Observed on macOS 27.2 with `sfltool dumpbtm` (entry `2.com.aidanzealley.echotyp
   installed app next launches. See [0013](0013-test-button-and-system-rows.md).
 - `/Applications/EchoType.app` is written in both `App.swift` and `install.sh`. Sharing it
   across Swift and shell would need machinery for a value that does not change.
-- If deleting the old bundle fails partway, for example on a root-owned bundle from an
-  earlier `sudo` install, the script exits with the app stopped and a partial bundle in
-  place. Rerunning after fixing ownership recovers it.
+- When another account owns the installed bundle, `deploy.sh` requests administrator
+  access to change its ownership before stopping the running app. If the request is
+  declined, the existing app keeps running.
 - The wait for the old app to quit has no timeout, so a hung EchoType stalls the script.

@@ -15,6 +15,14 @@ shift 2
 staged=.build/EchoType-$configuration.app
 "$(dirname "$0")/build-app.sh" "$configuration" "$staged"
 
+# Finder can install the app from another macOS account, leaving it owned by that
+# account in the shared /Applications folder. Ask for admin access before quitting
+# the running app, so a refused password leaves that app alone.
+if [[ "$app" == /Applications/EchoType.app && -e "$app" && ! -O "$app" ]]; then
+  echo "The installed EchoType belongs to $(stat -f %Su "$app"); administrator access is needed to replace it."
+  sudo chown -R "$(id -un)" "$app"
+fi
+
 # Stop every running copy, development or installed, before replacing its bundle.
 # Replacing the bundle under a running instance leaves Launch Services with a stale record
 # for it, and `open` then fails with error -600. Waiting for the exit also stops `open`
