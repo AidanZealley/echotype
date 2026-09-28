@@ -23,7 +23,8 @@ Keychain item the app cannot read without a prompt.
 - `cleanUp` defaults to `true`. The former `batchOnCommit` key is ignored, so an old
   batch preference does not govern the new revision behavior (see
   [0021](0021-revise-committed-dictation.md)).
-- Only fields the window edits are persisted. `silenceTimeout`, `hardCap` and
+- The menu bar's `hotkeysActive` choice is stored under its own `UserDefaults` key and
+  defaults to on. Other stored settings are fields the window edits. `silenceTimeout`, `hardCap` and
   `finalizeTimeout` stay code defaults, so today's values are not frozen into every
   install.
 - The keyterms list starts empty. The hard-coded placeholder list is gone: once the

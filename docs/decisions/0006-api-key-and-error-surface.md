@@ -19,7 +19,7 @@ variable was never an option.
   the editor. (Superseded: the app writes the item itself, see 0010.)
 - The menu bar menu's state line shows the running state, every session failure and a
   missing key. The overlay and settings milestones take this over. (Superseded: the
-  state line now shows only the session state.)
+  state line now shows the session state, missing key and most recent session error.)
 - `api.x.ai` answers a wrong key with 400 (`"Incorrect API key provided"`) and sends
   401 only when no credentials are presented. `STTError(httpStatus:)` stays faithful
   to HTTP, and the app words both `.badRequest` and `.unauthorized` as a key problem.

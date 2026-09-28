@@ -102,6 +102,7 @@ import EchoTypeCore
         }
         return false
       }
+      guard store.hotkeysActive else { return false }
       // Repeats are consumed too, so no character leaks while the chord is held, but only the
       // initial press counts.
       if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { onHotkey(hotkey) }
