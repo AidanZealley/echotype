@@ -65,8 +65,9 @@ forms, and finally opacity and placement.
 
 Reading uses a 280pt wide, two-line pill. The top line holds the level meter, state
 and elapsed time. The second gives the Space pause or resume and Escape stop hints.
-There is no empty transcript line. A notice appears underneath only when the selection
-was capped at 60,000 characters. Aidan chose variant B of three demos. While reading
+There is no empty transcript line. A selection over the 60,000-character cap is read
+without a notice; on 2026-09-28 Aidan removed the one that sat under the hints, since it
+displaced them and a selection that long is rare. Aidan chose variant B of three demos. While reading
 is paused, the meter and time retain 80% of their normal opacity and the displayed
 time holds still. Reading errors keep the 280pt layout and show the error in place of
 the shortcut hint.

@@ -94,17 +94,9 @@ struct PillView: View {
         Text(verbatim: readingHint)
           .foregroundStyle(.primary.opacity(supportingTextOpacity))
           .frame(maxWidth: .infinity, alignment: .trailing)
-        if !pill.settled.isEmpty { readingNotice }
       }
     }
     .font(.system(size: 11))
-  }
-
-  private var readingNotice: some View {
-    Text(pill.settled)
-      .font(.system(size: 11))
-      .foregroundStyle(.primary.opacity(supportingTextOpacity))
-      .lineLimit(1)
   }
 }
 

@@ -51,8 +51,9 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
   app's playback buffering.
 - Markdown and code are read as written, fence hints included. Cleaning them up is out of
   scope.
-- A reading is capped at the REST limit of 60,000 characters, and the pill names
-  the cut. The cap was not exercised with a real selection at G2.
+- A reading is capped at the REST limit of 60,000 characters. The pill no longer names
+  the cut (removed 2026-09-28, see decision 0008). The cap was not exercised with a real
+  selection at G2.
 
 ## G2 on the Mac
 

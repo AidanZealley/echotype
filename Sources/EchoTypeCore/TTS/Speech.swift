@@ -12,14 +12,14 @@ public enum Speech {
   /// The REST endpoint's limit on the text of one request.
   public static let maximumCharacters = 60_000
 
-  /// The text cut to its first `maximumCharacters`, and whether it was cut.
+  /// The text cut to its first `maximumCharacters`.
   ///
   /// Counts Unicode scalars rather than `Character`s, so a selection full of multi-scalar
   /// emoji still fits a limit the endpoint may count in code points.
-  public static func capped(_ text: String) -> (text: String, wasCut: Bool) {
+  public static func capped(_ text: String) -> String {
     let scalars = text.unicodeScalars
-    guard scalars.count > maximumCharacters else { return (text, false) }
-    return (String(scalars.prefix(maximumCharacters)), true)
+    guard scalars.count > maximumCharacters else { return text }
+    return String(scalars.prefix(maximumCharacters))
   }
 
   /// The `POST /v1/tts` request. It pins `optimize_streaming_latency` to 0 and

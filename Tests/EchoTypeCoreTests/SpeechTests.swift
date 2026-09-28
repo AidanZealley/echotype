@@ -30,7 +30,7 @@ func speechRequestFields() throws {
 @Test("The cap keeps text within the limit and cuts longer text to its first 60,000 characters")
 func speechCap() {
   let limit = String(repeating: "a", count: 60_000)
-  #expect(Speech.capped(limit) == (limit, false))
-  #expect(Speech.capped(limit + "bc") == (limit, true))
-  #expect(Speech.capped("") == ("", false))
+  #expect(Speech.capped(limit) == limit)
+  #expect(Speech.capped(limit + "bc") == limit)
+  #expect(Speech.capped("") == "")
 }

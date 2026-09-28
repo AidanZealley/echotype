@@ -25,8 +25,7 @@ struct Pill: Equatable {
   var isReading = false
   /// The microphone that actually opened for this dictation.
   var inputDevice: InputDevice?
-  /// Rendered solid. Committed text, revised when cleanup is on, followed by settled utterance runs. While reading,
-  /// the notice that the selection was cut.
+  /// Rendered solid. Committed text, revised when cleanup is on, followed by settled utterance runs.
   var settled = ""
   /// Rendered dimmed after `settled`. `SessionMachine.Snapshot.provisional`.
   var provisional = ""

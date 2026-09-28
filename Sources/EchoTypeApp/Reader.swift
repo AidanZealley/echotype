@@ -21,16 +21,13 @@ import Foundation
   private var isPaused = false
   private var playbackStarted = false
 
-  /// `onStart` runs once the text is known, just before it is fetched, with whether it was cut
-  /// to `Speech.maximumCharacters`. `onLevel` receives the level of the audio as it plays.
+  /// `onLevel` receives the level of the audio as it plays.
   init(
-    settings: Settings, inserter: Inserter,
-    onStart: @escaping @MainActor (_ wasCut: Bool) -> Void,
-    onLevel: @escaping @MainActor (Double) -> Void
+    settings: Settings, inserter: Inserter, onLevel: @escaping @MainActor (Double) -> Void
   ) {
     self.inserter = inserter
     player = SpeechPlayer(onLevel: onLevel)
-    task = Task { try await read(settings, onStart: onStart) }
+    task = Task { try await read(settings) }
   }
 
   /// Returns when the audio has finished or the reading was stopped. Throws why it failed
@@ -57,7 +54,7 @@ import Foundation
     return isPaused
   }
 
-  private func read(_ settings: Settings, onStart: (Bool) -> Void) async throws {
+  private func read(_ settings: Settings) async throws {
     try await inserter.waitForRestore()
     let selection = await Pasteboard.copySelection()
     try Task.checkCancellation()
@@ -65,9 +62,8 @@ import Foundation
     let apiKey = await Task.detached { Keychain.apiKey() }.value
     guard let apiKey else { throw Failure.noAPIKey }
     try Task.checkCancellation()
-    let (text, wasCut) = Speech.capped(selection)
-    onStart(wasCut)
 
+    let text = Speech.capped(selection)
     let request = Speech.request(text: text, settings: settings, apiKey: apiKey)
     let (bytes, response) = try await URLSession.shared.bytes(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0

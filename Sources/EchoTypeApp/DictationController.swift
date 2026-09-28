@@ -135,7 +135,6 @@ import Observation
       let reader = Reader(
         settings: store.settings,
         inserter: inserter,
-        onStart: { [weak self] wasCut in self?.readingStarted(wasCut: wasCut) },
         onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
       phase = .reading(reader)
       Task { await read(reader) }
@@ -407,12 +406,6 @@ import Observation
     guard isReading(reader) else { return }
     phase = .idle
     end(showing: failure.map(describe))
-  }
-
-  private func readingStarted(wasCut: Bool) {
-    updatePill { pill in
-      if wasCut { pill.settled = "Reading the first 60,000 characters" }
-    }
   }
 
   private func isReading(_ reader: Reader) -> Bool {
