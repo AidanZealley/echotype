@@ -1,6 +1,6 @@
 # 0021 Revise committed dictation during the session
 
-Status: accepted, 2026-09-27. Supersedes the batch pass in
+Status: accepted, 2026-09-27. Window extended 2026-09-28. Supersedes the batch pass in
 [0017](0017-batch-pass-on-commit.md).
 
 ## Context
@@ -16,11 +16,11 @@ self-corrections. It also kept the whole recording in memory and delayed every i
   while the current utterance's settled and provisional runs continue to appear as
   streamed. The pill shows accepted revisions, and its final text is what gets inserted.
   With cleanup off, insert the streamed transcript. The Test button never revises.
-- Send a recent window: the revised text from its second-to-last sentence onward, plus
-  committed text not yet revised. Keep one request in flight and combine commits that
-  arrive while it runs. At stop, cancel the live request and make one final revision of
-  the remaining window. A failed session keeps accepted revisions and the unrevised
-  committed tail without a final call.
+- Send a recent window: the revised text from whichever starts earlier, its second-to-last
+  sentence or its last 100 words, plus committed text not yet revised. Keep one request in
+  flight and combine commits that arrive while it runs. At stop, cancel the live request
+  and make one final revision of the remaining window. A failed session keeps accepted
+  revisions and the unrevised committed tail without a final call.
 - Accept a revision only when its words appear in the input in the same order after
   lowercasing and stripping punctuation at word edges. This permits deletions and
   punctuation changes but rejects added, substituted, or reordered words. If the call
@@ -32,11 +32,11 @@ self-corrections. It also kept the whole recording in memory and delayed every i
 
 ## Consequences
 
-- Requests normally cover recent sentences rather than the whole dictation, and the user
-  can see corrections before stopping. A long unpunctuated or unrevised tail can still
-  make a large window. The final request can delay insertion; live and final requests
-  have separate resource timeouts. Aidan reported insertion under one second after stop
-  in the final Mac check.
+- Requests normally cover recent sentences and at least 100 revised words when available,
+  rather than the whole dictation. The user can see corrections before stopping. A long
+  unpunctuated or unrevised tail can still make a large window. The final request can
+  delay insertion; live and final requests have separate resource timeouts. Aidan reported
+  insertion under one second after stop in the final Mac check.
 - The word check deliberately rejects some useful rewrites, such as `four pm` to `4pm`,
   and can permit excessive deletion. Scripted tests and real prompt cases cover the
   expected corrections and unchanged inputs; an uncertain or rejected result leaves the
