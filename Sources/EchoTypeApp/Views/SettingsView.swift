@@ -25,8 +25,30 @@ struct SettingsView: View {
       Tab("API Key", systemImage: "key") {
         APIKeyTab(controller: controller)
       }
+      Tab("Updates", systemImage: "arrow.triangle.2.circlepath") {
+        UpdatesTab()
+      }
     }
     .frame(width: 460)
+  }
+}
+
+private struct UpdatesTab: View {
+  private let releases = URL(string: "https://github.com/AidanZealley/echotype/releases/latest")!
+
+  var body: some View {
+    Form {
+      LabeledContent("Installed version") {
+        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+      }
+      Link("View latest release on GitHub", destination: releases)
+      Text("Compare the version on GitHub with this one. To update, quit EchoType, download the DMG, and replace EchoType.app in Applications.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+    .formStyle(.columns)
+    .padding(20)
+    .fixedSize(horizontal: false, vertical: true)
   }
 }
 
