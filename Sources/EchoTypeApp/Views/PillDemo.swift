@@ -51,7 +51,9 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)
 
-      pill = Pill(phase: .reading, settled: "Reading the first 60,000 characters", startedAt: .now)
+      pill = Pill(
+        phase: .reading, isReading: true, settled: "Reading the first 60,000 characters",
+        startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
 
@@ -60,7 +62,7 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)
 
-      pill = Pill(phase: .error("Nothing selected"), startedAt: .now)
+      pill = Pill(phase: .error("Nothing selected"), isReading: true, startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
       panel.hide()

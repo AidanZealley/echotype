@@ -21,6 +21,8 @@ struct Pill: Equatable {
   }
 
   var phase: Phase
+  /// Keeps the reading layout when a reading ends with an error.
+  var isReading = false
   /// Rendered solid. Committed text, revised when cleanup is on, followed by settled utterance runs. While reading,
   /// the notice that the selection was cut.
   var settled = ""
