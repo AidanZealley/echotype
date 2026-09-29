@@ -92,7 +92,7 @@ public actor Reviser {
     let sentenceStart = starts.count > 1 ? starts[starts.count - 2] : text.startIndex
     // Short fragments can contain sentence punctuation without providing enough context.
     let words = text.split(whereSeparator: \.isWhitespace)
-    let wordStart = words.count > 100 ? words[words.count - 100].startIndex : text.startIndex
+    let wordStart = words.count > 50 ? words[words.count - 50].startIndex : text.startIndex
     let wordSentenceStart = starts.last(where: { $0 <= wordStart }) ?? text.startIndex
     let tailStart = min(sentenceStart, wordSentenceStart)
     return (String(text[..<tailStart]).trimmingCharacters(in: .whitespaces), String(text[tailStart...]))
