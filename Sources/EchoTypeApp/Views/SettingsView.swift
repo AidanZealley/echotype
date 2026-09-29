@@ -15,31 +15,44 @@ struct SettingsView: View {
     TabView {
       Tab("General", systemImage: "gearshape") {
         GeneralTab(store: store)
+          .navigationTitle("EchoType Settings")
       }
       Tab("Keyterms", systemImage: "character.book.closed") {
         KeytermsTab(store: store)
+          .navigationTitle("EchoType Settings")
       }
       Tab("Read Aloud", systemImage: "speaker.wave.2") {
         ReadAloudTab(store: store)
+          .navigationTitle("EchoType Settings")
       }
       Tab("Agents", systemImage: "terminal") {
         AgentsTab()
+          .navigationTitle("EchoType Settings")
       }
       Tab("API Key", systemImage: "key") {
         APIKeyTab(controller: controller)
+          .navigationTitle("EchoType Settings")
       }
       Tab("Updates", systemImage: "arrow.triangle.2.circlepath") {
         UpdatesTab()
+          .navigationTitle("EchoType Settings")
       }
     }
     .frame(width: 460)
   }
 }
 
-/// Commands to paste into a terminal, so EchoType never edits another tool's config or runs its
-/// CLI. They name the running app, so they stay right if it moves. Registering twice fails, hence
-/// the remove hint.
+/// Commands and optional agent instructions to copy. EchoType never edits another tool's config
+/// or runs its CLI. The commands name the running app, so they stay right if it moves.
 private struct AgentsTab: View {
+  private static let agentInstructions = """
+    When I ask you to reply, respond or read an answer with or using EchoType, prepare the full \
+    written answer at its normal level of detail. Before sending it, find and call the speak tool \
+    on the echotype MCP server once with a separate short summary for listening, or the whole answer \
+    if I ask for it in full. Then send the full written answer without shortening it for speech. \
+    EchoType here is an MCP server, not a desktop app.
+    """
+
   private var app: String {
     let path = Bundle.main.executablePath ?? "/Applications/EchoType.app/Contents/MacOS/EchoTypeApp"
     return path.contains(" ") ? "'\(path)'" : path
@@ -52,6 +65,26 @@ private struct AgentsTab: View {
         .foregroundStyle(.secondary)
       command("Claude Code", "claude mcp add --scope user echotype -- \(app) --mcp", remove: "claude mcp remove echotype")
       command("Codex", "codex mcp add echotype -- \(app) --mcp", remove: "codex mcp remove echotype")
+      VStack(alignment: .leading, spacing: 6) {
+        HStack {
+          Text("Optional agent instructions")
+          Spacer()
+          Button("Copy", systemImage: "doc.on.doc") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(Self.agentInstructions, forType: .string)
+          }
+        }
+        Text("Paste into your agent's instructions, such as AGENTS.md.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        Text(verbatim: Self.agentInstructions)
+          .font(.caption)
+          .textSelection(.enabled)
+          .padding(8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
+          .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
