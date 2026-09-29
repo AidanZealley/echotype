@@ -65,24 +65,11 @@ quit EchoType, download the new DMG, drag EchoType into Applications and choose
 
 End a dictation with "reply with EchoType" and it sends itself. The agent calls EchoType's `speak`
 tool to read a version of its reply aloud, then writes the full reply as usual. Register the
-server once in each agent. EchoType has to be running for `speak` to work.
+server once in each agent: open **Settings → Agents**, copy the command for Claude Code or Codex,
+run it in a terminal, and start a new agent session. EchoType has to be running for `speak` to
+work.
 
-- Claude Code:
-
-  ```sh
-  claude mcp add --scope user echotype -- /Applications/EchoType.app/Contents/MacOS/EchoTypeApp --mcp
-  ```
-
-- Codex, in `~/.codex/config.toml`:
-
-  ```toml
-  [mcp_servers.echotype]
-  command = "/Applications/EchoType.app/Contents/MacOS/EchoTypeApp"
-  args = ["--mcp"]
-  ```
-
-- T3 Code: not yet checked. If it passes the harness's own MCP configuration
-  through, no separate step is needed.
+T3 Code needs no step of its own. It runs Claude Code and Codex, which use the server themselves.
 
 ## Development
 
