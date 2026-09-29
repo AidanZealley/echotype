@@ -1,7 +1,8 @@
 # 0011 The settings window makes EchoType a regular app while it is open
 
 Status: accepted, 2026-09-25 (settings gates G1 and G2). Departs from the
-specification's `LSUIElement` behaviour.
+specification's `LSUIElement` behaviour. The activation helper and close rule are
+superseded by [0023](0023-debug-window.md).
 
 ## Context
 
@@ -20,7 +21,9 @@ it.
 - `SettingsButton` in `App.swift` sets the activation policy to `.regular`, opens the
   window, activates on the next main-queue turn and raises the window with
   `orderFrontRegardless()`. The scene's `onDisappear` sets `.accessory` again. While the
-  window is open, EchoType has a Dock icon and a Cmd+Tab entry.
+  window is open, EchoType has a Dock icon and a Cmd+Tab entry. (Superseded: one helper
+  opens both Settings and Last Dictation this way, and closing either returns to
+  `.accessory` only when no other main-capable window is visible or minimised.)
 - From a fullscreen app, Settings switches to the desktop and opens the window there. The
   window does not join fullscreen spaces.
 

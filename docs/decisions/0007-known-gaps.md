@@ -38,8 +38,9 @@ Status: open. Remove each item as it is resolved.
 - **Inputs with more than two channels** are not mixed properly. Without a channel
   layout from the system the session fails to convert; with one, the mix to mono keeps
   only the first channel.
-- **The menu bar menu does not open from a fullscreen app while the settings window is
-  open.** EchoType is a regular app with a Dock icon while the window is open, and macOS
-  does not open a regular app's status item menu over a fullscreen app. Close the window
-  or go to the desktop first; Opt+D still works. Showing the Dock icon only while
-  EchoType is frontmost would fix it but drop the window's Cmd+Tab entry.
+- **The menu bar menu does not open from a fullscreen app while the settings or Last
+  Dictation window is open.** EchoType is a regular app with a Dock icon while either
+  window is open, and macOS does not open a regular app's status item menu over a
+  fullscreen app. Close the windows or go to the desktop first; Opt+D still works.
+  Showing the Dock icon only while EchoType is frontmost would fix it but drop the
+  windows' Cmd+Tab entry.

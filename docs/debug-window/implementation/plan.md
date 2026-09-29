@@ -1,6 +1,6 @@
 # Debug window implementation plan
 
-Status: implementation in progress.
+Status: accepted, 2026-09-29.
 
 ## Orchestration record
 
@@ -17,7 +17,7 @@ Status: implementation in progress.
 | 1 | [Trace and revision evidence](01-trace-core.md) | Approved spec | Accepted |
 | 2 | [Capture and show the last dictation](02-debug-window.md) | Workstream 1 accepted | Accepted |
 | 3 | [Make Last Dictation a normal feature](03-remove-debug-gate.md) | Workstream 2 accepted | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1–3 accepted | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1–3 accepted | Accepted |
 
 ## Why these boundaries
 
@@ -98,3 +98,4 @@ then removes the resolved entry before acceptance.
 | 2026-09-29 | `DictationTrace.Mark` carries `commit: Int?`, the index into `commits` starting at that word, in place of the spec's boundary flag. `Reviser` opts in with `init(..., capture: Bool = false)`. | The app needs the commit index for the gap hover and cannot count boundaries when a commit has no words. | Workstream 1 lead (spec allows adjusting names) | 1, 2 |
 | 2026-09-29 | Workstream 2 renders the marked paragraph as a non-editable, selectable `NSTextView` built from one attributed string, in place of the spec's SwiftUI `Text`. | SwiftUI `Text` has no hover for part of a paragraph, and the spec requires tooltips on changed words and commit marks. Wrapping and selection are kept; copying the paragraph includes the `\|` marks. Recorded in 0023. | Workstream 2 lead | 2 |
 | 2026-09-29 | Last Dictation becomes a normal feature for everyone. The debug gate is removed from the whole window, including the diagnostic detail. Workstream 2 is accepted exactly as validated, with the gate. A new workstream 3 removes the gate and updates the spec, decision 0023 and the README before the final review. | Aidan's follow-up to E1, after G1 passed on the gated candidate. | Aidan | 3, Final |
+| 2026-09-29 | Final review found no Required defects. Docs synced: the spec's Marking bullet describes the commit index, 0011's helper and close rule are marked superseded by 0023, and 0007's fullscreen menu gap names both windows. | Keep records in sync with the accepted code; no behavior change. | Final-review lead | Final |
