@@ -5,7 +5,7 @@ import SwiftUI
 struct EchoTypeApp: App {
   @State private var store: SettingsStore
   /// Nil for `--hud-demo`, which shows the overlay and must not start the hotkey monitor or
-  /// open the microphone.
+  /// open the microphone. It records no dictation, so it ignores `--debug`.
   @State private var controller: DictationController?
 
   init() {
@@ -15,7 +15,11 @@ struct EchoTypeApp: App {
       _controller = State(initialValue: nil)
       Task { await PillDemo.run() }
     } else {
-      _controller = State(initialValue: DictationController(store: store))
+      let debug = CommandLine.arguments.contains("--debug")
+      _controller = State(initialValue: DictationController(store: store, debug: debug))
+      // The debug window opens at launch, so the app starts as a regular app. See
+      // `presentWindow`.
+      if debug { NSApplication.shared.setActivationPolicy(.regular) }
     }
     Self.claimLoginItem()
   }
@@ -43,7 +47,7 @@ struct EchoTypeApp: App {
           .disabled(!(controller?.isIdle ?? false))
         Divider()
       }
-      SettingsButton()
+      WindowButtons(debug: debug)
       Button("Quit EchoType") {
         NSApplication.shared.terminate(nil)
       }
@@ -54,10 +58,25 @@ struct EchoTypeApp: App {
 
     Settings {
       SettingsView(store: store, controller: controller)
-        // Hide the Dock icon again once the window closes. See `SettingsButton`.
-        .onDisappear { NSApplication.shared.setActivationPolicy(.accessory) }
+        .onDisappear(perform: windowClosed)
     }
+
+    Window("Last Dictation", id: DebugWindow.id) {
+      if let controller {
+        DebugWindow(controller: controller)
+          .onDisappear(perform: windowClosed)
+      }
+    }
+    .defaultSize(width: 560, height: 640)
+    .defaultLaunchBehavior(debug ? .presented : .suppressed)
+    // A window left open when a debug launch quit must not come back in a normal launch.
+    .restorationBehavior(.disabled)
+    // Keeps the window out of the Window menu, which a normal launch shows while Settings is
+    // open.
+    .commandsRemoved()
   }
+
+  private var debug: Bool { controller?.debug ?? false }
 
   private var statusLine: String {
     guard let controller else { return "Overlay demo" }
@@ -92,29 +111,50 @@ struct EchoTypeApp: App {
   }
 }
 
-/// Opens the settings window in front, with keyboard focus, or in front and focused by a
-/// click when macOS declines the activation. The app is `LSUIElement`, and macOS does not
-/// reliably activate an accessory app, which left the window behind the frontmost app or
-/// without focus. So the app becomes a regular app, with a Dock icon, while the window is
-/// open, as Tailscale does. The scene's `onDisappear` switches it back.
-private struct SettingsButton: View {
+/// The menu's window items: Settings, and in debug mode the debug window.
+private struct WindowButtons: View {
+  let debug: Bool
   @Environment(\.openSettings) private var openSettings
+  @Environment(\.openWindow) private var openWindow
 
   var body: some View {
-    Button("Settings…") {
-      NSApplication.shared.setActivationPolicy(.regular)
-      openSettings()
-      // An activation requested while the menu is still closing can be lost, so wait for it
-      // to close.
-      DispatchQueue.main.async {
-        NSApplication.shared.activate()
-        // Activation is cooperative and macOS occasionally declines it, which left the window
-        // behind the frontmost app. Raising the window regardless keeps it in front; a click
-        // then focuses it. It is the app's only window that can become main: the overlay
-        // panel and the menu bar's windows cannot.
-        NSApplication.shared.windows.first { $0.canBecomeMain && $0.isVisible }?
-          .orderFrontRegardless()
-      }
+    Button("Settings…") { presentWindow { openSettings() } }
+    if debug {
+      Button("Last Dictation…") { presentWindow { openWindow(id: DebugWindow.id) } }
     }
+  }
+}
+
+/// Opens a window in front, with keyboard focus, or in front and focused by a click when macOS
+/// declines the activation. The app is `LSUIElement`, and macOS does not reliably activate an
+/// accessory app, which left the window behind the frontmost app or without focus. So the app
+/// becomes a regular app, with a Dock icon, while any of its windows is open, as Tailscale does.
+/// `windowClosed` switches it back. See decision 0011.
+@MainActor private func presentWindow(_ open: () -> Void) {
+  NSApplication.shared.setActivationPolicy(.regular)
+  open()
+  // An activation requested while the menu is still closing can be lost, so wait for it to
+  // close.
+  DispatchQueue.main.async {
+    NSApplication.shared.activate()
+    // Activation is cooperative and macOS occasionally declines it, which left the window
+    // behind the frontmost app. Raising the window regardless keeps it in front; a click then
+    // focuses it. The window just opened is the app's frontmost window that can become main:
+    // the overlay panel and the menu bar's windows cannot.
+    NSApplication.shared.orderedWindows.first { $0.canBecomeMain && $0.isVisible }?
+      .orderFrontRegardless()
+  }
+}
+
+/// Hides the Dock icon again once the last window closes, so closing one window leaves it while
+/// the other is open or minimised. Checked on the next turn, when the closing window is no
+/// longer visible.
+@MainActor private func windowClosed() {
+  DispatchQueue.main.async {
+    let open = NSApplication.shared.windows.contains {
+      $0.canBecomeMain && ($0.isVisible || $0.isMiniaturized)
+    }
+    guard !open else { return }
+    NSApplication.shared.setActivationPolicy(.accessory)
   }
 }

@@ -81,6 +81,7 @@ microphone and accessibility permissions between builds.
 ```sh
 ./scripts/run.sh              # build, sign and launch .build/EchoType.app
 ./scripts/run.sh --hud-demo   # loop the overlay through its states, no mic or key needed
+./scripts/run.sh --debug      # also open a Last Dictation window with commits and revision requests
 swift test                    # run the core tests
 ./scripts/install.sh          # build a release and replace /Applications/EchoType.app
 ```
