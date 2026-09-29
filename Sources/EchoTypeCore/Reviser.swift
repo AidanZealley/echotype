@@ -68,7 +68,10 @@ public actor Reviser {
     let result = try? await request(window)
     guard !Task.isCancelled, !finishing || input == committed else { return }
     let trimmed = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let accepted = !trimmed.isEmpty && Self.isFaithful(trimmed, to: window)
+    // A revision may not drop a reply request: the model can read it as an instruction and
+    // delete it, and the dictation would then send without the phrase in the inserted text.
+    let keepsRequest = !ReplyRequest.matches(window) || ReplyRequest.matches(trimmed)
+    let accepted = !trimmed.isEmpty && Self.isFaithful(trimmed, to: window) && keepsRequest
     // A failed or unfaithful call keeps the streamed words but still counts them as covered.
     // They stay in the recent tail for later windows, but an edit the model keeps making
     // cannot hold every later window open until the final call gets the whole dictation.
