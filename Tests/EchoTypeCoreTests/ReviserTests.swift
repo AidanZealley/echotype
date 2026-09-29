@@ -7,6 +7,7 @@ func revisionFaithfulness() {
   #expect(Reviser.isFaithful("We should ship the settings window today.", to: "We should ship. The settings window today."))
   #expect(Reviser.isFaithful("Let's meet at 4pm.", to: "Let's meet at 3, no, 4pm."))
   #expect(Reviser.isFaithful("Hello, world!", to: "hello world"))
+  #expect(Reviser.isFaithful("I'm never sure why.", to: "I-I'm never sure why."))
   #expect(!Reviser.isFaithful("We should now ship", to: "We should ship"))
   #expect(!Reviser.isFaithful("We must ship", to: "We should ship"))
   #expect(!Reviser.isFaithful("Ship we should", to: "We should ship"))
@@ -75,6 +76,20 @@ func revisionFallback() async {
   var updates = reviser.updates.makeAsyncIterator()
   _ = await updates.next()
   #expect(await reviser.shown == "Let's meet at 4pm. Thanks.")
+  await reviser.stop()
+}
+
+@Test("A rejected stretch leaves later windows once it is out of the recent tail")
+func revisionRejectionAdvances() async {
+  let recentSentence = (1...105).map { "word\($0)" }.joined(separator: " ") + "."
+  let first = "Old. " + recentSentence + " Wait. No."
+  let calls = RevisionCalls(replies: ["Unexpected words", "Unexpected words"])
+  let reviser = Reviser(request: { try await calls.answer($0) })
+  _ = await reviser.submit(committed: first)
+  await calls.wait(for: 1)
+  _ = await reviser.submit(committed: first + " Use the second one.")
+  await calls.wait(for: 2)
+  #expect(await calls.all == [first, recentSentence + " Wait. No. Use the second one."])
   await reviser.stop()
 }
 
