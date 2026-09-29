@@ -65,13 +65,16 @@ public actor Reviser {
     let (head, tail) = Self.split(revised)
     let window = Self.join(tail, String(input.dropFirst(covered)))
     guard !window.isEmpty else { return }
-    guard let result = try? await request(window), !Task.isCancelled, !finishing || input == committed
-    else { return }
-    let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty, Self.isFaithful(trimmed, to: window) else { return }
-    revised = Self.join(head, trimmed)
+    let result = try? await request(window)
+    guard !Task.isCancelled, !finishing || input == committed else { return }
+    let trimmed = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let accepted = !trimmed.isEmpty && Self.isFaithful(trimmed, to: window)
+    // A failed or unfaithful call keeps the streamed words but still counts them as covered.
+    // They stay in the recent tail for later windows, but an edit the model keeps making
+    // cannot hold every later window open until the final call gets the whole dictation.
+    revised = Self.join(head, accepted ? trimmed : window)
     covered = input.count
-    publisher.yield(())
+    if accepted { publisher.yield(()) }
   }
 
   private static func split(_ text: String) -> (String, String) {
@@ -104,7 +107,8 @@ public actor Reviser {
 
   public static func isFaithful(_ revision: String, to input: String) -> Bool {
     func words(_ text: String) -> [String] {
-      text.split(whereSeparator: \.isWhitespace).compactMap { raw in
+      // Hyphens and dashes separate words, so dropping the stutter in "I-I'm" is a deletion.
+      text.split(whereSeparator: { $0.isWhitespace || "-–—".contains($0) }).compactMap { raw in
         let word = raw.drop(while: isPunctuation).reversed().drop(while: isPunctuation)
           .reversed().map(String.init).joined().lowercased()
         return word.isEmpty ? nil : word

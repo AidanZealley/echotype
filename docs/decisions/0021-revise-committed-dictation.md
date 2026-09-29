@@ -1,6 +1,7 @@
 # 0021 Revise committed dictation during the session
 
-Status: accepted, 2026-09-27. Live timing and window updated 2026-09-28. Supersedes
+Status: accepted, 2026-09-27. Live timing and window updated 2026-09-28. Rejected
+revisions advance from 2026-09-29. Supersedes
 the batch pass in [0017](0017-batch-pass-on-commit.md).
 
 ## Context
@@ -23,10 +24,14 @@ self-corrections. It also kept the whole recording in memory and delayed every i
   window. A failed session keeps accepted revisions and the unrevised committed tail
   without a final call.
 - Accept a revision only when its words appear in the input in the same order after
-  lowercasing and stripping punctuation at word edges. This permits deletions and
-  punctuation changes but rejects added, substituted, or reordered words. If the call
-  fails, times out, returns empty text, or fails this check, keep the streamed input for
-  that stretch without showing an error.
+  lowercasing, splitting at hyphens and dashes, and stripping punctuation at word edges.
+  This permits deletions, including a stutter such as `I-I'm` to `I'm`, and punctuation
+  changes, but rejects added, substituted, or reordered words. If the call fails, times
+  out, returns empty text, or fails this check, keep the streamed input for that stretch
+  without showing an error, and count it as revised. It still returns in later windows
+  while it is part of the recent tail. (Before 2026-09-29 a rejected stretch stayed
+  unrevised, so an edit the model kept making was rejected in every later window and
+  the final call received the whole dictation.)
 - Replace **Re-transcribe on stop** and its `batchOnCommit` setting with **Clean up text**.
   Ignore the old stored key and default the new setting on. Remove the batch request and
   in-memory recording buffer.
@@ -36,7 +41,7 @@ self-corrections. It also kept the whole recording in memory and delayed every i
 
 - Requests normally cover whole recent sentences and at least 100 revised words when available,
   rather than the whole dictation. The user can see corrections before stopping. A long
-  unpunctuated or unrevised tail can still make a large window. The final request can
+  unpunctuated tail can still make a large window. The final request can
   delay insertion; live and final requests have separate resource timeouts. Aidan reported
   insertion under one second after stop in the final Mac check.
 - The word check deliberately rejects some useful rewrites, such as `four pm` to `4pm`,
