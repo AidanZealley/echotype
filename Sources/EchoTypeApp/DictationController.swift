@@ -20,6 +20,9 @@ import Observation
 /// starts a dictation. The read-aloud hotkey does nothing while a dictation or a test is starting
 /// or running, and a test cannot start while reading.
 ///
+/// `speak(_:)` reads text handed over by the `--mcp` process the same way, replacing a reading
+/// in progress and dropped while a dictation or test is starting or running.
+///
 /// The hotkey and Escape arrive inside the event tap's callback, which must only decide whether
 /// to consume the event. So those handlers change `phase`, which is what that decision reads,
 /// and leave every other piece of work to a task.
@@ -47,7 +50,8 @@ import Observation
     case running(SessionMachine)
     /// A test from the settings window, from its start to its outcome.
     case testing
-    /// Reading the selection aloud, from the press until the reader ends.
+    /// Reading the selection, or text handed over by another process, aloud, from the start until
+    /// the reader ends.
     case reading(Reader)
   }
 
@@ -63,6 +67,7 @@ import Observation
   @ObservationIgnored private let panel = OverlayPanel()
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
+  @ObservationIgnored private var speakObserver: (any NSObjectProtocol)?
 
   /// The session's pill and the screen it stays on, from the press until the session ends.
   private var pill: Pill?
@@ -88,6 +93,14 @@ import Observation
     )
     monitor.start()
     self.monitor = monitor
+    // Posted by the `--mcp` process, so the text arrives from outside the app. The poster
+    // uses `deliverImmediately`, which gets past the suspension an inactive app is under.
+    speakObserver = DistributedNotificationCenter.default().addObserver(
+      forName: SpeakNotification.name, object: nil, queue: .main
+    ) { [weak self] notification in
+      guard let text = notification.userInfo?[SpeakNotification.textKey] as? String else { return }
+      MainActor.assumeIsolated { self?.speak(text) }
+    }
     Task { await refreshAPIKeyStatus() }
   }
 
@@ -126,23 +139,44 @@ import Observation
   private func readAloudPressed() {
     switch phase {
     case .idle:
-      lastError = nil
-      errorFade?.cancel()
-      screen = NSScreen.forFocusedWindow()
-      // Shown only once the reader has the text, so an empty selection goes straight to its
-      // error.
-      pill = Pill(phase: .reading, isReading: true, startedAt: .now)
-      let reader = Reader(
-        settings: store.settings,
-        inserter: inserter,
-        onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
-      phase = .reading(reader)
-      Task { await read(reader) }
+      startReading(.selection)
     case .reading(let reader):
       Task { reader.stop() }
     case .starting, .abandoned, .running, .testing:
       break
     }
+  }
+
+  /// Reads `text` given by another process, under the same rules as the read-aloud hotkey,
+  /// except that a reading in progress is replaced. Dropped while a dictation or test is
+  /// starting or running, so the agent never talks over the user.
+  private func speak(_ text: String) {
+    switch phase {
+    case .idle:
+      startReading(.text(text))
+    case .reading(let reader):
+      // The old reading's task sees it no longer owns the phase and leaves the pill alone.
+      reader.stop()
+      startReading(.text(text))
+    case .starting, .abandoned, .running, .testing:
+      break
+    }
+  }
+
+  private func startReading(_ source: Reader.Source) {
+    lastError = nil
+    errorFade?.cancel()
+    screen = NSScreen.forFocusedWindow()
+    // The pill shows at once, for a selection and for given text alike; an empty selection
+    // then turns it into its error.
+    pill = Pill(phase: .reading, isReading: true, startedAt: .now)
+    let reader = Reader(
+      source,
+      settings: store.settings,
+      inserter: inserter,
+      onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
+    phase = .reading(reader)
+    Task { await read(reader) }
   }
 
   /// Called inside the event tap. Escape belongs to the focused app unless a session is

@@ -17,7 +17,7 @@ Status: draft; implementation has not started.
 | 1 | [Reply request rule, keyterm and setting](01-reply-request-core.md) | Approved spec | Accepted |
 | 2 | [MCP server](02-mcp-server.md) | Approved spec | Accepted |
 | 3 | [Sending a reply request](03-sending.md) | 1 | Accepted |
-| 4 | [Speaking in the app](04-speaking.md) | 2 | Not started |
+| 4 | [Speaking in the app](04-speaking.md) | 2 | Accepted |
 | 5 | [MCP process and setup](05-mcp-process-and-setup.md) | 2, 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-5 | Not started |
 
@@ -41,7 +41,9 @@ Status: draft; implementation has not started.
 - `MCPServer` takes its delivery as a closure and handles newline-delimited JSON-RPC messages
   (2, used by 5). A thrown delivery error becomes a tool error result carrying its message.
 - The distributed notification that carries text to the app: its name and the `text` user-info
-  key live in `EchoTypeCore` (4 defines them, 5 posts them).
+  key live in `EchoTypeCore` (4 defines them, 5 posts them). The poster must post with
+  `options: [.deliverImmediately]`, or the system holds the notification while the menu bar app
+  is inactive.
 - Bundle identifier `com.aidanzealley.echotype` identifies the running app (5).
 - A change to any of these is an escalation, not an edit by a later workstream.
 
@@ -82,3 +84,4 @@ workstreams depend on it, then removes the entry.
 |---|---|---|---|---|
 | 2026-09-29 | Notes for workstream 5, not drift: `MCPServer.handle` answers a blank line with a `-32700` error, so the stdin loop skips empty lines. Delivery errors surface through `localizedDescription`, so the delivery closure throws a `LocalizedError`. | Found in workstream 2 review | Lead 2 | 5 |
 | 2026-09-29 | Gate A accepted with three checks unreported (per-app Return timing in T3 Code, Claude Code and Codex, mention-without-phrase, Keyterms tab showing 99). `returnDelay` stays 200 ms for all apps. Not drift. | User's answer covered the core checks and no app needed longer | Lead 3 | 4, 5, Final |
+| 2026-09-29 | Workstream 5 must post the speak notification with `deliverImmediately` (recorded in the cross-workstream contracts; its frozen packet does not say so). The receiver cannot do this itself without a heavier selector-based observer. Not spec drift. | Found in workstream 4 review and closure | Lead 4 | 5 |

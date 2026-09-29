@@ -1,15 +1,22 @@
 import EchoTypeCore
 import Foundation
 
-/// Runs one reading: copies the selection, reads the key, caps the text, then streams the
-/// `POST /v1/tts` response into a `SpeechPlayer` as it arrives (decision 0018). It starts when
-/// created. `stop()` cancels the request and cuts the audio off at once.
+/// Runs one reading: takes its text (the selection, copied, or the text it was given), reads
+/// the key, caps the text, then streams the `POST /v1/tts` response into a `SpeechPlayer` as it
+/// arrives (decision 0018). It starts when created. `stop()` cancels the request and cuts the
+/// audio off at once.
 @MainActor final class Reader {
   enum Failure: Error {
     case nothingSelected
     case noAPIKey
     /// The audio output could not start.
     case playback(any Error)
+  }
+
+  enum Source {
+    case selection
+    /// Text already in hand, so there is no copy and no wait for the paste restore.
+    case text(String)
   }
 
   /// About 100ms of 16-bit mono audio, the most gathered before it is scheduled.
@@ -23,11 +30,14 @@ import Foundation
 
   /// `onLevel` receives the level of the audio as it plays.
   init(
-    settings: Settings, inserter: Inserter, onLevel: @escaping @MainActor (Double) -> Void
+    _ source: Source,
+    settings: Settings,
+    inserter: Inserter,
+    onLevel: @escaping @MainActor (Double) -> Void
   ) {
     self.inserter = inserter
     player = SpeechPlayer(onLevel: onLevel)
-    task = Task { try await read(settings) }
+    task = Task { try await read(source, settings) }
   }
 
   /// Returns when the audio has finished or the reading was stopped. Throws why it failed
@@ -54,16 +64,23 @@ import Foundation
     return isPaused
   }
 
-  private func read(_ settings: Settings) async throws {
-    try await inserter.waitForRestore()
-    let selection = await Pasteboard.copySelection()
-    try Task.checkCancellation()
-    guard let selection else { throw Failure.nothingSelected }
+  private func read(_ source: Source, _ settings: Settings) async throws {
+    let spoken: String
+    switch source {
+    case .selection:
+      try await inserter.waitForRestore()
+      let selection = await Pasteboard.copySelection()
+      try Task.checkCancellation()
+      guard let selection else { throw Failure.nothingSelected }
+      spoken = selection
+    case .text(let text):
+      spoken = text
+    }
     let apiKey = await Task.detached { Keychain.apiKey() }.value
     guard let apiKey else { throw Failure.noAPIKey }
     try Task.checkCancellation()
 
-    let text = Speech.capped(selection)
+    let text = Speech.capped(spoken)
     let request = Speech.request(text: text, settings: settings, apiKey: apiKey)
     let (bytes, response) = try await URLSession.shared.bytes(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
