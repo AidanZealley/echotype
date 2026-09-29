@@ -27,8 +27,8 @@ when you stop. Select some text and press a second hotkey to hear it read back.
 - **Keyterms.** Add up to 100 names and bits of jargon so they're spelled correctly.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
   pauses, and you can choose the voice and speed.
-- **Last Dictation.** **Last Dictation…** in the menu bar shows how your last dictation
-  was cleaned up, request by request, and copies it as JSON.
+- **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
+  and copies it as JSON.
 - **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
   toggle to turn the hotkeys off. Your API key is kept in the Keychain.
 
@@ -65,14 +65,12 @@ quit EchoType, download the new DMG, drag EchoType into Applications and choose
 
 ## Voice replies
 
-End a dictation with "reply with EchoType" and it sends itself. The agent calls EchoType's `speak`
+End a dictation with "reply with EchoType" and it sends itself. The agent calls the EchoType MCP's `speak`
 tool to read a version of its reply aloud, then writes the full reply as usual. Register the
 server once in each agent: open **Settings → Agents**, copy the command for Claude Code or Codex,
 run it in a terminal, and start a new agent session. EchoType has to be running for `speak` to
 work. The Agents tab also has optional instructions you can copy into your agent's instruction
 file to make spoken replies more reliable without shortening written answers.
-
-T3 Code needs no step of its own. It runs Claude Code and Codex, which use the server themselves.
 
 ## Development
 
