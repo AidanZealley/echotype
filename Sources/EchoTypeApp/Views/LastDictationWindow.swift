@@ -59,6 +59,8 @@ private struct RevisionRow: View {
         LabeledText(label: "Reply", text: revision.reply ?? "No reply")
       }
       .padding(.vertical, 4)
+      // The disclosure content centres a view narrower than the row.
+      .frame(maxWidth: .infinity, alignment: .leading)
     } label: {
       let words = revision.window.split(whereSeparator: \.isWhitespace).count
       Text(
@@ -89,12 +91,19 @@ private struct LabeledText: View {
 private struct MarkedText: NSViewRepresentable {
   let trace: DictationTrace
 
+  // SwiftUI owns the text view's frame and probes `sizeThatFits` with several widths, including
+  // 0, infinity and nil. Laying the displayed container out at a probed width made the view
+  // resize itself, fighting SwiftUI's frame and drawing the paragraph over the summary. So the
+  // view does not resize itself, its container follows the frame (the default
+  // `widthTracksTextView`), and `sizeThatFits` measures in a separate TextKit 1 container.
+
   func makeNSView(context: Context) -> NSTextView {
-    // TextKit 1, because `sizeThatFits` measures with the layout manager.
+    // TextKit 1, so it lays out exactly as `sizeThatFits` measures.
     let view = NSTextView(usingTextLayoutManager: false)
     view.isEditable = false
     view.isSelectable = true
     view.drawsBackground = false
+    view.isVerticallyResizable = false
     view.textContainerInset = .zero
     view.textContainer?.lineFragmentPadding = 0
     return view
@@ -104,16 +113,21 @@ private struct MarkedText: NSViewRepresentable {
     view.textStorage?.setAttributedString(text)
   }
 
-  /// The paragraph's height at the proposed width.
+  /// The paragraph's height at the proposed width, or its single-line size without one.
   func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context)
     -> CGSize?
   {
-    guard let width = proposal.width, let container = view.textContainer,
-      let layout = view.layoutManager
-    else { return nil }
-    container.size = NSSize(width: width, height: .greatestFiniteMagnitude)
+    let width = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+    let container = NSTextContainer(
+      size: NSSize(width: width ?? .greatestFiniteMagnitude, height: .greatestFiniteMagnitude))
+    container.lineFragmentPadding = 0
+    let layout = NSLayoutManager()
+    layout.addTextContainer(container)
+    let storage = NSTextStorage(attributedString: text)
+    storage.addLayoutManager(layout)
     layout.ensureLayout(for: container)
-    return CGSize(width: width, height: ceil(layout.usedRect(for: container).height))
+    let used = layout.usedRect(for: container)
+    return CGSize(width: width ?? ceil(used.width), height: ceil(used.height))
   }
 
   private var text: NSAttributedString {

@@ -282,3 +282,48 @@ agent sessions. Launch it only for G2, and never during an active dictation.
   - One recorded dictation: Passed. His screenshot shows the window after a 49s,
     73-word, 4-commit dictation with commit marks, struck and changed words, five
     request rows (3 accepted, 1 unchanged, 1 cancelled) and Copy as JSON.
+
+### G2 re-check: layout correction (2026-09-29)
+
+- Status: `Passed` 2026-09-29, Aidan's visual re-check through plan escalation E3.
+- Defects Aidan found on the accepted build (`45c7c05`), with screenshots:
+  1. The marked paragraph sometimes shifted up and drew over the summary line. It
+     happened once on its own; resizing the window forced it, with the paragraph
+     jumping and sometimes settling over the summary.
+  2. Expanded request rows centred short Window and Reply blocks, such as "Can you
+     hear me?", instead of aligning them to the leading edge.
+- Cause 1: `MarkedText.sizeThatFits` set the displayed text container's size at each
+  width SwiftUI probed (a harness logged 560, 0, infinity and nil before it settled).
+  `NSTextView` defaults to `isVerticallyResizable = true`, so after each probe the view
+  resized its own frame, and in the unflipped host its origin, to that width's height,
+  fighting the frame SwiftUI assigned. The final position depended on call order.
+- Cause 2: `DisclosureGroup` content centres a view narrower than the row, so only
+  short content appeared centred.
+- Fix, in `Views/LastDictationWindow.swift` only: the text view no longer resizes
+  itself; its container follows the frame through the default `widthTracksTextView`;
+  `sizeThatFits` measures the same attributed string in a separate TextKit 1 stack, so
+  measuring never touches the displayed view, and returns the natural one-line size for
+  a nil or infinite width. The disclosure content gets
+  `.frame(maxWidth: .infinity, alignment: .leading)`. No behavior, contract or
+  ownership change, so the implementation/review loop was not reopened.
+- Checks: `swift test` passes 69 tests; `./scripts/build-app.sh debug` to a temporary
+  path builds and signs (Aidan's running app untouched). Throwaway AppKit harnesses,
+  since deleted: the implementer logged the old code's self-resizing and confirmed that
+  after the fix only SwiftUI changes the frame and, at 12 widths, the frame height equals
+  the rendered height and the paragraph stays below the summary; the disclosure content
+  moved from centred (x 345.75) to leading (x 20). The reviewer independently confirmed
+  the container tracks the frame and the measured height matches the displayed height
+  across widening and narrowing.
+- Review: one fresh review of the diff found no Required defects. Accepted Optional:
+  name `widthTracksTextView` in the comment and shorten it (done by the lead). Declined
+  Optional: caching the measurement, unneeded for one paragraph. Question carried to
+  Aidan's check: whether the last line is ever clipped by a pixel after resizing.
+- Candidate: branch `debug-window` at `45c7c05` plus the uncommitted change to
+  `Views/LastDictationWindow.swift`, built with a plain `./scripts/run.sh`.
+- Evidence (Aidan, 2026-09-29, on the candidate above):
+  - Resize with a long dictation shown, repeatedly narrow and wide: Passed. The marked
+    paragraph never overlapped the summary line and its last line was never clipped,
+    which also answers the review's clipping Question.
+  - Expand every request row: Passed. Window and Reply align to the leading edge in
+    every expanded row.
+- No drift: the correction restores the approved layout.
