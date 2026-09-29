@@ -5,7 +5,7 @@ import SwiftUI
 struct EchoTypeApp: App {
   @State private var store: SettingsStore
   /// Nil for `--hud-demo`, which shows the overlay and must not start the hotkey monitor or
-  /// open the microphone. It records no dictation, so it ignores `--debug`.
+  /// open the microphone. It records no dictation, so it has no Last Dictation window.
   @State private var controller: DictationController?
 
   init() {
@@ -15,11 +15,7 @@ struct EchoTypeApp: App {
       _controller = State(initialValue: nil)
       Task { await PillDemo.run() }
     } else {
-      let debug = CommandLine.arguments.contains("--debug")
-      _controller = State(initialValue: DictationController(store: store, debug: debug))
-      // The debug window opens at launch, so the app starts as a regular app. See
-      // `presentWindow`.
-      if debug { NSApplication.shared.setActivationPolicy(.regular) }
+      _controller = State(initialValue: DictationController(store: store))
     }
     Self.claimLoginItem()
   }
@@ -47,7 +43,7 @@ struct EchoTypeApp: App {
           .disabled(!(controller?.isIdle ?? false))
         Divider()
       }
-      WindowButtons(debug: debug)
+      WindowButtons(hasLastDictation: controller != nil)
       Button("Quit EchoType") {
         NSApplication.shared.terminate(nil)
       }
@@ -61,22 +57,20 @@ struct EchoTypeApp: App {
         .onDisappear(perform: windowClosed)
     }
 
-    Window("Last Dictation", id: DebugWindow.id) {
+    Window("Last Dictation", id: LastDictationWindow.id) {
       if let controller {
-        DebugWindow(controller: controller)
+        LastDictationWindow(controller: controller)
           .onDisappear(perform: windowClosed)
       }
     }
     .defaultSize(width: 560, height: 640)
-    .defaultLaunchBehavior(debug ? .presented : .suppressed)
-    // A window left open when a debug launch quit must not come back in a normal launch.
+    // It opens only from the menu, so the app launches as an accessory app with no window.
+    .defaultLaunchBehavior(.suppressed)
+    // A window left open when the app quit must not come back at the next launch.
     .restorationBehavior(.disabled)
-    // Keeps the window out of the Window menu, which a normal launch shows while Settings is
-    // open.
+    // Keeps the window out of the Window menu, which the app shows while any window is open.
     .commandsRemoved()
   }
-
-  private var debug: Bool { controller?.debug ?? false }
 
   private var statusLine: String {
     guard let controller else { return "Overlay demo" }
@@ -111,16 +105,16 @@ struct EchoTypeApp: App {
   }
 }
 
-/// The menu's window items: Settings, and in debug mode the debug window.
+/// The menu's window items: Settings, and Last Dictation when a controller records dictations.
 private struct WindowButtons: View {
-  let debug: Bool
+  let hasLastDictation: Bool
   @Environment(\.openSettings) private var openSettings
   @Environment(\.openWindow) private var openWindow
 
   var body: some View {
     Button("Settings…") { presentWindow { openSettings() } }
-    if debug {
-      Button("Last Dictation…") { presentWindow { openWindow(id: DebugWindow.id) } }
+    if hasLastDictation {
+      Button("Last Dictation…") { presentWindow { openWindow(id: LastDictationWindow.id) } }
     }
   }
 }

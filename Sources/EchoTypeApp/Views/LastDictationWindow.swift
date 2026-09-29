@@ -2,11 +2,11 @@ import AppKit
 import EchoTypeCore
 import SwiftUI
 
-/// The debug window: the last dictation's commits, revision requests and the words the
+/// The Last Dictation window: the last dictation's commits, revision requests and the words the
 /// inserted text lost or re-punctuated. It only renders `controller.lastTrace`, so a dictation
 /// ending updates it without ordering it front or taking focus.
-struct DebugWindow: View {
-  static let id = "debug"
+struct LastDictationWindow: View {
+  static let id = "last-dictation"
   let controller: DictationController
 
   var body: some View {
