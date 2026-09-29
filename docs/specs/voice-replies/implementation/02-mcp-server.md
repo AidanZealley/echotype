@@ -1,6 +1,6 @@
 # Workstream 2: MCP server
 
-Status: not started.
+Status: accepted.
 
 ## Task packet
 
@@ -64,29 +64,29 @@ swift build
 
 ## Implementation handoff
 
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
+- Base commit: `6e33111`
+- Outcome: `MCPServer` in `EchoTypeCore` speaks both protocol eras and exposes `speak`. Tested without a process, pipe or app.
+- Files changed: `Sources/EchoTypeCore/MCPServer.swift` (new), `Tests/EchoTypeCoreTests/MCPServerTests.swift` (new). Status line at the top not edited.
+- Decisions: `MCPServer` is a final class with `init(deliver:)` and `handle(_:) -> String?`; it is hand-written over `JSONSerialization` (Foundation JSON only). The description and `instructions` are one constant, `MCPServer.speakGuidance`. `initialize` sets legacy mode, which skips version checks afterwards; otherwise a request naming an unsupported `_meta` version gets `-32022` with `data.supported` and `data.requested`. A request with no `_meta` version and no prior `initialize` is served rather than rejected. Messages without an `id` get no response. `tools/call` with a bad name or missing `text` returns a tool error result. `ttlMs` is 3,600,000 and `cacheScope` is `public` (the spec allows only `public` or `private`), defined once as `MCPServer.cacheHints` and merged into the discover and tools/list results. The `-32022` error data shape and the ttl values are my choices, not the spec's.
+- Verification: `swift test --filter MCPServerTests` (4 tests pass); `swift build` succeeds.
+- Known limitations or external checks: Real clients' first message and version are unchecked until the final gate.
+- Specification drift: None.
 
 ## Independent review
 
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
+- Reviewer: fresh `claude -p` session, Opus 5.5, medium reasoning, read-only
+- Verdict: Changes required
+- Required findings: (1) `cacheScope: "shared"` is not a valid MCP value (only `public` or `private`), in the discover and `tools/list` results.
+- Optional observations: (2) non-`LocalizedError` delivery errors give a generic message, so workstream 5's closure should throw a `LocalizedError`; (3) a wrong tool name gets the `text` message rather than `-32602`; (4) the test `Delivered` helper class is unneeded; (5) version constants could be `private`; (6) blank lines get a `-32700` error, so workstream 5 should skip empty lines.
+- Questions: (7) requests with no `_meta` version and no prior `initialize` are served.
 
 ## Resolution
 
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
+- Finding dispositions: 1 accepted and fixed by a fresh remediation pass (`public`, with `ttlMs` and `cacheScope` defined once as `cacheHints`, plus a test assertion). 2 and 6 are carried to workstream 5 as notes: its delivery closure throws a `LocalizedError`, and its stdin loop skips blank lines. 3, 4 and 5 rejected as optional and nonessential with one tool and no external callers. 7 accepted: serving a versionless request costs nothing, covers a legacy client that pings before `initialize`, and the specification is silent.
+- Simplification/deletion pass: one guidance constant, one state flag (`isLegacy`), no dependency, no dead code. The duplicated cache hints were merged in remediation.
+- Final verification: `swift test --filter MCPServerTests` (4 tests) and `swift build` pass.
 
 ## Closure review
 
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
+- Verdict: Accept (fresh session, Opus 5.5, medium reasoning)
+- Remaining required findings: none
