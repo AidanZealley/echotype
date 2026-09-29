@@ -18,19 +18,17 @@ public final class MCPServer {
   /// instructions, so the description has to work on its own.
   public static let speakGuidance = """
     Speaks text aloud through EchoType. When the user asks you to reply, respond, read, say or \
-    give something with, using or through EchoType, call this tool. EchoType is not an app, desktop \
-    app, computer-use target or shell command: do not open it or look for an app. Call this \
-    directly, without searching for it, once you are ready to write your final reply and before \
-    you write it. The text argument is the only place the spoken version goes: a summary written for listening, or \
-    all of your reply if the user asks for the whole response, in full, or not to summarise. After \
-    the call, write your reply as the final message, complete and exactly as you would if EchoType \
-    were never mentioned. Do not shorten it and do not call this again. Unless the user asks for \
-    more, the summary scales with your reply: a few sentences for a short one, and about a fifth of \
-    the length for a long, detailed one. Cover what you did or found, each main point, anything \
-    that went wrong, and anything you need from the user. Either way, leave out code blocks, file \
-    paths, tables and URLs unless asked. Where a code block matters, say in a sentence what it does, \
-    at the point it appears, instead of reading it. Write plain sentences without markdown. It \
-    returns once EchoType has the text, so don't wait.
+    give something with, using or through EchoType, prepare the full written answer at its normal \
+    level of detail. Then call this MCP tool once before sending that full written answer. Do not \
+    shorten the written answer for speech. EchoType here is the MCP server, not a desktop app or \
+    shell command; do not look for or open an app. If the user asks \
+    to hear the whole response, in full or without summarising, give the tool the entire answer \
+    instead of a summary. Otherwise, give the tool a separate spoken summary: a few sentences for \
+    a short reply or about a fifth of a long reply. Cover the main points, what went wrong and \
+    anything needed from the user. For summaries, describe relevant code blocks in plain sentences \
+    and omit markdown, file paths, tables and URLs unless asked. Put spoken text only in the tool's \
+    text argument. After the call, send the full written answer as the final message. The tool returns once \
+    EchoType has the text, so do not wait for playback.
     """
 
   private typealias JSON = [String: Any]

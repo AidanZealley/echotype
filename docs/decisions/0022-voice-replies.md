@@ -48,10 +48,11 @@ because of code blocks, paths and markdown, and speech is billed per character.
   notification, but all it can do is have EchoType read text aloud, so it has no
   authentication.
 
-- **Setup is commands to paste.** Settings has an Agents tab with the registration
-  command for Claude Code and Codex. EchoType doesn't edit another tool's config, run
-  its CLI or report whether an agent is connected. T3 Code needs no step of its own,
-  since it runs those harnesses.
+- **Setup is text to copy.** Settings has an Agents tab with the registration
+  command for Claude Code and Codex and optional instructions to paste into an agent's
+  instruction file. EchoType doesn't edit another tool's config, run its CLI or report
+  whether an agent is connected. T3 Code needs no step of its own, since it runs those
+  harnesses.
 
 ## Consequences
 
@@ -63,5 +64,5 @@ because of code blocks, paths and markdown, and speech is billed per character.
 - The legacy MCP path stays until clients have moved to the modern revision.
 - Nothing tells the user whether an agent is connected. Claude Code once missed the
   server on its first thread and the cause is unknown.
-- Agent behaviour depends on the tool description. Reword it there, not in per-agent
-  instruction files.
+- Agent behaviour depends on the tool description and, optionally, instructions the user
+  copies into their agent's instruction file.
