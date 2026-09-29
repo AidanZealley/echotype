@@ -12,7 +12,8 @@ func settingsRoundTrip() {
     cleanUp: false,
     readAloudHotkey: .controlOptionS,
     voice: "altair",
-    speechSpeed: 1.25
+    speechSpeed: 1.25,
+    sendReplyRequests: false
   )
 
   #expect(Settings(decoding: settings.encoded()) == settings)
@@ -56,6 +57,14 @@ func missingFieldsDefault() {
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
   #expect(Settings(decoding: stored).voice == "ara")
   #expect(Settings(decoding: stored).speechSpeed == 1.0)
+  #expect(Settings(decoding: stored).sendReplyRequests)
+}
+
+@Test("A malformed sendReplyRequests falls back to on without discarding other settings")
+func malformedSendReplyRequests() {
+  let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6},"sendReplyRequests":"no"}"#.utf8)
+
+  #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
 }
 
 @Test("An old batch preference is ignored while other fields survive")

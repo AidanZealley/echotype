@@ -4,17 +4,17 @@ Status: draft; implementation has not started.
 
 ## Orchestration record
 
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `voice-replies`
+- Starting commit: `d451a6f`
 - Review command: `claude -p "<prompt>" --permission-mode plan --model claude-opus-5-5 --effort medium`
 - Specification approved at commit: `5dac92c`
-- Started: `TBD`
+- Started: `2026-09-29`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Reply request rule, keyterm and setting](01-reply-request-core.md) | Approved spec | Not started |
+| 1 | [Reply request rule, keyterm and setting](01-reply-request-core.md) | Approved spec | Accepted |
 | 2 | [MCP server](02-mcp-server.md) | Approved spec | Not started |
 | 3 | [Sending a reply request](03-sending.md) | 1 | Not started |
 | 4 | [Speaking in the app](04-speaking.md) | 2 | Not started |

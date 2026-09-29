@@ -8,10 +8,16 @@ public enum STTConnection {
   public static let maximumKeyterms = 100
   private static let maximumKeytermLength = 50
 
-  /// The settings' keyterms under the endpoint's caps. The streaming URL and the batch request
-  /// both send these.
+  /// The most keyterms a user can save, leaving room for the built-in one.
+  public static let maximumSavedKeyterms = maximumKeyterms - 1
+  private static let builtInKeyterm = "EchoType"
+
+  /// `EchoType` first, then the settings' keyterms under the endpoint's caps. A saved
+  /// `EchoType` in any case is dropped. The streaming URL and the batch request both send these.
   public static func keyterms(settings: Settings) -> [String] {
-    settings.keyterms.prefix(maximumKeyterms).map { String($0.prefix(maximumKeytermLength)) }
+    let saved = settings.keyterms.filter { $0.caseInsensitiveCompare(builtInKeyterm) != .orderedSame }
+    return ([builtInKeyterm] + saved.prefix(maximumSavedKeyterms))
+      .map { String($0.prefix(maximumKeytermLength)) }
   }
 
   /// Longer than the 400ms default so brief pauses stay in one utterance, while allowing
