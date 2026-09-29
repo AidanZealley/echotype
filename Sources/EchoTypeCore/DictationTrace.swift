@@ -1,6 +1,6 @@
 import Foundation
 
-/// What happened during one dictation, for the debug window and its JSON export.
+/// What happened during one dictation, for the Last Dictation window and its JSON export.
 public struct DictationTrace: Codable, Equatable, Sendable {
   public var startedAt: Date
   public var endedAt: Date?

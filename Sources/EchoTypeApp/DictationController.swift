@@ -23,9 +23,8 @@ import Observation
 /// `speak(_:)` reads text handed over by the `--mcp` process the same way, replacing a reading
 /// in progress and dropped while a dictation or test is starting or running.
 ///
-/// In debug mode each dictation that reaches `running` is recorded as a `DictationTrace` and
-/// published as `lastTrace` when it ends, for the debug window. Tests and readings are not
-/// recorded, and without debug mode nothing is.
+/// Each dictation that reaches `running` is recorded as a `DictationTrace` and published as
+/// `lastTrace` when it ends, for the Last Dictation window. Tests and readings are not recorded.
 ///
 /// The hotkey and Escape arrive inside the event tap's callback, which must only decide whether
 /// to consume the event. So those handlers change `phase`, which is what that decision reads,
@@ -35,10 +34,8 @@ import Observation
   private(set) var hasAPIKey: Bool?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
-  /// Set by `--debug` for the launch.
-  let debug: Bool
-  /// The last dictation that reached `running`, whatever its outcome. Nil until one ends, and
-  /// always without `debug`.
+  /// The last dictation that reached `running`, whatever its outcome. Nil until one ends. Kept in
+  /// memory only.
   private(set) var lastTrace: DictationTrace?
   /// The dictation being recorded, from `running` until it is published.
   @ObservationIgnored private var trace: DictationTrace?
@@ -87,9 +84,8 @@ import Observation
   /// Fades an error pill after it has been read.
   private var errorFade: Task<Void, Never>?
 
-  init(store: SettingsStore, debug: Bool) {
+  init(store: SettingsStore) {
     self.store = store
-    self.debug = debug
     audio.onLevel = { [weak self] level in self?.levelChanged(level) }
     audio.onDevice = { [weak self] device in self?.updatePill { $0.inputDevice = device } }
     let monitor = HotkeyMonitor(
@@ -257,11 +253,10 @@ import Observation
       end(showing: error)
     case .started(let session, let chunks, let apiKey):
       phase = .running(session)
-      if debug { trace = DictationTrace(startedAt: .now, cleanUp: settings.cleanUp) }
+      trace = DictationTrace(startedAt: .now, cleanUp: settings.cleanUp)
       let reviser = settings.cleanUp ? Reviser(
         request: { try await RevisionRequest.revise($0, apiKey: apiKey, final: false) },
-        finalRequest: { try await RevisionRequest.revise($0, apiKey: apiKey, final: true) },
-        capture: debug) : nil
+        finalRequest: { try await RevisionRequest.revise($0, apiKey: apiKey, final: true) }) : nil
       let (live, audioFailure) = await run(
         session, streaming: chunks, reviser: reviser,
         endsOnReplyRequest: settings.sendReplyRequests)

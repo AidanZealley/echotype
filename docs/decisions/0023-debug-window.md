@@ -1,6 +1,6 @@
-# 0023 A development-only window shows the last dictation's trace
+# 0023 A Last Dictation window shows the last dictation's trace
 
-Status: accepted, 2026-09-29. Specified in [the debug window spec](../specs/debug-window.md).
+Status: accepted, 2026-09-29. Specified in [the Last Dictation spec](../specs/debug-window.md).
 
 ## Context
 
@@ -11,10 +11,10 @@ model returned the text unchanged. Finding out meant reproducing the requests by
 
 ## Decision
 
-- **`--debug` turns it on for one launch.** `./scripts/run.sh --debug` passes the flag to
-  the app. There is no setting, and a normal launch records nothing, has no **Last
-  Dictation…** menu item and no window. `--hud-demo` records no dictation, so it ignores
-  `--debug`.
+- **Every launch records the last dictation.** There is no setting and no launch flag.
+  **Last Dictation…** sits below **Settings…** in the menu and is the only way to open
+  the window. `--hud-demo` records no dictation, so it has no item. The trace stays in
+  memory: it is not written to disk, logged or sent anywhere.
 - **One value, `DictationTrace`, is both what the window renders and what Copy as JSON
   encodes.** It holds each growth of committed text with its time, every revision request
   with its window, raw reply, latency and result, the streamed and inserted text, and the
@@ -23,8 +23,8 @@ model returned the text unchanged. Finding out meant reproducing the requests by
 - **Only the last dictation that reached `running` is kept.** Inserted, failed, cancelled
   and empty dictations all replace it; the Test button and read-aloud never do. A
   cancelled session is told apart from an empty one by the last snapshot's state.
-  Cancellation doesn't wait for an in-flight revision just to complete the trace, and
-  `Reviser` records attempts only when the controller asks it to.
+  Cancellation doesn't wait for an in-flight revision just to complete the trace.
+  `Reviser` records every request it makes.
 - **Words are marked with the faithfulness rule.** Streamed and inserted text split into
   words and normalise as `Reviser.isFaithful` does, sharing one tokenizer. Each inserted
   word matches the next equal streamed word. Unmatched streamed words are deleted
@@ -39,10 +39,17 @@ model returned the text unchanged. Finding out meant reproducing the requests by
   Both menu items share one helper, which replaces 0011's `SettingsButton`. It makes the
   app regular, opens the window, activates on the next turn and raises the app's
   frontmost main-capable window. Either window's close returns the app to an accessory
-  app only when no other main-capable window is still visible or minimised. A debug
-  launch starts as a regular app because the window opens at launch. A dictation ending
+  app only when no other main-capable window is still visible or minimised. The window
+  never opens at launch, so the app always starts as an accessory app. A dictation ending
   only changes `lastTrace`, so the open window updates without moving in front or taking
   focus.
+
+## Change of decision
+
+The window first shipped behind a development-only `--debug` launch flag, with no
+recording and no menu item without it. After checking it on the Mac, Aidan decided on
+2026-09-29 that it is useful to everyone and removed the gate from the whole window,
+diagnostic detail included. The flag no longer exists.
 
 ## Consequences
 
@@ -56,3 +63,5 @@ model returned the text unchanged. Finding out meant reproducing the requests by
 - A cancelled request may be missing from the list when its call hadn't returned by the
   time the trace was published.
 - Selecting and copying the marked text includes the commit marks.
+- Every dictation keeps its revision windows and replies in memory until the next
+  dictation that reaches `running` replaces them.

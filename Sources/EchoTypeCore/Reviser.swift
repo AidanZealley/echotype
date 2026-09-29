@@ -12,19 +12,16 @@ public actor Reviser {
   private var attempted = 0
   private var working: Task<Void, Never>?
   private var finishing = false
-  private let capture: Bool
-  /// Each completed request in start order, recorded only when `capture` is on. Only one
-  /// request runs at a time, so appending at completion keeps start order.
+  /// Each completed request in start order. Only one request runs at a time, so appending at
+  /// completion keeps start order.
   public private(set) var attempts: [DictationTrace.Revision] = []
 
   public nonisolated let updates: AsyncStream<Void>
   private nonisolated let publisher: AsyncStream<Void>.Continuation
 
-  /// `capture` records `attempts` for the debug trace.
-  public init(request: @escaping Request, finalRequest: Request? = nil, capture: Bool = false) {
+  public init(request: @escaping Request, finalRequest: Request? = nil) {
     self.request = request
     self.finalRequest = finalRequest ?? request
-    self.capture = capture
     (updates, publisher) = AsyncStream.makeStream(of: Void.self)
   }
 
@@ -71,7 +68,8 @@ public actor Reviser {
     let (head, tail) = Self.split(revised)
     let window = Self.join(tail, String(input.dropFirst(covered)))
     guard !window.isEmpty else { return }
-    let started = capture ? (at: Date(), clock: ContinuousClock.now) : nil
+    let startedAt = Date()
+    let startedClock = ContinuousClock.now
     let reply: String?
     let failure: String?
     do {
@@ -83,11 +81,9 @@ public actor Reviser {
     }
     let trimmed = reply?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     let result = judge(trimmed, failure: failure, window: window, input: input)
-    if let started {
-      attempts.append(.init(
-        at: started.at, isFinal: isFinal, window: window, reply: reply,
-        duration: (ContinuousClock.now - started.clock) / .seconds(1), result: result))
-    }
+    attempts.append(.init(
+      at: startedAt, isFinal: isFinal, window: window, reply: reply,
+      duration: (ContinuousClock.now - startedClock) / .seconds(1), result: result))
     switch result {
     case .cancelled, .superseded:
       return

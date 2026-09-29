@@ -130,8 +130,7 @@ func revisionAttempts() async {
   let calls = RevisionCalls(replies: ["One", "One now two."])
   let reviser = Reviser(
     request: { try await calls.answer($0) },
-    finalRequest: { _ in throw RevisionError.failed },
-    capture: true
+    finalRequest: { _ in throw RevisionError.failed }
   )
   var updates = reviser.updates.makeAsyncIterator()
   _ = await reviser.submit(committed: "One.")

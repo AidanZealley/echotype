@@ -27,6 +27,8 @@ when you stop. Select some text and press a second hotkey to hear it read back.
 - **Keyterms.** Add up to 100 names and bits of jargon so they're spelled correctly.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
   pauses, and you can choose the voice and speed.
+- **Last Dictation.** **Last Dictation…** in the menu bar shows how your last dictation
+  was cleaned up, request by request, and copies it as JSON.
 - **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
   toggle to turn the hotkeys off. Your API key is kept in the Keychain.
 
@@ -80,7 +82,6 @@ microphone and accessibility permissions between builds.
 ```sh
 ./scripts/run.sh              # build, sign and launch .build/EchoType.app
 ./scripts/run.sh --hud-demo   # loop the overlay through its states, no mic or key needed
-./scripts/run.sh --debug      # also open a Last Dictation window with commits and revision requests
 swift test                    # run the core tests
 ./scripts/install.sh          # build a release and replace /Applications/EchoType.app
 ```

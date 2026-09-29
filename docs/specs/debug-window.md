@@ -1,10 +1,11 @@
-# Debug window
+# Last Dictation window
 
 A window that shows what happened during the last dictation: where the stream committed
 text, which revision requests ran, what each one returned, and which words the inserted
 text lost or re-punctuated compared with what was streamed.
 
-Status: approved, 2026-09-29. Not implemented.
+Status: approved, 2026-09-29. Revised the same day to make it a normal feature with no
+debug gate (see [0023](../decisions/0023-debug-window.md)). Implemented.
 
 ## Problem
 
@@ -16,12 +17,12 @@ today is to reproduce the requests by hand.
 
 ## Behaviour
 
-- Debug mode is for development only. `./scripts/run.sh --debug` turns it on for that
-  launch. `run.sh` already passes its arguments to the app, as it does for `--hud-demo`.
-  There is no setting, and normal launches of the installed app do not enter debug mode.
-- In debug mode the window opens at launch, and a menu bar item, **Last Dictation…**,
-  below **Settings…**, reopens it after it is closed. Without `--debug` there is no
-  window, no menu item and no recording.
+- Every launch records the last dictation, in the installed app and the development
+  build alike. There is no setting and no launch flag. A menu bar item, **Last
+  Dictation…**, below **Settings…**, opens the window. `--hud-demo` records no dictation
+  and has no item.
+- The window opens only from the menu item. The app launches as an accessory app with no
+  window open, and a window left open at quit does not come back at the next launch.
 - The window shows the most recent dictation that reached `running`, whatever its
   outcome: inserted, failed, cancelled or empty. The Test button is not recorded.
   Cancellation does not wait for an in-flight revision merely to complete the trace.
@@ -29,9 +30,10 @@ today is to reproduce the requests by hand.
   front or takes focus, so a dictation that finishes with the window open still inserts
   into the target app. Before the first dictation it says "No dictation yet".
 - It opens the same way as Settings: the app becomes a regular app while it is open and
-  returns to an accessory app when the last of its windows closes. That includes the
-  launch in debug mode, when the window opens without a menu click. Closing the debug
-  window while Settings is open must not hide the Dock icon, and the reverse.
+  returns to an accessory app when the last of its windows closes. Closing the Last
+  Dictation window while Settings is open must not hide the Dock icon, and the reverse.
+- The trace stays in memory. It is not written to disk, logged or sent anywhere. Only
+  Copy as JSON moves it, to the pasteboard.
 
 ### Layout
 
@@ -123,10 +125,9 @@ Use the app's system colours so both themes work. Keep the text selectable.
   When a word repeats, the walk can mark a different copy as deleted than the model
   removed. The text reads the same, so this is acceptable.
 
-- **`Reviser`** records attempts only when the controller enables debug capture and
-  exposes them as `public private(set) var attempts: [DictationTrace.Revision]`.
-  Without debug capture it keeps no request text or replies for the trace. Time each
-  recorded request with `ContinuousClock`. The existing guards map to results:
+- **`Reviser`** records every request it makes and exposes them as
+  `public private(set) var attempts: [DictationTrace.Revision]`. Time each request with
+  `ContinuousClock`. The existing guards map to results:
   - `Task.isCancelled` after the request: `cancelled`.
   - `finishing && input != committed`: `superseded`.
   - The request threw: `failed`, with `String(describing: error)`.
@@ -142,9 +143,8 @@ Use the app's system colours so both themes work. Keep the text selectable.
 
 ### App
 
-- **`DictationController`** takes `debug: Bool` in its initialiser and gains
-  `private(set) var lastTrace: DictationTrace?`, observable. With `debug` off it records
-  nothing and `lastTrace` stays nil.
+- **`DictationController`** gains `private(set) var lastTrace: DictationTrace?`,
+  observable. It is nil until the first dictation ends.
   - `dictate` starts a trace when the session starts running, with `cleanUp` from the
     session's settings.
   - `run` appends a `Commit` whenever `snapshot.committed` grows, with the new suffix,
@@ -156,36 +156,36 @@ Use the app's system colours so both themes work. Keep the text selectable.
     `Outcome.nothing` covers both a cancelled and an empty session, so the trace records
     `cancelled` when the last snapshot's state was `.cancelled` and `nothing` otherwise.
   - `test()` records nothing.
-- **`DebugWindow`**, a new `Sources/EchoTypeApp/Views/DebugWindow.swift`, renders
-  `controller.lastTrace` as described above. Build the text as one `Text` from
-  `AttributedString` runs so it wraps and selects as a paragraph.
-- **`EchoTypeApp`** reads `--debug` from `CommandLine.arguments` in `init`, as it does
-  `--hud-demo`, and passes it to the controller. It adds a
-  `Window("Last Dictation", id: "debug")` scene with `.defaultLaunchBehavior`
-  `.presented` in debug mode and `.suppressed` otherwise, and shows the menu item only
-  in debug mode. The item opens the window with `openWindow` using the same activation
-  steps as `SettingsButton`. Move those steps into one helper shared by both buttons. Each scene's
-  `onDisappear` switches back to `.accessory` only when no other window that can become
-  main is still visible.
+- **`LastDictationWindow`**, in `Sources/EchoTypeApp/Views/LastDictationWindow.swift`,
+  renders `controller.lastTrace` as described above. The text is a non-editable,
+  selectable `NSTextView` built from one attributed string, so it wraps and selects as a
+  paragraph and shows hover text for single words (see 0023).
+- **`EchoTypeApp`** adds a `Window("Last Dictation", id: "last-dictation")` scene with
+  `.defaultLaunchBehavior(.suppressed)`, `.restorationBehavior(.disabled)` and
+  `.commandsRemoved()`. It shows the menu item whenever it has a controller, which
+  `--hud-demo` does not. The item opens the window with `openWindow` through
+  `presentWindow`, the activation helper Settings also uses. Each scene's `onDisappear`
+  switches back to `.accessory` only when no other window that can become main is still
+  visible or minimised.
 
 ### Docs
 
-Add `./scripts/run.sh --debug` to the README's development commands, beside
-`--hud-demo`.
+The README lists Last Dictation among its features.
 
 ### Decision record
 
-Add `docs/decisions/0023-debug-window.md` recording the trace, the `--debug` flag
-and the marking rule, and link it from `docs/decisions/README.md`.
+`docs/decisions/0023-debug-window.md` records the trace, the marking rule, the window's
+activation and the removal of the original debug gate. `docs/decisions/README.md` links
+it.
 
 ## Tests
 
 - `DictationTrace.marks`: streamed `"I-I'm never sure. Why it fails"` in two commits
   and inserted `"I'm never sure why it fails"` gives `I` deleted, `I'm` kept,
   `sure.` changed to `sure`, `Why` changed to `why`, and a boundary before `Why`.
-- `Reviser.attempts`: with debug capture enabled and replies that are accepted,
-  unfaithful, and thrown, the attempts record `accepted`, `rejected(word:)` naming
-  the added word, and `failed`, in order. This pins the mapping the window depends
+- `Reviser.attempts`: with replies that are accepted, unfaithful, and thrown, the
+  attempts record `accepted`, `rejected(word:)` naming the added word, and `failed`, in
+  order. This pins the mapping the window depends
   on. The other results need no tests.
 
 ## Open questions
@@ -202,8 +202,9 @@ and the marking rule, and link it from `docs/decisions/README.md`.
 After implementation, run `swift test`, then check on the Mac with the development
 build:
 
-- `./scripts/run.sh --debug` opens the window at launch, showing "No dictation yet".
-  `./scripts/run.sh` shows no window and no **Last Dictation…** item.
+- `./scripts/run.sh` starts the app with no window open. **Last Dictation…** sits below
+  **Settings…** and opens the window, showing "No dictation yet".
+  `./scripts/run.sh --hud-demo` shows no **Last Dictation…** item.
 
 - Dictate a passage of more than 50 words with a pause mid-sentence, a stutter and a
   self-correction ("at three, no, four"). The window shows commit marks at the pauses,
@@ -213,6 +214,6 @@ build:
   stays behind the editor, and the text goes into the editor.
 - Cancel a dictation with Escape. The window shows it as cancelled.
 - Copy as JSON, paste into a text editor, and check it is readable.
-- Open Settings and the debug window together, close one, and check the other still
+- Open Settings and the Last Dictation window together, close one, and check the other still
   shows and the Dock icon stays until both are closed.
 - Check both themes.

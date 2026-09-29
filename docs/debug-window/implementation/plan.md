@@ -16,7 +16,8 @@ Status: implementation in progress.
 |---:|---|---|---|
 | 1 | [Trace and revision evidence](01-trace-core.md) | Approved spec | Accepted |
 | 2 | [Capture and show the last dictation](02-debug-window.md) | Workstream 1 accepted | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1–2 accepted | Not started |
+| 3 | [Make Last Dictation a normal feature](03-remove-debug-gate.md) | Workstream 2 accepted | Accepted |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1–3 accepted | Not started |
 
 ## Why these boundaries
 
@@ -37,9 +38,12 @@ the app owner. Documentation follows the app workstream that makes it true.
 - `Reviser.attempts` is ordered by request start. Each settled attempt contains its
   request window, raw reply when one arrived, result and measured duration. A
   deliberately cancelled dictation need not wait for an in-flight model response just
-  to complete the trace. Attempt capture is enabled only in debug mode.
+  to complete the trace. Workstream 3 makes attempt capture unconditional and removes
+  the `capture` parameter.
 - The controller publishes only the last dictation that reached `running`; tests and
-  read-aloud never create a trace. Debug off retains no trace.
+  read-aloud never create a trace. Workstreams 1 and 2 gate the trace on `--debug`.
+  Workstream 3 removes the gate, so every launch with a controller retains the last
+  trace in memory, and `--debug` no longer exists.
 
 ## Ownership handoffs
 
@@ -50,28 +54,38 @@ the app owner. Documentation follows the app workstream that makes it true.
   silently rewrite it.
 - Workstream 2 owns `Sources/EchoTypeApp/DictationController.swift`,
   `Sources/EchoTypeApp/App.swift`, `Sources/EchoTypeApp/Views/DebugWindow.swift`,
-  `README.md`, and the new decision record plus index. No workstream overlaps these
-  files. The final review may correct either owner after its lead assigns the fix.
+  `README.md`, and the new decision record plus index. Workstreams 1 and 2 overlap in no
+  files.
+- Workstream 3 takes over both accepted workstreams' files for this change:
+  `Reviser.swift`, `DictationTrace.swift` (comments only), `ReviserTests.swift`,
+  `DictationController.swift`, `App.swift`, `Views/DebugWindow.swift` (renamed to
+  `Views/LastDictationWindow.swift`), `README.md`, `docs/specs/debug-window.md`,
+  decision 0023 and its index entry. The final review may correct any owner after its
+  lead assigns the fix.
 
 ## Whole-feature acceptance
 
 - The approved [spec](../../specs/debug-window.md) is implemented without changing
-  the behavior of normal dictation, read-aloud, reply requests or Settings.
+  the behavior of normal dictation, read-aloud, reply requests or Settings, with Aidan's
+  2026-09-29 change: Last Dictation, including its diagnostic detail, is a normal
+  feature with no debug gate.
 - Focused Core tests and `swift test` pass; the app builds through the development
   script. Review records explain any unavailable command.
 - Gate G1 passes with recorded evidence for the spec's Mac Final gate before
-  workstream 2 is accepted.
-- Decision record `0023-debug-window.md` and the README agree with the code.
+  workstream 2 is accepted. Gate G2 passes with recorded evidence for workstream 3's
+  External validation before workstream 3 is accepted.
+- The spec, decision record `0023-debug-window.md` and the README agree with the code.
 
 ## External validation gates
 
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
 | G1: Mac behavior | Workstream 2 | After closure, before acceptance | Passed | Signed development build from `./scripts/run.sh --debug`, with branch/head recorded in workstream 2 | Passed 2026-09-29: Aidan ran every Final gate check on `debug-window` at `d34e023` plus workstream 2's diff, and all passed. Evidence is in workstream 2's External validation. |
+| G2: Ungated Mac behavior | Workstream 3 | After closure, before acceptance | Passed | Signed development build from `./scripts/run.sh`, with branch/head recorded in workstream 3 | Passed 2026-09-29: Aidan ran all four checks (launch state, menu item, empty window, one recorded dictation) on `debug-window` at `d8d334d` plus workstream 3's diff, and all passed. Evidence is in workstream 3's External validation. |
 
 ## Escalations
 
-Empty until a lead blocks. A blocking lead creates `E1`, then `E2` as needed, with
+A blocking lead creates `E1`, then `E2` as needed, with
 the decision needed, realistic options, recommendation, evidence and what it unblocks.
 The orchestrator writes Aidan's answer into that entry. The resuming lead records the
 lasting decision in its handoff and, if downstream work relies on it, in the log below,
