@@ -205,8 +205,6 @@ build:
   punctuation in amber. The request list accounts for every request.
 - With the window open and a text editor focused, dictate again. The window updates,
   stays behind the editor, and the text goes into the editor.
-- Turn off Wi-Fi mid-dictation. The trace shows failed requests and the streamed text
-  was inserted.
 - Cancel a dictation with Escape. The window shows it as cancelled.
 - Copy as JSON, paste into a text editor, and check it is readable.
 - Open Settings and the debug window together, close one, and check the other still
