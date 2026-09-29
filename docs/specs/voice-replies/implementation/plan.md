@@ -7,7 +7,7 @@ Status: draft; implementation has not started.
 - Integration branch: `TBD`
 - Starting commit: `TBD`
 - Review command: `claude -p "<prompt>" --permission-mode plan --model claude-opus-5-5 --effort medium`
-- Specification approved at commit: `TBD`
+- Specification approved at commit: `5dac92c`
 - Started: `TBD`
 
 ## Workstream order
