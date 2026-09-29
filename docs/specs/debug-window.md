@@ -16,16 +16,20 @@ today is to reproduce the requests by hand.
 
 ## Behaviour
 
-- A menu bar item, **Last Dictation…**, below **Settings…**, opens the window. It is
-  always present and there is no setting. Recording one session's trace costs a few
-  kilobytes, so there is nothing to switch off.
+- Debug mode is for development only. `./scripts/run.sh --debug` turns it on for that
+  launch. `run.sh` already passes its arguments to the app, as it does for `--hud-demo`.
+  There is no setting, and the installed app never enters debug mode.
+- In debug mode the window opens at launch, and a menu bar item, **Last Dictation…**,
+  below **Settings…**, reopens it after it is closed. Without `--debug` there is no
+  window, no menu item and no recording.
 - The window shows the most recent dictation that reached `running`, whatever its
   outcome: inserted, failed, cancelled or empty. The Test button is not recorded.
 - While the window is open, it updates when a dictation ends. It never orders itself
   front or takes focus, so a dictation that finishes with the window open still inserts
   into the target app. Before the first dictation it says "No dictation yet".
 - It opens the same way as Settings: the app becomes a regular app while it is open and
-  returns to an accessory app when the last of its windows closes. Closing the debug
+  returns to an accessory app when the last of its windows closes. That includes the
+  launch in debug mode, when the window opens without a menu click. Closing the debug
   window while Settings is open must not hide the Dock icon, and the reverse.
 
 ### Layout
@@ -133,8 +137,9 @@ Use the app's system colours so both themes work. Keep the text selectable.
 
 ### App
 
-- **`DictationController`** gains `private(set) var lastTrace: DictationTrace?`,
-  observable.
+- **`DictationController`** takes `debug: Bool` in its initialiser and gains
+  `private(set) var lastTrace: DictationTrace?`, observable. With `debug` off it records
+  nothing and `lastTrace` stays nil.
   - `dictate` starts a trace when the session starts running, with `cleanUp` from the
     session's settings.
   - `run` appends a `Commit` whenever `snapshot.committed` grows, with the new suffix,
@@ -149,15 +154,23 @@ Use the app's system colours so both themes work. Keep the text selectable.
 - **`DebugWindow`**, a new `Sources/EchoTypeApp/Views/DebugWindow.swift`, renders
   `controller.lastTrace` as described above. Build the text as one `Text` from
   `AttributedString` runs so it wraps and selects as a paragraph.
-- **`EchoTypeApp`** adds a `Window("Last Dictation", id: "debug")` scene and the menu
-  item, which opens it with `openWindow` using the same activation steps as
-  `SettingsButton`. Move those steps into one helper shared by both buttons. Each scene's
+- **`EchoTypeApp`** reads `--debug` from `CommandLine.arguments` in `init`, as it does
+  `--hud-demo`, and passes it to the controller. It adds a
+  `Window("Last Dictation", id: "debug")` scene with `.defaultLaunchBehavior`
+  `.presented` in debug mode and `.suppressed` otherwise, and shows the menu item only
+  in debug mode. The item opens the window with `openWindow` using the same activation
+  steps as `SettingsButton`. Move those steps into one helper shared by both buttons. Each scene's
   `onDisappear` switches back to `.accessory` only when no other window that can become
   main is still visible.
 
+### Docs
+
+Add `./scripts/run.sh --debug` to the README's development commands, beside
+`--hud-demo`.
+
 ### Decision record
 
-Add `docs/decisions/0022-debug-window.md` recording the trace, the always-on menu item
+Add `docs/decisions/0022-debug-window.md` recording the trace, the `--debug` flag
 and the marking rule, and link it from `docs/decisions/README.md`.
 
 ## Tests
@@ -171,9 +184,6 @@ and the marking rule, and link it from `docs/decisions/README.md`.
 
 ## Open questions
 
-- **Always-on menu item.** It adds one item for everyone for a diagnostic tool. If it
-  feels like clutter after the dictation issues are settled, hide it behind holding
-  Option while the menu is open instead of adding a setting.
 - **History.** One session is enough while the window is open, because it updates as
   each dictation ends. If sessions are regularly lost by dictating again before looking,
   keep the last three and add a picker.
@@ -184,7 +194,10 @@ and the marking rule, and link it from `docs/decisions/README.md`.
 ## Final gate
 
 After implementation, run `swift test`, then check on the Mac with the development
-build (`scripts/run.sh`):
+build:
+
+- `./scripts/run.sh --debug` opens the window at launch, showing "No dictation yet".
+  `./scripts/run.sh` shows no window and no **Last Dictation…** item.
 
 - Dictate a passage of more than 50 words with a pause mid-sentence, a stutter and a
   self-correction ("at three, no, four"). The window shows commit marks at the pauses,
