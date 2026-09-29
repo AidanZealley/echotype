@@ -17,17 +17,20 @@ public final class MCPServer {
   /// The `speak` description and the server `instructions`. Not every client reads
   /// instructions, so the description has to work on its own.
   public static let speakGuidance = """
-    Speaks text aloud to the user through EchoType. Use it when the user asks for your reply \
-    to be read, spoken, or given with or through EchoType. Finish your reply first, then call \
-    this once with a version written for listening. Unless the user asks for more, speak a \
-    summary that scales with your reply: a few sentences for a short one, and about a fifth \
-    of the length for a long, detailed one. Cover what you did or found, each main point, \
-    anything that went wrong, and anything you need from the user. If the user asks for the \
-    whole response, in full, or not to summarise, speak all of it. Either way, leave out code \
-    blocks, file paths, tables and URLs unless asked. Where a code block matters, say in a \
-    sentence what it does, at the point it appears, instead of reading it. Write plain \
-    sentences without markdown. It returns once EchoType has the text, so don't wait or call \
-    it again.
+    Speaks text aloud to the user through EchoType. This tool is what "EchoType" means in a \
+    request like "reply with EchoType": there is no app to open or look for. Use it when the \
+    user asks for your reply to be read, spoken, or given with or through EchoType. Call this \
+    once, before you write your reply. The text argument is the only place the spoken version \
+    goes: a summary written for listening, or all of your reply if the user asks for the whole \
+    response, in full, or not to summarise. After the call, write your reply as the final \
+    message, complete and exactly as you would if EchoType were never mentioned. Do not \
+    shorten it and do not call this again. Unless the user asks for more, the summary scales \
+    with your reply: a few sentences for a short one, and about a fifth of the length for a \
+    long, detailed one. Cover what you did or found, each main point, anything that went wrong, \
+    and anything you need from the user. Either way, leave out code blocks, file paths, tables \
+    and URLs unless asked. Where a code block matters, say in a sentence what it does, at the \
+    point it appears, instead of reading it. Write plain sentences without markdown. It \
+    returns once EchoType has the text, so don't wait.
     """
 
   private typealias JSON = [String: Any]

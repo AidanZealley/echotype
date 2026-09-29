@@ -1,11 +1,11 @@
 # Voice replies
 
 The user dictates a prompt to a coding agent, ends it by asking for a spoken reply, and
-the message sends itself. The agent replies as usual, then speaks a version of its reply
-through EchoType. One press of the dictation hotkey starts the exchange, and nothing else
+the message sends itself. The agent speaks a version of its reply through EchoType,
+then writes its reply as usual. One press of the dictation hotkey starts the exchange, and nothing else
 needs a key.
 
-Status: draft, 2026-09-29. Not implemented.
+Status: draft, 2026-09-29. Implemented on the `voice-replies` branch; Gate B is pending.
 
 ## Problem
 
@@ -30,7 +30,9 @@ EchoType does the listening and the speaking, and the agent decides what to say:
 - **The agent summarises by default.** Speech is billed per character and is the largest
   cost EchoType has, and the full reply is usually on screen. Unless the request asks for
   more, the agent speaks a summary that scales with its reply, about a fifth of the length
-  for a long one. Nothing in the app enforces the length beyond the existing
+  for a long one. The agent calls `speak` first, then writes its full reply as the final message. The
+  written reply is unchanged: only the `speak` text is shortened.
+  Nothing in the app enforces the length beyond the existing
   `Speech.capped`.
 - **The agent speaks through MCP.** EchoType ships an MCP server with one `speak` tool.
   Its description tells the agent when to call it and how to write for listening. Claude
@@ -105,17 +107,20 @@ ordinary dictation.
 The description does the work an instruction file would otherwise do, and it goes into
 every agent that loads the server. Starting text:
 
-> Speaks text aloud to the user through EchoType. Use it when the user asks for your reply
-> to be read, spoken, or given with or through EchoType. Finish your reply first, then call
-> this once with a version written for listening. Unless the user asks for more, speak a
-> summary that scales with your reply: a few sentences for a short one, and about a fifth
-> of the length for a long, detailed one. Cover what you did or found, each main point,
-> anything that went wrong, and anything you need from the user. If the user asks for the
-> whole response, in full, or not to summarise, speak all of it. Either way, leave out code
-> blocks, file paths, tables and URLs unless asked. Where a code block matters, say in a
-> sentence what it does, at the point it appears, instead of reading it. Write plain
-> sentences without markdown. It returns once EchoType has the text, so don't wait or call
-> it again.
+> Speaks text aloud to the user through EchoType. This tool is what "EchoType" means in a
+> request like "reply with EchoType": there is no app to open or look for. Use it when the
+> user asks for your reply to be read, spoken, or given with or through EchoType. Call this
+> once, before you write your reply. The text argument is the only place the spoken version
+> goes: a summary written for listening, or all of your reply if the user asks for the whole
+> response, in full, or not to summarise. After the call, write your reply as the final
+> message, complete and exactly as you would if EchoType were never mentioned. Do not
+> shorten it and do not call this again. Unless the user asks for more, the summary scales
+> with your reply: a few sentences for a short one, and about a fifth of the length for a
+> long, detailed one. Cover what you did or found, each main point, anything that went wrong,
+> and anything you need from the user. Either way, leave out code blocks, file paths, tables
+> and URLs unless asked. Where a code block matters, say in a sentence what it does, at the
+> point it appears, instead of reading it. Write plain sentences without markdown. It
+> returns once EchoType has the text, so don't wait.
 
 Send the same text as the server's `instructions`, in the `initialize` result for legacy
 clients and the `server/discover` result for modern ones (see the protocol section). Not
@@ -245,7 +250,7 @@ After implementation, run `swift test`, then check on the Mac with the installed
   request, and which version it named.
 - **Agent behaviour.** In each agent, try "reply with EchoType", "respond with EchoType"
   and "read the whole response with EchoType, and don't summarise" on a prompt whose
-  answer is long and includes code. The agent calls `speak` once, after its reply. The
+  answer is long and includes code. The agent calls `speak` once, before its written reply, and the reply is written in full. The
   first two speak a summary of roughly a fifth of the reply's length, with no code read
   out. The third speaks the whole reply, describing each code block in a sentence where it
   appears. Record the character count of each spoken text against the reply's length, to

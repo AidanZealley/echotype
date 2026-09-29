@@ -18,7 +18,7 @@ Status: draft; implementation has not started.
 | 2 | [MCP server](02-mcp-server.md) | Approved spec | Accepted |
 | 3 | [Sending a reply request](03-sending.md) | 1 | Accepted |
 | 4 | [Speaking in the app](04-speaking.md) | 2 | Accepted |
-| 5 | [MCP process and setup](05-mcp-process-and-setup.md) | 2, 4 | Not started |
+| 5 | [MCP process and setup](05-mcp-process-and-setup.md) | 2, 4 | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-5 | Not started |
 
 ## Why these boundaries
@@ -65,7 +65,7 @@ Status: draft; implementation has not started.
 | Gate | Workstream | Placement | Status |
 |---|---|---|---|
 | A. Sending, Return timing, keyterm | 3 | After closure, before acceptance | Passed; per-app timing, mention-without-phrase and Keyterms tab 99 unreported |
-| B. MCP in each agent, agent behaviour, speaking | 5 | After closure, before acceptance | Pending |
+| B. MCP in each agent, agent behaviour, speaking | 5 | After closure, before acceptance | Passed for Codex and Claude Code (retest 3); pending: T3 Code, first-message protocol logs, character counts, speaking check 3 (Reading pill, Space pause, hotkey stop, drop during dictation, not-running error) |
 
 Gate A covers the specification's Final gate items Sending, Return timing and Keyterm. Gate B
 covers MCP in each agent, Agent behaviour and Speaking. The user runs both on the Mac with the
@@ -74,7 +74,7 @@ runs end to end.
 
 ## Escalations
 
-Empty until a lead blocks. One entry per escalation. The lead that resolves one records its
+None open. One entry per escalation. The lead that resolves one records its
 lasting decision in the workstream handoff, and in the decision and drift log when later
 workstreams depend on it, then removes the entry.
 
@@ -85,3 +85,9 @@ workstreams depend on it, then removes the entry.
 | 2026-09-29 | Notes for workstream 5, not drift: `MCPServer.handle` answers a blank line with a `-32700` error, so the stdin loop skips empty lines. Delivery errors surface through `localizedDescription`, so the delivery closure throws a `LocalizedError`. | Found in workstream 2 review | Lead 2 | 5 |
 | 2026-09-29 | Gate A accepted with three checks unreported (per-app Return timing in T3 Code, Claude Code and Codex, mention-without-phrase, Keyterms tab showing 99). `returnDelay` stays 200 ms for all apps. Not drift. | User's answer covered the core checks and no app needed longer | Lead 3 | 4, 5, Final |
 | 2026-09-29 | Workstream 5 must post the speak notification with `deliverImmediately` (recorded in the cross-workstream contracts; its frozen packet does not say so). The receiver cannot do this itself without a heavier selector-based observer. Not spec drift. | Found in workstream 4 review and closure | Lead 4 | 5 |
+| 2026-09-29 | Tool description and server instructions (`MCPServer.speakGuidance`, workstream 2) gained one sentence saying the tool is what "EchoType" means in "reply with EchoType" and that there is no app to open; the spec's starting text updated to match. Same handling, no protocol or contract change. | Gate B: Codex did not connect the phrase to `speak` on its first trial | Lead 5 | 2, 5 |
+| 2026-09-29 | `MCPServer.speakGuidance` gained wording that the written reply is unchanged and only the `speak` text is shortened; the spec's starting text and summary bullet updated to match. Same handling, no protocol or contract change. | Gate B retest 1: Codex shortened its written reply as if summarising | Lead 5 | 2, 5 |
+| 2026-09-29 | Ordering reversed: the agent calls `speak` once first, with the spoken text only in its argument, then writes the full reply as the final message. Spec, `MCPServer.speakGuidance`, README and packet updated; the wording says which text goes where. Overrides the spec's "speak after the reply". | Gate B retest 2: with `speak` last, its turn became the final message and hid the full reply | User (E5-1) | 2, 5 |
+| 2026-09-29 | Send rule: "...the summary for the speak tool, using EchoType," matched `ReplyRequest.matches` as the spec's rule reads (`speak` counted as a verb, `using EchoType` as the name). Not a code defect, so no edit; escalated in E5-1. | Gate B retest 2 | Lead 5 | 3 |
+| 2026-09-29 | Lasting Gate B decisions: the agent calls `speak` once first, then writes its full reply (already logged above); the send rule is left as is (option 1), so "...the summary for the speak tool, using EchoType," can still send. Nothing changed in `ReplyRequest`. | User did not answer the send-rule question after retest 3, so option 1 stands | User (E5-1), Lead 5 | 3, 5, Final |
+| 2026-09-29 | Gate B accepted with items pending: T3 Code (README line stays unverified), first-message protocol logs, character counts (waived), speaking check 3 (unreported). Not drift. | User could not connect T3 Code, waived counts, and reported nothing on the rest | Lead 5 | Final |
