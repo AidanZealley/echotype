@@ -114,7 +114,8 @@ Use the app's system colours so both themes work. Keep the text selectable.
   JSON button encodes.
 
 - **Marking.** `DictationTrace.marks` returns the streamed words, each marked `kept`,
-  `deleted` or `changed(inserted: String)`, with a flag for a commit boundary before it.
+  `deleted` or `changed(inserted: String)`, with the index of the commit that starts at
+  it, if any.
   Align the words as `Reviser.isFaithful` does: split both texts into words, normalise
   them the same way, and walk the streamed words forward, matching each inserted word to
   the next equal one. Unmatched streamed words are deleted. A matched word whose raw form
