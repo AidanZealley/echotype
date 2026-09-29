@@ -18,15 +18,24 @@ import AppKit
     pasteboard.setString(text, forType: .string)
     pending = (saved, before)
 
-    let vKeyCode: CGKeyCode = 9
-    for keyDown in [true, false] {
-      let event = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: keyDown)
-      // Explicit flags, so the still-held Option key does not turn this into Cmd+Opt+V.
-      event?.flags = .maskCommand
-      event?.post(tap: .cghidEventTap)
-    }
+    // Explicit flags, so the still-held Option key does not turn this into Cmd+Opt+V.
+    post(key: 9, flags: .maskCommand)
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { self.restore(after: before) }
+  }
+
+  /// Presses Return with empty flags, so a still-held hotkey modifier does not turn it into
+  /// Option+Return or similar.
+  func pressReturn() {
+    post(key: 36, flags: [])
+  }
+
+  private func post(key: CGKeyCode, flags: CGEventFlags) {
+    for keyDown in [true, false] {
+      let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: keyDown)
+      event?.flags = flags
+      event?.post(tap: .cghidEventTap)
+    }
   }
 
   /// What to put back afterwards. While an earlier insertion's restore is pending and its

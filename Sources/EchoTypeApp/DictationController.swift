@@ -214,9 +214,17 @@ import Observation
       let reviser = settings.cleanUp ? Reviser(
         request: { try await RevisionRequest.revise($0, apiKey: apiKey, final: false) },
         finalRequest: { try await RevisionRequest.revise($0, apiKey: apiKey, final: true) }) : nil
-      let (live, audioFailure) = await run(session, streaming: chunks, reviser: reviser)
+      let (live, audioFailure) = await run(
+        session, streaming: chunks, reviser: reviser,
+        endsOnReplyRequest: settings.sendReplyRequests)
+      // Decided on the streamed text, so it does not wait for or depend on the revision.
+      // Only a dictation's `.insert` outcome can send.
+      var sends = false
+      if settings.sendReplyRequests, audioFailure == nil, case .insert(let text) = live {
+        sends = ReplyRequest.matches(text)
+      }
       let outcome = await revisedOutcome(live, reviser: reviser)
-      finish(outcome, audioFailure: audioFailure)
+      await finish(outcome, audioFailure: audioFailure, sends: sends)
     }
   }
 
@@ -263,7 +271,7 @@ import Observation
       try? await Task.sleep(for: .seconds(5))
       if !Task.isCancelled { commit() }
     }
-    let (outcome, audioFailure) = await run(session, streaming: chunks, reviser: nil)
+    let (outcome, audioFailure) = await run(session, streaming: chunks, reviser: nil, endsOnReplyRequest: false)
     // A session that ended early must not have a later one committed for it.
     commitAfterFive.cancel()
     return switch (outcome, audioFailure) {
@@ -323,7 +331,7 @@ import Observation
   /// Runs a session, mirroring streamed and revised text into the pill while feeding audio.
   private func run(
     _ session: SessionMachine, streaming chunks: AsyncThrowingStream<Data, any Error>,
-    reviser: Reviser?
+    reviser: Reviser?, endsOnReplyRequest: Bool
   ) async -> (SessionMachine.Outcome, (any Error)?) {
     let outcome = Task { await session.run() }
     var pump: Task<(any Error)?, Never>?
@@ -339,7 +347,14 @@ import Observation
         }
       }
     }
+    var committedLength = 0
     for await snapshot in session.snapshots {
+      if endsOnReplyRequest, snapshot.committed.count > committedLength,
+        ReplyRequest.matches(snapshot.committed)
+      {
+        commit()
+      }
+      committedLength = snapshot.committed.count
       currentSnapshot = snapshot
       state = snapshot.state
       let committed = if let reviser {
@@ -381,11 +396,13 @@ import Observation
     return failure
   }
 
-  private func finish(_ outcome: SessionMachine.Outcome, audioFailure: (any Error)?) {
+  private func finish(
+    _ outcome: SessionMachine.Outcome, audioFailure: (any Error)?, sends: Bool
+  ) async {
     var failure = audioFailure
     switch outcome {
     case .insert(let text):
-      inserter.insert(text)
+      if sends { await insertAndSend(text) } else { inserter.insert(text) }
     case .nothing:
       break
     case .failed(let text, let error):
@@ -393,6 +410,18 @@ import Observation
       failure = failure ?? error
     }
     end(showing: failure.map(describe))
+  }
+
+  // MARK: Sending
+
+  /// How long the focused app gets to take the paste before Return, one value for every app.
+  private static let returnDelay = Duration.milliseconds(200)
+
+  /// The one place that sends: inserts, waits for the paste to land, then presses Return.
+  private func insertAndSend(_ text: String) async {
+    inserter.insert(text)
+    try? await Task.sleep(for: Self.returnDelay)
+    inserter.pressReturn()
   }
 
   // MARK: Reading
