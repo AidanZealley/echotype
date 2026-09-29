@@ -46,11 +46,15 @@ struct SettingsView: View {
 /// or runs its CLI. The commands name the running app, so they stay right if it moves.
 private struct AgentsTab: View {
   private static let agentInstructions = """
-    When I ask you to reply, respond or read an answer with or using EchoType, prepare the full \
-    written answer at its normal level of detail. Before sending it, find and call the speak tool \
-    on the echotype MCP server once with a separate short summary for listening, or the whole answer \
-    if I ask for it in full. Then send the full written answer without shortening it for speech. \
-    EchoType here is an MCP server, not a desktop app.
+    ## EchoType
+
+    When asked to reply, respond, or read an answer with or using EchoType:
+
+    1. Prepare the full written answer at its normal level of detail.
+    2. Before sending it, find and call the `speak` tool on the EchoType MCP server once. Speak a separate short summary, unless asked to hear the whole answer.
+    3. Send the full written answer without shortening it for speech.
+
+    EchoType is an MCP server, not a desktop app.
     """
 
   private var app: String {
