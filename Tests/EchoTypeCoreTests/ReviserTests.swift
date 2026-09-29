@@ -13,9 +13,9 @@ func revisionFaithfulness() {
   #expect(!Reviser.isFaithful("Ship we should", to: "We should ship"))
 }
 
-@Test("The 100-word window includes its whole starting sentence")
+@Test("The 50-word window includes its whole starting sentence")
 func revisionWindowKeepsRecentWords() async {
-  let words = (1...105).map { "word\($0)" }
+  let words = (1...55).map { "word\($0)" }
   let recentSentence = words.joined(separator: " ") + "."
   let first = "Old. " + recentSentence + " Wait. No."
   let calls = RevisionCalls()
@@ -30,9 +30,9 @@ func revisionWindowKeepsRecentWords() async {
   await reviser.stop()
 }
 
-@Test("Two long sentences stay together even when they exceed 100 words")
+@Test("Two long sentences stay together even when they exceed 50 words")
 func revisionWindowKeepsSentences() async {
-  let longSentence = (1...110).map { "word\($0)" }.joined(separator: " ") + "."
+  let longSentence = (1...60).map { "word\($0)" }.joined(separator: " ") + "."
   let first = "First. " + longSentence + " Third."
   let calls = RevisionCalls()
   let reviser = Reviser(request: { await calls.record($0); return $0 })
@@ -81,7 +81,7 @@ func revisionFallback() async {
 
 @Test("A rejected stretch leaves later windows once it is out of the recent tail")
 func revisionRejectionAdvances() async {
-  let recentSentence = (1...105).map { "word\($0)" }.joined(separator: " ") + "."
+  let recentSentence = (1...55).map { "word\($0)" }.joined(separator: " ") + "."
   let first = "Old. " + recentSentence + " Wait. No."
   let calls = RevisionCalls(replies: ["Unexpected words", "Unexpected words"])
   let reviser = Reviser(request: { try await calls.answer($0) })

@@ -1,7 +1,7 @@
 # 0021 Revise committed dictation during the session
 
 Status: accepted, 2026-09-27. Live timing and window updated 2026-09-28. Rejected
-revisions advance from 2026-09-29. Supersedes
+revisions advance and the window shrinks to 50 words from 2026-09-29. Supersedes
 the batch pass in [0017](0017-batch-pass-on-commit.md).
 
 ## Context
@@ -18,11 +18,14 @@ self-corrections. It also kept the whole recording in memory and delayed every i
   streamed. The pill shows accepted revisions, and its final text is what gets inserted.
   With cleanup off, insert the streamed transcript. The Test button never revises.
 - Send a recent window: the revised text from whichever starts earlier, its second-to-last
-  sentence or the sentence containing its 100th word from the end, plus committed text
+  sentence or the sentence containing its 50th word from the end, plus committed text
   not yet revised. Keep one request in flight and combine commits that arrive while it
   runs. At stop, cancel the live request and make one final revision of the remaining
   window. A failed session keeps accepted revisions and the unrevised committed tail
   without a final call.
+  Fifty words is two or three spoken sentences. The word minimum stops short phrases
+  split at pauses from shrinking the window to a few words. It was 100 until 2026-09-29,
+  which re-revised each sentence five or more times as it moved back through the window.
 - Accept a revision only when its words appear in the input in the same order after
   lowercasing, splitting at hyphens and dashes, and stripping punctuation at word edges.
   This permits deletions, including a stutter such as `I-I'm` to `I'm`, and punctuation
@@ -39,7 +42,7 @@ self-corrections. It also kept the whole recording in memory and delayed every i
 
 ## Consequences
 
-- Requests normally cover whole recent sentences and at least 100 revised words when available,
+- Requests normally cover whole recent sentences and at least 50 revised words when available,
   rather than the whole dictation. The user can see corrections before stopping. A long
   unpunctuated tail can still make a large window. The final request can
   delay insertion; live and final requests have separate resource timeouts. Aidan reported
