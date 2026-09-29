@@ -125,6 +125,29 @@ func revisionFinalFallback() async {
   #expect(await reviser.finish(committed: "Keep this.") == "Keep this.")
 }
 
+@Test("Captured attempts record each request's result in start order")
+func revisionAttempts() async {
+  let calls = RevisionCalls(replies: ["One", "One now two."])
+  let reviser = Reviser(
+    request: { try await calls.answer($0) },
+    finalRequest: { _ in throw RevisionError.failed },
+    capture: true
+  )
+  var updates = reviser.updates.makeAsyncIterator()
+  _ = await reviser.submit(committed: "One.")
+  _ = await updates.next()
+  _ = await reviser.submit(committed: "One. Two.")
+  while await reviser.attempts.count < 2 { await Task.yield() }
+  _ = await reviser.finish(committed: "One. Two. Three.")
+
+  let attempts = await reviser.attempts
+  #expect(attempts.map(\.result) == [.accepted, .rejected(word: "now"), .failed("failed")])
+  #expect(attempts.map(\.window) == ["One.", "One Two.", "One Two. Three."])
+  #expect(attempts.map(\.reply) == ["One", "One now two.", nil])
+  #expect(attempts.map(\.isFinal) == [false, false, true])
+  #expect(attempts.allSatisfy { $0.duration >= 0 })
+}
+
 private enum RevisionError: Error { case failed }
 
 private actor RevisionCalls {

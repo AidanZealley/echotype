@@ -1,20 +1,20 @@
 # Debug window implementation plan
 
-Status: draft; implementation has not started.
+Status: implementation in progress.
 
 ## Orchestration record
 
-- Integration branch: `TBD` (suggested: `debug-window`)
-- Starting commit: `TBD`
+- Integration branch: `debug-window`
+- Starting commit: `e7fe4d1b2afa2648f6aee2192ba95e566a130704`
 - Review command: lead subagents
-- Specification approved at commit: `TBD` (record the workflow's starting commit if the approved spec is part of it)
-- Started: `TBD`
+- Specification approved at commit: `e7fe4d1b2afa2648f6aee2192ba95e566a130704`
+- Started: 2026-09-29
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Trace and revision evidence](01-trace-core.md) | Approved spec | Not started |
+| 1 | [Trace and revision evidence](01-trace-core.md) | Approved spec | Accepted |
 | 2 | [Capture and show the last dictation](02-debug-window.md) | Workstream 1 accepted | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1–2 accepted | Not started |
 
@@ -81,4 +81,4 @@ then removes the resolved entry before acceptance.
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-09-29 | `DictationTrace.Mark` carries `commit: Int?`, the index into `commits` starting at that word, in place of the spec's boundary flag. `Reviser` opts in with `init(..., capture: Bool = false)`. | The app needs the commit index for the gap hover and cannot count boundaries when a commit has no words. | Workstream 1 lead (spec allows adjusting names) | 1, 2 |

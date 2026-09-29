@@ -4,11 +4,14 @@ import Foundation
 enum Prose {
   /// Lowercased words with punctuation stripped at their edges. Hyphens and dashes separate
   /// words, so dropping the stutter in "I-I'm" is a deletion.
-  static func words(_ text: some StringProtocol) -> [String] {
+  static func words(_ text: some StringProtocol) -> [String] { tokens(text).map(\.word) }
+
+  /// Each word with the raw form it came from, such as `("sure.", "sure")`.
+  static func tokens(_ text: some StringProtocol) -> [(raw: String, word: String)] {
     text.split(whereSeparator: { $0.isWhitespace || "-–—".contains($0) }).compactMap { raw in
       let word = raw.drop(while: isPunctuation).reversed().drop(while: isPunctuation)
         .reversed().map(String.init).joined().lowercased()
-      return word.isEmpty ? nil : word
+      return word.isEmpty ? nil : (String(raw), word)
     }
   }
 

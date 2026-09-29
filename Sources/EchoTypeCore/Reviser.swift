@@ -12,13 +12,19 @@ public actor Reviser {
   private var attempted = 0
   private var working: Task<Void, Never>?
   private var finishing = false
+  private let capture: Bool
+  /// Each completed request in start order, recorded only when `capture` is on. Only one
+  /// request runs at a time, so appending at completion keeps start order.
+  public private(set) var attempts: [DictationTrace.Revision] = []
 
   public nonisolated let updates: AsyncStream<Void>
   private nonisolated let publisher: AsyncStream<Void>.Continuation
 
-  public init(request: @escaping Request, finalRequest: Request? = nil) {
+  /// `capture` records `attempts` for the debug trace.
+  public init(request: @escaping Request, finalRequest: Request? = nil, capture: Bool = false) {
     self.request = request
     self.finalRequest = finalRequest ?? request
+    self.capture = capture
     (updates, publisher) = AsyncStream.makeStream(of: Void.self)
   }
 
@@ -40,7 +46,7 @@ public actor Reviser {
     working?.cancel()
     await working?.value
     self.committed = committed
-    await revise(committed: committed, using: finalRequest)
+    await revise(committed: committed, isFinal: true)
     publisher.finish()
     return shown
   }
@@ -56,28 +62,61 @@ public actor Reviser {
     while !finishing && attempted < committed.count {
       let input = committed
       attempted = input.count
-      await revise(committed: input, using: request)
+      await revise(committed: input, isFinal: false)
     }
     working = nil
   }
 
-  private func revise(committed input: String, using request: Request) async {
+  private func revise(committed input: String, isFinal: Bool) async {
     let (head, tail) = Self.split(revised)
     let window = Self.join(tail, String(input.dropFirst(covered)))
     guard !window.isEmpty else { return }
-    let result = try? await request(window)
-    guard !Task.isCancelled, !finishing || input == committed else { return }
-    let trimmed = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let started = capture ? (at: Date(), clock: ContinuousClock.now) : nil
+    let reply: String?
+    let failure: String?
+    do {
+      reply = try await (isFinal ? finalRequest : request)(window)
+      failure = nil
+    } catch {
+      reply = nil
+      failure = String(describing: error)
+    }
+    let trimmed = reply?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let result = judge(trimmed, failure: failure, window: window, input: input)
+    if let started {
+      attempts.append(.init(
+        at: started.at, isFinal: isFinal, window: window, reply: reply,
+        duration: (ContinuousClock.now - started.clock) / .seconds(1), result: result))
+    }
+    switch result {
+    case .cancelled, .superseded:
+      return
+    case .accepted, .unchanged:
+      revised = Self.join(head, trimmed)
+      covered = input.count
+      publisher.yield(())
+    case .rejected, .replyRequestRemoved, .empty, .failed:
+      // A failed or unfaithful call keeps the streamed words but still counts them as covered.
+      // They stay in the recent tail for later windows, but an edit the model keeps making
+      // cannot hold every later window open until the final call gets the whole dictation.
+      revised = Self.join(head, window)
+      covered = input.count
+    }
+  }
+
+  /// Classifies a completed request. `failure` is set when the request threw.
+  private func judge(_ trimmed: String, failure: String?, window: String, input: String)
+    -> DictationTrace.Result
+  {
+    if Task.isCancelled { return .cancelled }
+    if finishing && input != committed { return .superseded }
+    if let failure { return .failed(failure) }
+    if trimmed.isEmpty { return .empty }
+    if let word = Self.firstUnmatchedWord(in: trimmed, from: window) { return .rejected(word: word) }
     // A revision may not drop a reply request: the model can read it as an instruction and
     // delete it, and the dictation would then send without the phrase in the inserted text.
-    let keepsRequest = !ReplyRequest.matches(window) || ReplyRequest.matches(trimmed)
-    let accepted = !trimmed.isEmpty && Self.isFaithful(trimmed, to: window) && keepsRequest
-    // A failed or unfaithful call keeps the streamed words but still counts them as covered.
-    // They stay in the recent tail for later windows, but an edit the model keeps making
-    // cannot hold every later window open until the final call gets the whole dictation.
-    revised = Self.join(head, accepted ? trimmed : window)
-    covered = input.count
-    if accepted { publisher.yield(()) }
+    if ReplyRequest.matches(window) && !ReplyRequest.matches(trimmed) { return .replyRequestRemoved }
+    return trimmed == window ? .unchanged : .accepted
   }
 
   private static func split(_ text: String) -> (String, String) {
@@ -99,12 +138,18 @@ public actor Reviser {
   }
 
   public static func isFaithful(_ revision: String, to input: String) -> Bool {
+    firstUnmatchedWord(in: revision, from: input) == nil
+  }
+
+  /// The first normalised word of `revision` that is not the next match in `input`: an added
+  /// or substituted word, or one moved out of order. Nil when the revision is faithful.
+  public static func firstUnmatchedWord(in revision: String, from input: String) -> String? {
     let source = Prose.words(input)
     var position = 0
     for word in Prose.words(revision) {
-      guard let match = source[position...].firstIndex(of: word) else { return false }
+      guard let match = source[position...].firstIndex(of: word) else { return word }
       position = match + 1
     }
-    return true
+    return nil
   }
 }
