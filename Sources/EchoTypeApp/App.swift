@@ -2,7 +2,6 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
-@main
 struct EchoTypeApp: App {
   @State private var store: SettingsStore
   /// Nil for `--hud-demo`, which shows the overlay and must not start the hotkey monitor or
