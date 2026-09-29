@@ -128,21 +128,16 @@ every client reads server instructions, so the tool description must work on its
 
 ## Setup
 
-`README.md` gains a section with the registration for each agent, using the installed
-app's executable:
+Settings has an Agents tab. It shows one command to paste into a terminal for each of Claude Code
+and Codex, using the running app's executable, with a Copy button and a hint to run the matching
+`remove` command first if the server is already registered. EchoType never edits an agent's config
+or runs its CLI, and it does not detect whether an agent is connected.
 
-- Claude Code:
-  `claude mcp add --scope user echotype -- /Applications/EchoType.app/Contents/MacOS/EchoTypeApp --mcp`
-- Codex, in `~/.codex/config.toml`:
+- Claude Code: `claude mcp add --scope user echotype -- <app> --mcp`
+- Codex: `codex mcp add echotype -- <app> --mcp`
+- T3 Code needs no step of its own. It runs Claude Code and Codex, which use the server themselves.
 
-  ```toml
-  [mcp_servers.echotype]
-  command = "/Applications/EchoType.app/Contents/MacOS/EchoTypeApp"
-  args = ["--mcp"]
-  ```
-
-- T3 Code: whatever the final gate finds. If it passes the harness's own MCP
-  configuration through, no separate step is needed.
+`README.md` points to the Agents tab.
 
 ## Implementation
 

@@ -22,6 +22,9 @@ struct SettingsView: View {
       Tab("Read Aloud", systemImage: "speaker.wave.2") {
         ReadAloudTab(store: store)
       }
+      Tab("Agents", systemImage: "terminal") {
+        AgentsTab()
+      }
       Tab("API Key", systemImage: "key") {
         APIKeyTab(controller: controller)
       }
@@ -30,6 +33,52 @@ struct SettingsView: View {
       }
     }
     .frame(width: 460)
+  }
+}
+
+/// Commands to paste into a terminal, so EchoType never edits another tool's config or runs its
+/// CLI. They name the running app, so they stay right if it moves. Registering twice fails, hence
+/// the remove hint.
+private struct AgentsTab: View {
+  private var app: String {
+    let path = Bundle.main.executablePath ?? "/Applications/EchoType.app/Contents/MacOS/EchoTypeApp"
+    return path.contains(" ") ? "'\(path)'" : path
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("Connect an agent to EchoType so it can read replies aloud. Run the command once in a terminal, then start a new agent session.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      command("Claude Code", "claude mcp add --scope user echotype -- \(app) --mcp", remove: "claude mcp remove echotype")
+      command("Codex", "codex mcp add echotype -- \(app) --mcp", remove: "codex mcp remove echotype")
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(20)
+    .fixedSize(horizontal: false, vertical: true)
+  }
+
+  private func command(_ name: String, _ add: String, remove: String) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text(name)
+        Spacer()
+        Button("Copy", systemImage: "doc.on.doc") {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(add, forType: .string)
+        }
+      }
+      Text(verbatim: add)
+        .font(.caption.monospaced())
+        .textSelection(.enabled)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
+      Text(verbatim: "Already connected? Run \(remove) first.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
   }
 }
 
