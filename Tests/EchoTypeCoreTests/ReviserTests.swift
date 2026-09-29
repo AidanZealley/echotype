@@ -13,6 +13,16 @@ func revisionFaithfulness() {
   #expect(!Reviser.isFaithful("Ship we should", to: "We should ship"))
 }
 
+@Test("A revision that drops a reply request is rejected")
+func revisionKeepsReplyRequest() async {
+  let streamed = "Check the build. Reply with EchoType."
+  let calls = RevisionCalls(replies: ["Check the build."])
+  let reviser = Reviser(request: { try await calls.answer($0) })
+  let text = await reviser.finish(committed: streamed)
+  #expect(text == streamed)
+  #expect(ReplyRequest.matches(text))
+}
+
 @Test("The 50-word window includes its whole starting sentence")
 func revisionWindowKeepsRecentWords() async {
   let words = (1...55).map { "word\($0)" }

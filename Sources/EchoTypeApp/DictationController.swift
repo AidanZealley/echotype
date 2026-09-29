@@ -251,13 +251,13 @@ import Observation
       let (live, audioFailure) = await run(
         session, streaming: chunks, reviser: reviser,
         endsOnReplyRequest: settings.sendReplyRequests)
-      // Decided on the streamed text, so it does not wait for or depend on the revision.
+      let outcome = await revisedOutcome(live, reviser: reviser)
+      // Decided on the text that is inserted, so a send always has the request in it.
       // Only a dictation's `.insert` outcome can send.
       var sends = false
-      if settings.sendReplyRequests, audioFailure == nil, case .insert(let text) = live {
+      if settings.sendReplyRequests, audioFailure == nil, case .insert(let text) = outcome {
         sends = ReplyRequest.matches(text)
       }
-      let outcome = await revisedOutcome(live, reviser: reviser)
       await finish(outcome, audioFailure: audioFailure, sends: sends)
     }
   }

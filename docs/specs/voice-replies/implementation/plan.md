@@ -19,7 +19,7 @@ Status: draft; implementation has not started.
 | 3 | [Sending a reply request](03-sending.md) | 1 | Accepted |
 | 4 | [Speaking in the app](04-speaking.md) | 2 | Accepted |
 | 5 | [MCP process and setup](05-mcp-process-and-setup.md) | 2, 4 | Accepted |
-| Final | [Whole-feature review](final-review.md) | Workstreams 1-5 | Not started |
+| Final | [Whole-feature review](final-review.md) | Workstreams 1-5 | Accepted |
 
 ## Why these boundaries
 
@@ -74,7 +74,9 @@ runs end to end.
 
 ## Escalations
 
-None open. One entry per escalation. The lead that resolves one records its
+None open.
+
+One entry per escalation. The lead that resolves one records its
 lasting decision in the workstream handoff, and in the decision and drift log when later
 workstreams depend on it, then removes the entry.
 
@@ -91,3 +93,6 @@ workstreams depend on it, then removes the entry.
 | 2026-09-29 | Send rule: "...the summary for the speak tool, using EchoType," matched `ReplyRequest.matches` as the spec's rule reads (`speak` counted as a verb, `using EchoType` as the name). Not a code defect, so no edit; escalated in E5-1. | Gate B retest 2 | Lead 5 | 3 |
 | 2026-09-29 | Lasting Gate B decisions: the agent calls `speak` once first, then writes its full reply (already logged above); the send rule is left as is (option 1), so "...the summary for the speak tool, using EchoType," can still send. Nothing changed in `ReplyRequest`. | User did not answer the send-rule question after retest 3, so option 1 stands | User (E5-1), Lead 5 | 3, 5, Final |
 | 2026-09-29 | Gate B accepted with items pending: T3 Code (README line stays unverified), first-message protocol logs, character counts (waived), speaking check 3 (unreported). Not drift. | User could not connect T3 Code, waived counts, and reported nothing on the rest | Lead 5 | Final |
+| 2026-09-29 | `MCPServer.speakGuidance` rewritten to lead with the mapping ("reply/respond/read/say ... with/using/through EchoType" means call the tool), name the wrong actions (app, desktop app, computer-use target, shell command) and say to call it directly without searching for it, once, before the final reply. Spec starting text updated to match. Same handling, no protocol or contract change. | Post-acceptance defect A: a Codex agent used computer use to look for an EchoType app | Lead Final | 2, 5 |
+| 2026-09-29 | Send decision moved from the streamed text to the text actually inserted, and `Reviser` rejects a revision that drops a reply request the input had. Spec Sending and `finish` bullets updated. Overrides the spec's "streamed text is used rather than the revised text". | Post-acceptance defect B: `isFaithful` is a subsequence check, so the cleanup model could delete "reply with EchoType" while the send, decided on streamed text, still fired | Lead Final | 1, 3 |
+| 2026-09-29 | Final review accepted. Fix A passed on the Mac (wording much more reliable). Fix B (phrase lost before submit) was not reported either way; it stays unverified against the real cleanup model and is reopened if the user sees it again, with the streamed committed text, each revision result, the inserted text and the Clean up setting. Not drift. | User's answer to EF-1 | User (EF-1), Lead Final | Final |
