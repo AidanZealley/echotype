@@ -1,6 +1,6 @@
 # 0023 A Last Dictation window shows the last dictation's trace
 
-Status: accepted, 2026-09-29. Specified in [the Last Dictation spec](../specs/debug-window.md).
+Status: accepted, 2026-09-29.
 
 ## Context
 
@@ -53,9 +53,11 @@ diagnostic detail included. The flag no longer exists.
 
 ## Consequences
 
-- One dictation is kept. Dictating again before looking loses the previous trace.
+- One dictation is kept. Dictating again before looking loses the previous trace. If
+  that happens regularly, keep the last three and add a picker.
 - Time between commits includes speaking time, so it only roughly stands in for pause
-  length.
+  length. If endpointing is the suspect, record the gap between the last partial of one
+  utterance and its `speech_final` instead.
 - Hyphens and dashes separate words and appear in no mark, so the stutter `I-I'm` shows
   as `I` struck through and `I'm`, and `well known` revised to `well-known` shows as kept.
 - A session where nothing is said ends when the silence timeout calls `cancel()`, so it

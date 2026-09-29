@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-09-25 (settings gates G1 and G2). Departs from the
 specification's `LSUIElement` behaviour. The activation helper and close rule are
-superseded by [0023](0023-debug-window.md).
+superseded by [0023](0023-last-dictation-window.md).
 
 ## Context
 
