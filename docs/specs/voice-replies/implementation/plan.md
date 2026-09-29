@@ -16,7 +16,7 @@ Status: draft; implementation has not started.
 |---:|---|---|---|
 | 1 | [Reply request rule, keyterm and setting](01-reply-request-core.md) | Approved spec | Accepted |
 | 2 | [MCP server](02-mcp-server.md) | Approved spec | Accepted |
-| 3 | [Sending a reply request](03-sending.md) | 1 | Not started |
+| 3 | [Sending a reply request](03-sending.md) | 1 | Accepted |
 | 4 | [Speaking in the app](04-speaking.md) | 2 | Not started |
 | 5 | [MCP process and setup](05-mcp-process-and-setup.md) | 2, 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1-5 | Not started |
@@ -62,7 +62,7 @@ Status: draft; implementation has not started.
 
 | Gate | Workstream | Placement | Status |
 |---|---|---|---|
-| A. Sending, Return timing, keyterm | 3 | After closure, before acceptance | Pending |
+| A. Sending, Return timing, keyterm | 3 | After closure, before acceptance | Passed; per-app timing, mention-without-phrase and Keyterms tab 99 unreported |
 | B. MCP in each agent, agent behaviour, speaking | 5 | After closure, before acceptance | Pending |
 
 Gate A covers the specification's Final gate items Sending, Return timing and Keyterm. Gate B
@@ -76,17 +76,9 @@ Empty until a lead blocks. One entry per escalation. The lead that resolves one 
 lasting decision in the workstream handoff, and in the decision and drift log when later
 workstreams depend on it, then removes the entry.
 
-### E1 <short title> (workstream N)
-
-- Decision needed: `TBD`
-- Options: `TBD`
-- Lead's recommendation: `TBD`
-- Evidence: `TBD`
-- Unblocks: `TBD`
-- User's answer: `TBD`
-
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
 | 2026-09-29 | Notes for workstream 5, not drift: `MCPServer.handle` answers a blank line with a `-32700` error, so the stdin loop skips empty lines. Delivery errors surface through `localizedDescription`, so the delivery closure throws a `LocalizedError`. | Found in workstream 2 review | Lead 2 | 5 |
+| 2026-09-29 | Gate A accepted with three checks unreported (per-app Return timing in T3 Code, Claude Code and Codex, mention-without-phrase, Keyterms tab showing 99). `returnDelay` stays 200 ms for all apps. Not drift. | User's answer covered the core checks and no app needed longer | Lead 3 | 4, 5, Final |

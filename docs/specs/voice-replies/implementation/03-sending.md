@@ -1,6 +1,6 @@
 # Workstream 3: Sending a reply request
 
-Status: not started.
+Status: accepted; gate A passed with three checks unreported.
 
 ## Task packet
 
@@ -63,57 +63,12 @@ swift test
 The controller is not unit-tested; review reads the code paths against the acceptance
 criteria.
 
-### External validation gate A
-
-Placement: after closure, before acceptance. The candidate is the branch built with
-`./scripts/install.sh`, run by the user. Checks, from the specification's Final gate:
-
-- Sending: dictate a prompt ending "reply with EchoType" with a pause at the end. The session
-  ends by itself and the text, request included, is inserted and sent. Repeat with the hotkey
-  stopping instead of the pause. A dictation that mentions EchoType without the phrase inserts
-  without sending. Turning the setting off stops sends.
-- Return timing: send in T3 Code, Claude Code in the terminal and Codex in the terminal. The
-  message arrives whole and sends once. Report any app that needed a longer delay.
-- Keyterm: "EchoType" is spelled that way in the stream and the Keyterms tab shows 99 as the
-  limit.
-
-Evidence: a pass or fail per check, and the app for any timing failure. If an app needs longer,
-raise the one constant for all apps (say 400 ms) and ask for a retest.
-
-## Implementation handoff
-
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
-
-## Independent review
-
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
-
-## Resolution
-
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
-
-## Closure review
-
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
-
-## External validation
+### External validation
 
 - Gate and placement: `A`, after closure and before acceptance
-- Status: `Pending`
-- Candidate and instructions: `TBD`
-- Required evidence: `TBD`
-- Attempts and lasting decisions: `TBD`
-- Resume condition: the user reports every check passing
+- Status: `Passed`, with unreported checks pending
+- Candidate and instructions: the working tree on branch `voice-replies` (base `8d62d49`), built with `./scripts/install.sh`.
+- Required evidence: a pass or fail per check (Sending, Return timing, Keyterm), and the app for any timing failure.
+- Attempts and lasting decisions: one run. The user reported a pass: reply sends after a pause and after the hotkey, Return follows the paste and the message went through, "EchoType" is spelled correctly, and with the setting off neither path sends. No app needed a longer delay, so `returnDelay` stays 200 ms.
+- Pending, not reported: which apps were tried (T3 Code, Claude Code, Codex), the mention-without-phrase case, and the Keyterms tab showing 99. Listed in the completion report.
+- Resume condition: met

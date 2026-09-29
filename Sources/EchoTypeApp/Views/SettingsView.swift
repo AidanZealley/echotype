@@ -70,6 +70,12 @@ private struct GeneralTab: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       }
+      VStack(alignment: .leading) {
+        Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
+        Text("Ending with a request like “reply with EchoType” sends the message")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       LaunchAtLoginRow()
       PermissionsRow()
         .padding(.top, 12)
@@ -342,7 +348,7 @@ private struct KeytermsTab: View {
       HStack {
         Text("Separate with commas")
         Spacer()
-        Text(verbatim: "\(store.settings.keyterms.count) of \(STTConnection.maximumKeyterms) keyterms used")
+        Text(verbatim: "\(store.settings.keyterms.count) of \(STTConnection.maximumSavedKeyterms) keyterms used")
           .monospacedDigit()
       }
       .foregroundStyle(.secondary)
