@@ -32,3 +32,4 @@ delete it.
 | 0020 | [Insert through the pasteboard and copy selections after pending pastes](0020-pasteboard-insertion-and-selection-copy.md) | Accepted |
 | 0021 | [Revise committed dictation during the session](0021-revise-committed-dictation.md) | Accepted; supersedes 0017 |
 | 0022 | [Voice replies: EchoType sends, the agent speaks a summary first, over a hand-written MCP server](0022-voice-replies.md) | Accepted |
+| 0023 | [A development-only window shows the last dictation's trace](0023-debug-window.md) | Accepted |

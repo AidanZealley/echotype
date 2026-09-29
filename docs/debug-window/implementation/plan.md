@@ -15,7 +15,7 @@ Status: implementation in progress.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Trace and revision evidence](01-trace-core.md) | Approved spec | Accepted |
-| 2 | [Capture and show the last dictation](02-debug-window.md) | Workstream 1 accepted | Not started |
+| 2 | [Capture and show the last dictation](02-debug-window.md) | Workstream 1 accepted | Accepted |
 | Final | [Whole-feature review](final-review.md) | Workstreams 1–2 accepted | Not started |
 
 ## Why these boundaries
@@ -67,7 +67,7 @@ the app owner. Documentation follows the app workstream that makes it true.
 
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
-| G1: Mac behavior | Workstream 2 | After closure, before acceptance | Pending | Signed development build from `./scripts/run.sh --debug`, with branch/head recorded in workstream 2 | Every Final gate check in the approved spec has evidence, including Aidan's evidence where the agent lacks microphone, xAI or desktop access |
+| G1: Mac behavior | Workstream 2 | After closure, before acceptance | Passed | Signed development build from `./scripts/run.sh --debug`, with branch/head recorded in workstream 2 | Passed 2026-09-29: Aidan ran every Final gate check on `debug-window` at `d34e023` plus workstream 2's diff, and all passed. Evidence is in workstream 2's External validation. |
 
 ## Escalations
 
@@ -82,3 +82,5 @@ then removes the resolved entry before acceptance.
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
 | 2026-09-29 | `DictationTrace.Mark` carries `commit: Int?`, the index into `commits` starting at that word, in place of the spec's boundary flag. `Reviser` opts in with `init(..., capture: Bool = false)`. | The app needs the commit index for the gap hover and cannot count boundaries when a commit has no words. | Workstream 1 lead (spec allows adjusting names) | 1, 2 |
+| 2026-09-29 | Workstream 2 renders the marked paragraph as a non-editable, selectable `NSTextView` built from one attributed string, in place of the spec's SwiftUI `Text`. | SwiftUI `Text` has no hover for part of a paragraph, and the spec requires tooltips on changed words and commit marks. Wrapping and selection are kept; copying the paragraph includes the `\|` marks. Recorded in 0023. | Workstream 2 lead | 2 |
+| 2026-09-29 | Last Dictation becomes a normal feature for everyone. The debug gate is removed from the whole window, including the diagnostic detail. Workstream 2 is accepted exactly as validated, with the gate. A new workstream 3 removes the gate and updates the spec, decision 0023 and the README before the final review. | Aidan's follow-up to E1, after G1 passed on the gated candidate. | Aidan | 3, Final |

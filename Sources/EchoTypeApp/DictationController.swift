@@ -23,6 +23,10 @@ import Observation
 /// `speak(_:)` reads text handed over by the `--mcp` process the same way, replacing a reading
 /// in progress and dropped while a dictation or test is starting or running.
 ///
+/// In debug mode each dictation that reaches `running` is recorded as a `DictationTrace` and
+/// published as `lastTrace` when it ends, for the debug window. Tests and readings are not
+/// recorded, and without debug mode nothing is.
+///
 /// The hotkey and Escape arrive inside the event tap's callback, which must only decide whether
 /// to consume the event. So those handlers change `phase`, which is what that decision reads,
 /// and leave every other piece of work to a task.
@@ -31,6 +35,13 @@ import Observation
   private(set) var hasAPIKey: Bool?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
+  /// Set by `--debug` for the launch.
+  let debug: Bool
+  /// The last dictation that reached `running`, whatever its outcome. Nil until one ends, and
+  /// always without `debug`.
+  private(set) var lastTrace: DictationTrace?
+  /// The dictation being recorded, from `running` until it is published.
+  @ObservationIgnored private var trace: DictationTrace?
 
   /// What a test heard, for the settings window to show.
   enum TestOutcome {
@@ -76,8 +87,9 @@ import Observation
   /// Fades an error pill after it has been read.
   private var errorFade: Task<Void, Never>?
 
-  init(store: SettingsStore) {
+  init(store: SettingsStore, debug: Bool) {
     self.store = store
+    self.debug = debug
     audio.onLevel = { [weak self] level in self?.levelChanged(level) }
     audio.onDevice = { [weak self] device in self?.updatePill { $0.inputDevice = device } }
     let monitor = HotkeyMonitor(
@@ -245,9 +257,11 @@ import Observation
       end(showing: error)
     case .started(let session, let chunks, let apiKey):
       phase = .running(session)
+      if debug { trace = DictationTrace(startedAt: .now, cleanUp: settings.cleanUp) }
       let reviser = settings.cleanUp ? Reviser(
         request: { try await RevisionRequest.revise($0, apiKey: apiKey, final: false) },
-        finalRequest: { try await RevisionRequest.revise($0, apiKey: apiKey, final: true) }) : nil
+        finalRequest: { try await RevisionRequest.revise($0, apiKey: apiKey, final: true) },
+        capture: debug) : nil
       let (live, audioFailure) = await run(
         session, streaming: chunks, reviser: reviser,
         endsOnReplyRequest: settings.sendReplyRequests)
@@ -259,7 +273,33 @@ import Observation
         sends = ReplyRequest.matches(text)
       }
       await finish(outcome, audioFailure: audioFailure, sends: sends)
+      await publishTrace(outcome, audioFailure: audioFailure, reviser: reviser)
     }
+  }
+
+  /// Completes the trace `run` recorded with what `finish` did, and publishes it. `inserted` is
+  /// the text `finish` passed to the inserter, and the failure is the one it showed.
+  private func publishTrace(
+    _ outcome: SessionMachine.Outcome, audioFailure: (any Error)?, reviser: Reviser?
+  ) async {
+    guard var trace else { return }
+    self.trace = nil
+    trace.endedAt = .now
+    // A cancelled request may still be settling. The trace does not wait for it.
+    trace.revisions = await reviser?.attempts ?? []
+    switch outcome {
+    case .insert(let text):
+      trace.inserted = text
+      trace.outcome = .inserted
+    case .failed(let text, let error):
+      trace.inserted = text
+      trace.outcome = .failed(describe(error))
+    case .nothing:
+      // `run` recorded `.cancelled` if the session was cancelled.
+      break
+    }
+    if let audioFailure { trace.outcome = .failed(describe(audioFailure)) }
+    lastTrace = trace
   }
 
   private func revisedOutcome(
@@ -383,11 +423,17 @@ import Observation
     }
     var committedLength = 0
     for await snapshot in session.snapshots {
-      if endsOnReplyRequest, snapshot.committed.count > committedLength,
-        ReplyRequest.matches(snapshot.committed)
-      {
-        commit()
+      if snapshot.committed.count > committedLength {
+        if endsOnReplyRequest, ReplyRequest.matches(snapshot.committed) { commit() }
+        // Committed text only grows at its end, so the suffix is the new segment. This
+        // includes the tail `transcript.done` commits.
+        trace?.commits.append(.init(
+          at: .now,
+          text: snapshot.committed.dropFirst(committedLength)
+            .trimmingCharacters(in: .whitespaces)))
       }
+      trace?.streamed = snapshot.committed
+      if snapshot.state == .cancelled { trace?.outcome = .cancelled }
       committedLength = snapshot.committed.count
       currentSnapshot = snapshot
       state = snapshot.state
