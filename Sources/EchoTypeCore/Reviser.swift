@@ -78,17 +78,7 @@ public actor Reviser {
   }
 
   private static func split(_ text: String) -> (String, String) {
-    var starts = [text.startIndex]
-    var index = text.startIndex
-    while index < text.endIndex {
-      let character = text[index]
-      let next = text.index(after: index)
-      if ".!?".contains(character), next < text.endIndex, text[next].isWhitespace {
-        let start = text[next...].firstIndex(where: { !$0.isWhitespace }) ?? text.endIndex
-        if start < text.endIndex { starts.append(start) }
-      }
-      index = next
-    }
+    let starts = Prose.sentenceStarts(text)
     let sentenceStart = starts.count > 1 ? starts[starts.count - 2] : text.startIndex
     // Short fragments can contain sentence punctuation without providing enough context.
     let words = text.split(whereSeparator: \.isWhitespace)
@@ -106,24 +96,12 @@ public actor Reviser {
   }
 
   public static func isFaithful(_ revision: String, to input: String) -> Bool {
-    func words(_ text: String) -> [String] {
-      // Hyphens and dashes separate words, so dropping the stutter in "I-I'm" is a deletion.
-      text.split(whereSeparator: { $0.isWhitespace || "-–—".contains($0) }).compactMap { raw in
-        let word = raw.drop(while: isPunctuation).reversed().drop(while: isPunctuation)
-          .reversed().map(String.init).joined().lowercased()
-        return word.isEmpty ? nil : word
-      }
-    }
-    let source = words(input)
+    let source = Prose.words(input)
     var position = 0
-    for word in words(revision) {
+    for word in Prose.words(revision) {
       guard let match = source[position...].firstIndex(of: word) else { return false }
       position = match + 1
     }
     return true
-  }
-
-  private static func isPunctuation(_ character: Character) -> Bool {
-    character.unicodeScalars.allSatisfy { CharacterSet.punctuationCharacters.contains($0) }
   }
 }

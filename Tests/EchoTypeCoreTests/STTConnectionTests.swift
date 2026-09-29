@@ -23,21 +23,23 @@ func connectionURLCarriesTheDocumentedParameters() {
       URLQueryItem(name: "filler_words", value: "false"),
       URLQueryItem(name: "format", value: "true"),
       URLQueryItem(name: "language", value: "en-GB"),
+      URLQueryItem(name: "keyterm", value: "EchoType"),
     ]
   )
 }
 
-@Test("Keyterms are capped at 100 and 50 characters each")
+@Test("EchoType is sent first, a saved copy is dropped, and 100 saved terms send 99")
 func keytermsAreCapped() {
-  let many = (0..<120).map { "term\($0)" }
-  let terms = queryItems(Settings(keyterms: many)).filter { $0.name == "keyterm" }
+  let many = (0..<100).map { "term\($0)" }
+  let terms = STTConnection.keyterms(settings: Settings(keyterms: ["echotype"] + many))
 
   #expect(terms.count == 100)
-  #expect(terms.first?.value == "term0")
-  #expect(terms.last?.value == "term99")
+  #expect(terms.first == "EchoType")
+  #expect(terms[1] == "term0")
+  #expect(terms.last == "term98")
 
-  let long = queryItems(Settings(keyterms: [String(repeating: "x", count: 60)]))
-  #expect(long.last?.value == String(repeating: "x", count: 50))
+  let long = STTConnection.keyterms(settings: Settings(keyterms: [String(repeating: "x", count: 60)]))
+  #expect(long.last == String(repeating: "x", count: 50))
 }
 
 @Test("A keyterm containing spaces is percent encoded")

@@ -106,6 +106,9 @@ public struct Settings: Equatable, Sendable {
   /// The speaking rate, from 0.7 to 1.5, the endpoint's range.
   public var speechSpeed: Double
 
+  /// Whether a dictation ending in a request like "reply with EchoType" is sent with Return.
+  public var sendReplyRequests: Bool
+
   public init(
     hotkey: Hotkey = .optionD,
     keyterms: [String] = [],
@@ -117,7 +120,8 @@ public struct Settings: Equatable, Sendable {
     cleanUp: Bool = true,
     readAloudHotkey: Hotkey = .optionS,
     voice: String = "ara",
-    speechSpeed: Double = 1.0
+    speechSpeed: Double = 1.0,
+    sendReplyRequests: Bool = true
   ) {
     self.hotkey = hotkey
     self.keyterms = keyterms
@@ -130,6 +134,7 @@ public struct Settings: Equatable, Sendable {
     self.readAloudHotkey = readAloudHotkey
     self.voice = voice
     self.speechSpeed = speechSpeed
+    self.sendReplyRequests = sendReplyRequests
   }
 }
 
@@ -144,7 +149,7 @@ public struct Settings: Equatable, Sendable {
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
     case hotkey, keyterms, language, inputDeviceID, cleanUp
-    case readAloudHotkey, voice, speechSpeed
+    case readAloudHotkey, voice, speechSpeed, sendReplyRequests
   }
 
   public init(from decoder: any Decoder) throws {
@@ -165,6 +170,9 @@ extension Settings: Codable {
     voice = (try? container.decodeIfPresent(String.self, forKey: .voice)) ?? defaults.voice
     speechSpeed =
       (try? container.decodeIfPresent(Double.self, forKey: .speechSpeed)) ?? defaults.speechSpeed
+    sendReplyRequests =
+      (try? container.decodeIfPresent(Bool.self, forKey: .sendReplyRequests))
+      ?? defaults.sendReplyRequests
   }
 
   public func encode(to encoder: any Encoder) throws {
@@ -177,6 +185,7 @@ extension Settings: Codable {
     try container.encode(readAloudHotkey, forKey: .readAloudHotkey)
     try container.encode(voice, forKey: .voice)
     try container.encode(speechSpeed, forKey: .speechSpeed)
+    try container.encode(sendReplyRequests, forKey: .sendReplyRequests)
   }
 
   /// Decodes a stored value. Missing or unreadable data gives the defaults.

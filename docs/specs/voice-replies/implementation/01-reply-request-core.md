@@ -1,6 +1,6 @@
 # Workstream 1: Reply request rule, keyterm and setting
 
-Status: not started.
+Status: accepted.
 
 ## Task packet
 
@@ -67,29 +67,40 @@ swift build
 
 ## Implementation handoff
 
-- Base commit: `TBD`
-- Outcome: `TBD`
-- Files changed: `TBD`
-- Decisions: `TBD`
-- Verification: `TBD`
-- Known limitations or external checks: `TBD`
-- Specification drift: `TBD`
+- Base commit: `d451a6f` (working tree, uncommitted)
+- Outcome: `ReplyRequest.matches`, the built-in first `EchoType` keyterm with
+  `STTConnection.maximumSavedKeyterms` (99), and `Settings.sendReplyRequests` (default on,
+  decoded independently) are in `EchoTypeCore`. The app does not use them yet.
+- Files changed: `Sources/EchoTypeCore/Prose.swift` (new), `ReplyRequest.swift` (new),
+  `Reviser.swift`, `STT/STTConnection.swift`, `Settings.swift`; tests: `ReplyRequestTests.swift`
+  (new), `STTConnectionTests`, `SettingsTests`.
+- Decisions: `Prose` (internal) holds `words` and `sentenceStarts`, which `Reviser.split`,
+  `Reviser.isFaithful` and `ReplyRequest` use; the old copies and `isPunctuation` are gone. The
+  name may follow the preposition only directly (`with EchoType`, `with echo type`). The
+  verb may be anywhere in the last sentence. `keyterms(settings:)` also applies the 50
+  character cap to `EchoType`, which is a no-op.
+- Verification: `swift test --filter` for ReplyRequestTests, STTConnectionTests,
+  SettingsTests and ReviserTests all pass; `swift build` succeeds. The existing URL test
+  now expects a trailing `keyterm=EchoType` item, and the cap test was rewritten for 99.
+- Known limitations or external checks: `SettingsView` still shows
+  `STTConnection.maximumKeyterms` (100) until workstream 3.
+- Specification drift: none.
 
 ## Independent review
 
-- Reviewer: `TBD`
-- Verdict: `TBD`
-- Required findings: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
+- Reviewer: `claude -p` on claude-opus-5-5, medium effort, read-only (review command, no substitution)
+- Verdict: `Accept`
+- Required findings: none
+- Optional observations: the `else { return false }` in `ReplyRequest.matches` cannot run because `Prose.sentenceStarts` always returns at least one start; the test function `keytermsAreCapped` has a name narrower than its new title
+- Questions: none
 
 ## Resolution
 
-- Finding dispositions: `TBD`
-- Simplification/deletion pass: `TBD`
-- Final verification: `TBD`
+- Finding dispositions: no Required findings, so no remediation pass. Both optional observations left unpromoted: the guard is harmless and the rename is cosmetic.
+- Simplification/deletion pass: done by the implementation agent (old `Reviser` word and sentence copies and `isPunctuation` removed). The reviewer found no dead code or duplicated state.
+- Final verification: lead reran `ReplyRequestTests`, `STTConnectionTests`, `SettingsTests` and `ReviserTests` (20 tests, all pass) and `swift build`.
 
 ## Closure review
 
-- Verdict: `TBD`
-- Remaining required findings: `TBD`
+- Verdict: `Accept` (fresh session, same review command)
+- Remaining required findings: none
