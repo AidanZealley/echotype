@@ -15,7 +15,7 @@ Status: draft; implementation has not started.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Reply request rule, keyterm and setting](01-reply-request-core.md) | Approved spec | Accepted |
-| 2 | [MCP server](02-mcp-server.md) | Approved spec | Not started |
+| 2 | [MCP server](02-mcp-server.md) | Approved spec | Accepted |
 | 3 | [Sending a reply request](03-sending.md) | 1 | Not started |
 | 4 | [Speaking in the app](04-speaking.md) | 2 | Not started |
 | 5 | [MCP process and setup](05-mcp-process-and-setup.md) | 2, 4 | Not started |
@@ -89,4 +89,4 @@ workstreams depend on it, then removes the entry.
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-09-29 | Notes for workstream 5, not drift: `MCPServer.handle` answers a blank line with a `-32700` error, so the stdin loop skips empty lines. Delivery errors surface through `localizedDescription`, so the delivery closure throws a `LocalizedError`. | Found in workstream 2 review | Lead 2 | 5 |
