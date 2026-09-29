@@ -29,7 +29,9 @@ EchoType does the listening and the speaking, and the agent decides what to say:
   instructions to the agent. EchoType does not interpret them.
 - **The agent summarises by default.** Speech is billed per character and is the largest
   cost EchoType has, and the full reply is usually on screen. Unless the request asks for
-  more, the agent speaks a short summary of its reply.
+  more, the agent speaks a summary that scales with its reply, about a fifth of the length
+  for a long one. Nothing in the app enforces the length beyond the existing
+  `Speech.capped`.
 - **The agent speaks through MCP.** EchoType ships an MCP server with one `speak` tool.
   Its description tells the agent when to call it and how to write for listening. Claude
   Code and Codex both load MCP servers, so the same server works in each without
@@ -43,8 +45,11 @@ EchoType does the listening and the speaking, and the agent decides what to say:
   with a request like “reply with EchoType” sends the message".
 - With it on, a dictation is a **reply request** when the last sentence of its streamed
   committed text contains both:
-  - **The name.** The word `echotype`, or `echo` followed by `type`.
-  - **A speaking verb.** One of `read`, `reply`, `respond`, `speak`, `say`, `answer`.
+  - **The name as an object.** The word `echotype`, or `echo` followed by `type`,
+    directly after `with`, `through`, `via` or `using`. Talking about EchoType ("make
+    EchoType read faster", "the reply bug in EchoType") does not qualify.
+  - **A speaking verb.** One of `read`, `reply`, `respond`, `speak`, `say`, `answer`,
+    `tell`.
 
   Words are compared as in `Reviser.isFaithful`: lowercased, with punctuation stripped at
   word edges. Sentences end at `.`, `!` or `?` followed by whitespace, as in
@@ -67,9 +72,9 @@ EchoType does the listening and the speaking, and the agent decides what to say:
 
 A pause of more than 1.2 seconds inside the request commits the words said so far. For
 example, "read the reply with EchoType … minus the code" sends before "minus the code".
-Say the request in one breath. The same rule can end a dictation that talks about
-EchoType, such as "make EchoType read faster" followed by a pause. The setting is the
-escape hatch. See the open questions.
+Put qualifiers before the request and end on it: "without code blocks, read the response
+with EchoType". Some sentences can still match by accident, such as "the reply is wrong
+with EchoType" followed by a pause. The setting is the escape hatch.
 
 ### Built-in keyterm
 
@@ -103,12 +108,14 @@ every agent that loads the server. Starting text:
 > Speaks text aloud to the user through EchoType. Use it when the user asks for your reply
 > to be read, spoken, or given with or through EchoType. Finish your reply first, then call
 > this once with a version written for listening. Unless the user asks for more, speak a
-> short summary of a few sentences: what you did or found, anything that went wrong, and
-> anything you need from the user. Follow any request about what to include, such as the
-> whole response or leaving out code. Whatever you speak, leave out code blocks, file
-> paths, tables and URLs unless asked, mentioning them briefly if they matter, and write
-> plain sentences without markdown. It returns once EchoType has the text, so don't wait
-> or call it again.
+> summary that scales with your reply: a few sentences for a short one, and about a fifth
+> of the length for a long, detailed one. Cover what you did or found, each main point,
+> anything that went wrong, and anything you need from the user. If the user asks for the
+> whole response, in full, or not to summarise, speak all of it. Either way, leave out code
+> blocks, file paths, tables and URLs unless asked. Where a code block matters, say in a
+> sentence what it does, at the point it appears, instead of reading it. Write plain
+> sentences without markdown. It returns once EchoType has the text, so don't wait or call
+> it again.
 
 Send the same text as the server's `instructions`, in the `initialize` result for legacy
 clients and the `server/discover` result for modern ones (see the protocol section). Not
@@ -203,9 +210,10 @@ server is written by hand.
 ## Tests
 
 - `ReplyRequest.matches`: each of "reply with EchoType", "respond with echo type" and
-  "read the response with EchoType, minus any code blocks" matches as the last sentence.
-  The name without a verb doesn't, the name in an earlier sentence doesn't, and a verb
-  without the name doesn't.
+  "read the response with EchoType, minus any code blocks" and "tell me what failed with
+  EchoType" matches as the last sentence. The name without a verb doesn't, the name in an
+  earlier sentence doesn't, a verb without the name doesn't, and the name without a
+  preposition ("make EchoType read faster") doesn't.
 - `STTConnection.keyterms`: `EchoType` comes first, a saved duplicate is dropped, and 100
   saved terms send 99 of them.
 - `MCPServer`: a legacy exchange (`initialize`, then `tools/call`) and a modern one
@@ -213,17 +221,11 @@ server is written by hand.
   unsupported version gets `-32022` with the supported list. These pin the
   compatibility boundary; the other methods need no tests of their own.
 
-## Open questions
+## Deferred
 
-- **False sends.** The rule fires on any last sentence with the name and a verb before a
-  pause, which is likely when dictating about EchoType itself. If that happens in real
-  use, ask Grok whether the last sentence requests a spoken reply, only when it contains
-  the name. That adds a network call to the send path, so it waits for evidence.
-- **Return delay.** 200 ms is a guess. Chat inputs built on web views may handle a paste
-  asynchronously.
-- **Agent reliability.** Whether each agent calls `speak` for every wording, and only
-  once, depends on the model. If the tool description isn't enough, a line in the global
-  instruction files is the fallback.
+- **Model-based send decision.** If the rule still misfires in real use, ask Grok whether
+  the last sentence requests a spoken reply, only when it contains the name. That adds a
+  network call to the send path, so it waits for evidence.
 
 ## Final gate
 
@@ -234,18 +236,22 @@ After implementation, run `swift test`, then check on the Mac with the installed
   Repeat with the hotkey stopping instead of the pause. A dictation that mentions
   EchoType without a verb inserts without sending. Turning the setting off stops sends.
 - **Return timing.** Send in T3 Code, Claude Code in the terminal and Codex in the
-  terminal. The message arrives whole and sends once. Record any app that needed a longer
-  delay.
+  terminal. The message arrives whole and sends once. The 200 ms delay is a guess, and
+  chat inputs on web views may handle a paste asynchronously. If an app needs longer,
+  raise the one constant for all apps (say 400 ms) rather than adding a setting.
 - **MCP in each agent.** Register the server in Claude Code and Codex, then check whether
   T3 Code picks it up for each harness it runs. Record what T3 Code needs. Log the first
   message each client sends and record whether it opened with `initialize` or a modern
   request, and which version it named.
 - **Agent behaviour.** In each agent, try "reply with EchoType", "respond with EchoType"
-  and "read the whole response with EchoType, minus any code blocks" on a prompt whose
+  and "read the whole response with EchoType, and don't summarise" on a prompt whose
   answer is long and includes code. The agent calls `speak` once, after its reply. The
-  first two speak a summary of a few sentences, and the third speaks the whole reply
-  without code. Record the character count of each spoken text, to judge whether the
-  default length needs tightening.
+  first two speak a summary of roughly a fifth of the reply's length, with no code read
+  out. The third speaks the whole reply, describing each code block in a sentence where it
+  appears. Record the character count of each spoken text against the reply's length, to
+  judge whether the summary proportion needs adjusting. If an agent misses `speak` or calls it twice in more
+  than about 1 of 5 trials across the three wordings, add one line to that agent's global
+  instruction file. No EchoType code changes.
 - **Speaking.** A reply is read with the `Reading` pill. Space pauses it, and the
   dictation hotkey stops it and starts a new dictation. A `speak` call during a dictation
   is dropped. With the app quit, the tool returns its error.
