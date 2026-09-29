@@ -81,7 +81,7 @@ the app owner. Documentation follows the app workstream that makes it true.
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
 | G1: Mac behavior | Workstream 2 | After closure, before acceptance | Passed | Signed development build from `./scripts/run.sh --debug`, with branch/head recorded in workstream 2 | Passed 2026-09-29: Aidan ran every Final gate check on `debug-window` at `d34e023` plus workstream 2's diff, and all passed. Evidence is in workstream 2's External validation. |
-| G2: Ungated Mac behavior | Workstream 3 | After closure, before acceptance | Passed | Signed development build from `./scripts/run.sh`, with branch/head recorded in workstream 3 | Passed 2026-09-29: Aidan ran all four checks (launch state, menu item, empty window, one recorded dictation) on `debug-window` at `d8d334d` plus workstream 3's diff, and all passed. Evidence is in workstream 3's External validation. |
+| G2: Ungated Mac behavior | Workstream 3 | After closure, before acceptance | Passed | `debug-window` at `45c7c05` plus the layout correction to `Views/LastDictationWindow.swift`, built with `./scripts/run.sh` | Passed on `d8d334d` plus workstream 3's diff. Aidan then found two layout defects on the accepted build (paragraph overlapping the summary on resize; centred expanded rows). Passed again 2026-09-29: Aidan re-checked the correction and both checks passed. Evidence is in workstream 3's External validation, G2 re-check. |
 
 ## Escalations
 
