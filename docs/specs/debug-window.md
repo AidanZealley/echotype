@@ -4,7 +4,7 @@ A window that shows what happened during the last dictation: where the stream co
 text, which revision requests ran, what each one returned, and which words the inserted
 text lost or re-punctuated compared with what was streamed.
 
-Status: draft, 2026-09-29. Not implemented.
+Status: approved, 2026-09-29. Not implemented.
 
 ## Problem
 
@@ -18,12 +18,13 @@ today is to reproduce the requests by hand.
 
 - Debug mode is for development only. `./scripts/run.sh --debug` turns it on for that
   launch. `run.sh` already passes its arguments to the app, as it does for `--hud-demo`.
-  There is no setting, and the installed app never enters debug mode.
+  There is no setting, and normal launches of the installed app do not enter debug mode.
 - In debug mode the window opens at launch, and a menu bar item, **Last Dictation…**,
   below **Settings…**, reopens it after it is closed. Without `--debug` there is no
   window, no menu item and no recording.
 - The window shows the most recent dictation that reached `running`, whatever its
   outcome: inserted, failed, cancelled or empty. The Test button is not recorded.
+  Cancellation does not wait for an in-flight revision merely to complete the trace.
 - While the window is open, it updates when a dictation ends. It never orders itself
   front or takes focus, so a dictation that finishes with the window open still inserts
   into the target app. Before the first dictation it says "No dictation yet".
@@ -48,7 +49,7 @@ From top to bottom:
    - Commit boundaries: a thin vertical mark between words, with the seconds since the
      previous commit on hover. Boundaries show where pauses split the stream.
    - Everything else in the primary text colour.
-3. **Requests.** One row per revision request, oldest first: time since the session
+3. **Requests.** One row per recorded revision request, oldest first: time since the session
    started, `live` or `final`, window word count, latency, and the outcome. A rejected
    row names the first word that failed the check, for example
    `rejected at "i'm"`. Each row expands to show the window sent and the reply.
@@ -69,7 +70,7 @@ Use the app's system colours so both themes work. Keep the text selectable.
     public var startedAt: Date
     public var endedAt: Date?
     public var cleanUp: Bool
-    public var commits: [Commit]          // each speech_final segment, in order
+    public var commits: [Commit]          // each growth of committed text, in order
     public var revisions: [Revision]      // from Reviser, in order
     public var streamed: String           // the final committed text before revision
     public var inserted: String           // what went in, or "" when nothing did
@@ -93,6 +94,7 @@ Use the app's system colours so both themes work. Keep the text selectable.
       case accepted
       case unchanged                      // accepted, but identical to the window
       case rejected(word: String)
+      case replyRequestRemoved           // the reply dropped a spoken EchoType reply request
       case empty
       case failed(String)                 // the thrown error, described
       case cancelled                      // cancelled at stop
@@ -121,14 +123,17 @@ Use the app's system colours so both themes work. Keep the text selectable.
   When a word repeats, the walk can mark a different copy as deleted than the model
   removed. The text reads the same, so this is acceptable.
 
-- **`Reviser`** records an attempt for every request it makes, in `revise`, and exposes
-  them as `public private(set) var attempts: [DictationTrace.Revision]`. Time the
-  request with `ContinuousClock`. The existing guards map to results:
+- **`Reviser`** records attempts only when the controller enables debug capture and
+  exposes them as `public private(set) var attempts: [DictationTrace.Revision]`.
+  Without debug capture it keeps no request text or replies for the trace. Time each
+  recorded request with `ContinuousClock`. The existing guards map to results:
   - `Task.isCancelled` after the request: `cancelled`.
   - `finishing && input != committed`: `superseded`.
   - The request threw: `failed`, with `String(describing: error)`.
   - Empty after trimming: `empty`.
   - Unfaithful: `rejected(word:)`.
+  - Faithful but dropping a spoken EchoType reply request: `replyRequestRemoved`,
+    preserving the existing guard from [0022](../decisions/0022-voice-replies.md).
   - Faithful and equal to the window: `unchanged`. Otherwise `accepted`.
 
   Split `isFaithful` into `firstUnmatchedWord(in revision: String, from input: String)
@@ -170,7 +175,7 @@ Add `./scripts/run.sh --debug` to the README's development commands, beside
 
 ### Decision record
 
-Add `docs/decisions/0022-debug-window.md` recording the trace, the `--debug` flag
+Add `docs/decisions/0023-debug-window.md` recording the trace, the `--debug` flag
 and the marking rule, and link it from `docs/decisions/README.md`.
 
 ## Tests
@@ -178,9 +183,10 @@ and the marking rule, and link it from `docs/decisions/README.md`.
 - `DictationTrace.marks`: streamed `"I-I'm never sure. Why it fails"` in two commits
   and inserted `"I'm never sure why it fails"` gives `I` deleted, `I'm` kept,
   `sure.` changed to `sure`, `Why` changed to `why`, and a boundary before `Why`.
-- `Reviser.attempts`: with replies that are accepted, unfaithful, and thrown, the
-  attempts record `accepted`, `rejected(word:)` naming the added word, and `failed`, in
-  order. This pins the mapping the window depends on. The other results need no tests.
+- `Reviser.attempts`: with debug capture enabled and replies that are accepted,
+  unfaithful, and thrown, the attempts record `accepted`, `rejected(word:)` naming
+  the added word, and `failed`, in order. This pins the mapping the window depends
+  on. The other results need no tests.
 
 ## Open questions
 
