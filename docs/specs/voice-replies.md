@@ -24,9 +24,12 @@ EchoType does the listening and the speaking, and the agent decides what to say:
 - **EchoType sends.** When the last sentence of a dictation asks for a reply through
   EchoType, EchoType inserts the text and presses Return. The request stays in the
   message.
-- **The agent reads the request.** "Reply with EchoType", "read the response with
-  EchoType, minus any code blocks" or "just give me a summary with EchoType" are ordinary
+- **The agent reads the request.** "Reply with EchoType", "read the whole response with
+  EchoType, minus any code blocks" or "tell me what failed with EchoType" are ordinary
   instructions to the agent. EchoType does not interpret them.
+- **The agent summarises by default.** Speech is billed per character and is the largest
+  cost EchoType has, and the full reply is usually on screen. Unless the request asks for
+  more, the agent speaks a short summary of its reply.
 - **The agent speaks through MCP.** EchoType ships an MCP server with one `speak` tool.
   Its description tells the agent when to call it and how to write for listening. Claude
   Code and Codex both load MCP servers, so the same server works in each without
@@ -99,11 +102,13 @@ every agent that loads the server. Starting text:
 
 > Speaks text aloud to the user through EchoType. Use it when the user asks for your reply
 > to be read, spoken, or given with or through EchoType. Finish your reply first, then call
-> this once with a version written for listening. Follow any request about what to include,
-> such as a summary or leaving out code. Unless the user asks otherwise, leave out code
-> blocks, file paths, tables and URLs, mentioning them briefly if they matter, and write
-> plain sentences without markdown. It returns once EchoType has the text, so don't wait or
-> call it again.
+> this once with a version written for listening. Unless the user asks for more, speak a
+> short summary of a few sentences: what you did or found, anything that went wrong, and
+> anything you need from the user. Follow any request about what to include, such as the
+> whole response or leaving out code. Whatever you speak, leave out code blocks, file
+> paths, tables and URLs unless asked, mentioning them briefly if they matter, and write
+> plain sentences without markdown. It returns once EchoType has the text, so don't wait
+> or call it again.
 
 Send the same text as the server's `instructions`, in the `initialize` result for legacy
 clients and the `server/discover` result for modern ones (see the protocol section). Not
@@ -235,10 +240,12 @@ After implementation, run `swift test`, then check on the Mac with the installed
   T3 Code picks it up for each harness it runs. Record what T3 Code needs. Log the first
   message each client sends and record whether it opened with `initialize` or a modern
   request, and which version it named.
-- **Agent behaviour.** In each agent, try "reply with EchoType", "respond with EchoType",
-  "read the response with EchoType, minus any code blocks" and "give me a summary with
-  EchoType" on a prompt whose answer includes code. The agent calls `speak` once, after
-  its reply, with text that follows the request and contains no code by default.
+- **Agent behaviour.** In each agent, try "reply with EchoType", "respond with EchoType"
+  and "read the whole response with EchoType, minus any code blocks" on a prompt whose
+  answer is long and includes code. The agent calls `speak` once, after its reply. The
+  first two speak a summary of a few sentences, and the third speaks the whole reply
+  without code. Record the character count of each spoken text, to judge whether the
+  default length needs tightening.
 - **Speaking.** A reply is read with the `Reading` pill. Space pauses it, and the
   dictation hotkey stops it and starts a new dictation. A `speak` call during a dictation
   is dropped. With the app quit, the tool returns its error.
