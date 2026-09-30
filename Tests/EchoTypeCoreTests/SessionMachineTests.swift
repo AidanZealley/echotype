@@ -29,6 +29,7 @@ struct SessionMachineTests {
   @Test("Ten seconds of quiet pauses the session and speech resumes it")
   func quietPausesAndSpeechResumes() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("a thought", speechFinal: true))
 
@@ -49,6 +50,7 @@ struct SessionMachineTests {
   @Test("Pause and resume cycles accumulate every segment in order")
   func pauseCyclesAccumulateText() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("one", isFinal: true, speechFinal: true))
 
@@ -79,6 +81,7 @@ struct SessionMachineTests {
   @Test("A session where nothing is said cancels silently")
   func nothingSaidCancelsSilently() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial(""))
 
@@ -92,6 +95,7 @@ struct SessionMachineTests {
   @Test("The hard cap ends the session and commits what accumulated")
   func hardCapCommits() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("walked away", speechFinal: true))
 
@@ -108,6 +112,7 @@ struct SessionMachineTests {
   @Test("Cancelling discards everything", arguments: [false, true])
   func cancellingDiscardsEverything(afterPausing: Bool) async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("private thoughts", speechFinal: true))
 
@@ -125,6 +130,7 @@ struct SessionMachineTests {
   @Test("Stopping before transcript.created still ends the session with nothing to insert")
   func triggerBeforeTheSessionIsReady() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
 
     await session.trigger()
     #expect(await log.next() == .finalizing)
@@ -138,6 +144,7 @@ struct SessionMachineTests {
   @Test("A finalisation the endpoint never answers ends the session rather than hanging")
   func finalizingWithoutAnAnswerTimesOut() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("said and done", speechFinal: true))
 
@@ -162,6 +169,7 @@ struct SessionMachineTests {
   @Test("A socket failure keeps the segments finalised before it")
   func socketFailureKeepsFinalisedSegments() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("half a sentence", speechFinal: true))
 
@@ -173,6 +181,7 @@ struct SessionMachineTests {
   @Test("A server error keeps the segments finalised before it")
   func serverErrorKeepsFinalisedSegments() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("half a sentence", speechFinal: true))
 
@@ -187,6 +196,7 @@ struct SessionMachineTests {
   @Test("A transcript.done nobody asked for ends the session as a failure")
   func unsolicitedDoneDoesNotCommit() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("thinking out loud", speechFinal: true))
 
@@ -205,6 +215,7 @@ struct SessionMachineTests {
   @Test("A frame the session cannot decode ends the session rather than truncating in silence")
   func undecodableFrameEndsTheSession() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("first sentence", isFinal: true, speechFinal: true))
 
@@ -228,6 +239,7 @@ struct SessionMachineTests {
   @Test("An empty transcript inserts nothing")
   func emptyTranscriptInsertsNothing() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial(""))
 
@@ -243,6 +255,7 @@ struct SessionMachineTests {
   @Test("Provisional text is shown, then superseded by the run it settles into")
   func provisionalTextIsSuperseded() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
 
     await transport.emit(Fixture.partial("tan stock"))
@@ -258,6 +271,7 @@ struct SessionMachineTests {
   @Test("Settled text accumulates across speech_final segments and is what gets inserted")
   func settledTextAccumulatesAcrossSegments() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
 
     await transport.emit(Fixture.partial("install pnpm"))
@@ -286,6 +300,7 @@ struct SessionMachineTests {
   @Test("Settled text survives pause and resume cycles")
   func settledTextSurvivesPauses() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("one", isFinal: true, speechFinal: true))
 
@@ -314,6 +329,7 @@ struct SessionMachineTests {
   @Test("The last snapshot carries the last text")
   func lastSnapshotCarriesTheText() async {
     let running = await start()
+    defer { running.cancel(); transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("said and done", speechFinal: true))
 

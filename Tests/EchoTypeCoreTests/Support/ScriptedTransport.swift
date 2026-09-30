@@ -21,9 +21,14 @@ actor ScriptedTransport: WebSocketTransport {
   /// Sends one server frame and waits for the session to process it.
   func emit(_ message: String) async {
     guard !isFinished else { return }
-    await withCheckedContinuation { acknowledge in
-      queue.append(Pending(message: message, acknowledge: acknowledge))
-      wakeConsumer()
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { acknowledge in
+        guard !isFinished, !Task.isCancelled else { acknowledge.resume(); return }
+        queue.append(Pending(message: message, acknowledge: acknowledge))
+        wakeConsumer()
+      }
+    } onCancel: {
+      close()
     }
   }
 
@@ -52,6 +57,7 @@ actor ScriptedTransport: WebSocketTransport {
     // Reaching for the next frame is what says the previous one has been handled.
     acknowledgeInFlight()
     while true {
+      if Task.isCancelled { end(); return nil }
       if let failure {
         self.failure = nil
         end()
@@ -63,7 +69,13 @@ actor ScriptedTransport: WebSocketTransport {
         return pending.message
       }
       if isFinished { return nil }
-      await withCheckedContinuation { consumer = $0 }
+      await withTaskCancellationHandler {
+        await withCheckedContinuation {
+          if isFinished || Task.isCancelled { $0.resume() } else { consumer = $0 }
+        }
+      } onCancel: {
+        close()
+      }
     }
   }
 

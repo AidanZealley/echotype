@@ -1,14 +1,14 @@
 # EchoType macOS rewrite implementation plan
 
-Status: draft; implementation has not started. Workflow approval: pending.
+Status: approved; execution started. Workflow approval: Aidan approved execution of the README and plan in this conversation on 2026-09-30.
 
 ## Orchestration record
 
-- Integration branch: `TBD`, proposed `refactor/macos-lifecycle`
-- Starting commit: `TBD`
+- Integration branch: `refactor/macos-lifecycle`
+- Starting commit: `2e17817246749f626ce36c90823dee2b4ef0d5fb`
 - Review command: `lead subagents`, inherited model and effort
-- Specification approval reference: agreed scope in this conversation; record the committed planning base at execution
-- Started: `TBD`
+- Specification approval reference: agreed scope in this conversation; committed planning base `2e17817246749f626ce36c90823dee2b4ef0d5fb`; execution approved by Aidan on 2026-09-30
+- Started: `2026-09-30`
 
 This file is the resume record. Only one lead may be active. A non-terminal row without a live lead means interrupted work; restart that row with recovery, never its successor. Execution procedure and lead prompts are in [README](README.md). Do not start while workflow approval is pending.
 
@@ -18,7 +18,7 @@ Workstream states: Not started, Implementation, Review, Remediation, Closure rev
 
 | # | Workstream | Depends on | Status |
 |---|---|---|---|
-| 1 | [Establish Mac verification](01-verification.md) | Workflow approval | Not started |
+| 1 | [Establish Mac verification](01-verification.md) | Workflow approval | Accepted |
 | 2 | [Own clipboard and destination](02-clipboard-destination.md) | 1 | Not started |
 | 3 | [Own dictation lifetime](03-dictation.md) | 2 | Not started |
 | 4 | [Own reading lifetime](04-reading.md) | 3 | Not started |
@@ -59,7 +59,7 @@ These contracts freeze behavior and dependency direction. Details owned solely w
 
 | Gate | Owner and placement | Status | Candidate | Required evidence and resume condition |
 |---|---|---|---|---|
-| G1 Mac/toolchain/CI | 1, after closure before acceptance | Pending | TBD | Swift tests and release build on Mac; passing Actions run or explicit approval to defer Actions execution; record whether merge-check configuration needs Aidan |
+| G1 Mac/toolchain/CI | 1, after closure before acceptance | Passed | Workstream 1 on `refactor/macos-lifecycle`, base `2e17817`; local tests/build and fresh closure pass; Aidan approved Actions deferral on 2026-09-30; CI unverified; required-check configuration pending | Swift tests and release build on Mac; passing Actions run or explicit approval to defer Actions execution; record whether merge-check configuration needs Aidan |
 | G2 Destination feasibility | 2, during implementation before independent review | Pending | TBD | Repeated stable editing-target identity plus changed-field detection in native, terminal and Electron editors; conservative recovery for unsupported targets; failure changing supported scope requires Aidan's decision |
 | G3 Clipboard integration | 2, after closure before acceptance | Pending | TBD | Signed paste/copy/restoration, recovery and Return suppression; external clipboard writes and reading Copy cleanup checked |
 | G4 Dictation/device behavior | 3, after closure before acceptance | Pending | TBD | Signed hotkeys/cancellation/last-word behavior and mic release; chosen input, disconnect and Bluetooth checks as available; network live test only with explicit authority |
@@ -75,7 +75,7 @@ All rows 1 through 6 must be Accepted. Tests and the unsigned release executable
 
 ## Escalations
 
-None. Leads add entries with id, owning row, decision needed, options, recommendation, evidence, what it unblocks and User's answer. The orchestrator reads only the named entry and records that answer. The resuming lead writes its lasting decision into the handoff/log before removing the entry.
+None. Resolved decisions remain in the owning handoff and decision log.
 
 ## Completion summary
 
@@ -93,3 +93,5 @@ The final lead fills these fields before its acceptance commit so the orchestrat
 |---|---|---|---|---|
 | 2026-09-29 | Clipboard before dictation; UI with feature owners | Prove editing-target identity before consumers and avoid deferred recovery/cancellation UI | Proposed in draft workflow | 2 through 5 |
 | 2026-09-29 | Correlated distributed-notification request/reply with five-second admission wait | Extend existing delivery narrowly; signed two-process gate verifies feasibility | Proposed in draft workflow | 5 |
+| 2026-09-30 | Workstream 1 drift: none. Direct executable-target app tests work without a production split | Local SwiftPM import and adapter tests pass without app startup; recovery confirms reviewed code and local checks | Within approved packet scope | 1 |
+| 2026-09-30 | Defer the first Actions execution. CI remains unverified; required-check configuration remains an administrator follow-up | E1-CI resolved. Continue local work after G1; no publication or PR authorised | Aidan, explicit answer recorded in E1-CI on 2026-09-30 | 1 and final reporting |

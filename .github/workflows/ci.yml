@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    name: macOS tests and release build
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      # Installed in the macOS 26 arm64 image. Keep this explicit when updating Xcode.
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      XAI_API_KEY: ""
+      ECHOTYPE_FIXTURE_WAV: ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Run deterministic tests with coverage
+        run: swift test --enable-code-coverage
+      - name: Build unsigned release executable
+        run: swift build -c release --product EchoTypeApp
