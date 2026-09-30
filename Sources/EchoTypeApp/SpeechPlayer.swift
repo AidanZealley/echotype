@@ -1,82 +1,136 @@
 import AVFoundation
 import EchoTypeCore
 
-/// Plays one reading's Float32 samples at `Speech.sampleRate` through an `AVAudioEngine`,
-/// scheduling each buffer as it arrives, and reports the level of the audio as it plays. Use
-/// one player per reading.
-@MainActor final class SpeechPlayer {
-  private let engine = AVAudioEngine()
-  private let node = AVAudioPlayerNode()
-  private let format = AVAudioFormat(
-    standardFormatWithSampleRate: Double(Speech.sampleRate), channels: 1)!
+@MainActor protocol ReadingPlayback: AnyObject {
+  func start() throws
+  func pause()
+  func resume()
+  func schedule(_ samples: [Float]) async throws
+  func finished() async throws
+  func stop()
+}
 
-  /// `onLevel` receives the level of each roughly 100ms of audio as it plays, scaled as
-  /// dictation scales the microphone's. It stops with the player.
+/// One reading's playback queue. Completion callbacks carry buffer identities so callbacks
+/// delivered after Stop cannot decrement a new queue or resume an obsolete waiter.
+@MainActor final class SpeechPlayer: ReadingPlayback {
+  static let maximumQueuedFrames = Speech.sampleRate / 2 // 500 ms, including playing audio.
+  struct Output {
+    var start: () throws -> Void
+    var pause: () -> Void
+    var resume: () -> Void
+    var schedule: ([Float], @escaping @Sendable () -> Void) -> Void
+    var stop: () -> Void
+  }
+  private let output: Output
+  private var stopped = true
+  private var buffers: [UUID: Int] = [:]
+  private(set) var queuedFrames = 0
+  private var capacity: CheckedContinuation<Void, any Error>?
+  private var completion: CheckedContinuation<Void, any Error>?
+
+  init(output: Output) { self.output = output }
+
+  convenience init(onLevel: @escaping @MainActor (Double) -> Void) {
+    let audio = PlaybackAudio(onLevel: onLevel)
+    self.init(output: .init(start: { try audio.start() }, pause: { audio.pause() },
+      resume: { audio.resume() }, schedule: { audio.schedule($0, completion: $1) },
+      stop: { audio.stop() }))
+  }
+
+  func start() throws { try output.start(); stopped = false }
+  func pause() { if !stopped { output.pause() } }
+  func resume() { if !stopped { output.resume() } }
+
+  func schedule(_ samples: [Float]) async throws {
+    guard !samples.isEmpty else { return }
+    precondition(samples.count <= Self.maximumQueuedFrames)
+    while !stopped, queuedFrames + samples.count > Self.maximumQueuedFrames {
+      try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { capacity = $0 }
+      } onCancel: { Task { @MainActor in self.stop() } }
+    }
+    try Task.checkCancellation()
+    guard !stopped else { throw CancellationError() }
+    let id = UUID()
+    buffers[id] = samples.count
+    queuedFrames += samples.count
+    output.schedule(samples) { [weak self] in
+      Task { @MainActor in self?.played(id) }
+    }
+  }
+
+  private func played(_ id: UUID) {
+    guard let count = buffers.removeValue(forKey: id), !stopped else { return }
+    queuedFrames -= count
+    capacity?.resume(); capacity = nil
+    if buffers.isEmpty { completion?.resume(); completion = nil }
+  }
+
+  func finished() async throws {
+    guard !stopped else { throw CancellationError() }
+    if !buffers.isEmpty {
+      try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { completion = $0 }
+      } onCancel: { Task { @MainActor in self.stop() } }
+    }
+    try Task.checkCancellation()
+  }
+
+  func stop() {
+    guard !stopped else { return }
+    stopped = true
+    output.stop()
+    buffers.removeAll(); queuedFrames = 0
+    capacity?.resume(throwing: CancellationError()); capacity = nil
+    completion?.resume(throwing: CancellationError()); completion = nil
+  }
+}
+
+@MainActor private final class PlaybackAudio {
+  private lazy var engine = AVAudioEngine()
+  private lazy var node = AVAudioPlayerNode()
+  private let format = AVAudioFormat(standardFormatWithSampleRate: Double(Speech.sampleRate), channels: 1)!
+  private var generation = 0
+  private var active = false
+  private let onLevel: @MainActor (Double) -> Void
   init(onLevel: @escaping @MainActor (Double) -> Void) {
+    self.onLevel = onLevel
+  }
+  func start() throws {
     engine.attach(node)
     engine.connect(node, to: engine.mainMixerNode, format: format)
-    // The tap sees the node's output as it renders, so levels follow playback, not the
-    // response, which arrives several times faster than real time.
-    node.installTap(
-      onBus: 0, bufferSize: AVAudioFrameCount(Speech.sampleRate / 10), format: format,
+    generation += 1
+    let generation = generation
+    node.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Speech.sampleRate / 10), format: format,
       block: Self.levelTap { [weak self] level in
-        // A level already on its way when the player stopped is dropped.
-        if self?.node.isPlaying == true { onLevel(level) }
+        guard let self, self.active, self.generation == generation, self.node.isPlaying else { return }
+        self.onLevel(level)
       })
-  }
-
-  func start() throws {
-    try engine.start()
+    do { try engine.start() } catch { node.removeTap(onBus: 0); engine.stop(); throw error }
+    active = true
     node.play()
   }
-
   func pause() { node.pause() }
-
   func resume() { node.play() }
-
-  /// Queues samples to play after those already scheduled.
-  func schedule(_ samples: [Float]) {
-    guard let buffer = buffer(samples) else { return }
-    node.scheduleBuffer(buffer)
-  }
-
-  /// Returns once every scheduled buffer has played, or at once when the player is stopped.
-  func finished() async {
-    // Buffers play in order, so one silent frame queued last finishes after all the audio.
-    // `stop()` completes it early. A stopped node would never complete it, so don't wait.
-    guard engine.isRunning, let silence = buffer([0]) else { return }
-    await node.scheduleBuffer(silence, completionCallbackType: .dataPlayedBack)
-  }
-
-  /// Cuts the audio off at once and releases the output.
   func stop() {
-    node.stop()
-    engine.stop()
+    guard active else { return }
+    active = false; generation += 1
+    node.stop(); node.removeTap(onBus: 0); engine.stop()
   }
-
-  /// Built outside the main actor: the tap runs on the audio engine's own thread.
-  private nonisolated static func levelTap(
-    _ deliver: @escaping @MainActor (Double) -> Void
-  ) -> AVAudioNodeTapBlock {
+  func schedule(_ samples: [Float], completion: @escaping @Sendable () -> Void) {
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {
+      completion(); return
+    }
+    buffer.frameLength = buffer.frameCapacity
+    samples.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+    node.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { _ in completion() }
+  }
+  private nonisolated static func levelTap(_ deliver: @escaping @MainActor (Double) -> Void) -> AVAudioNodeTapBlock {
     { buffer, _ in
-      let samples = UnsafeBufferPointer(
-        start: buffer.floatChannelData![0], count: Int(buffer.frameLength))
-      let rms = samples.isEmpty
-        ? 0 : (samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count)).squareRoot()
+      let samples = UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength))
+      let rms = samples.isEmpty ? 0 : (samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count)).squareRoot()
       let level = Overlay.level(rms: rms)
       Task { @MainActor in deliver(level) }
     }
-  }
-
-  private func buffer(_ samples: [Float]) -> AVAudioPCMBuffer? {
-    guard !samples.isEmpty,
-      let buffer = AVAudioPCMBuffer(
-        pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))
-    else { return nil }
-    buffer.frameLength = buffer.frameCapacity
-    samples.withUnsafeBufferPointer { source in
-      buffer.floatChannelData![0].update(from: source.baseAddress!, count: samples.count)
-    }
-    return buffer
   }
 }

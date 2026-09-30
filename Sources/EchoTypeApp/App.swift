@@ -82,6 +82,7 @@ struct EchoTypeApp: App {
     case .idle: "Ready"
     case .starting: "Starting"
     case .listening: "Listening"
+    case .reading: "Reading"
     case .paused: "Paused"
     case .finishing, .inserting: "Finishing"
     case .cancelled: "Cancelled"

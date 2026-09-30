@@ -1,107 +1,128 @@
 import EchoTypeCore
 import Foundation
+import Observation
 
-/// Runs one reading: takes its text (the selection, copied, or the text it was given), reads
-/// the key, caps the text, then streams the `POST /v1/tts` response into a `SpeechPlayer` as it
-/// arrives (decision 0018). It starts when created. `stop()` cancels the request and cuts the
-/// audio off at once.
-@MainActor final class Reader {
-  enum Failure: Error {
-    case nothingSelected
-    case noAPIKey
-    /// The audio output could not start.
-    case playback(any Error)
+/// Created without side effects. The coordinator reserves it, then owns and joins `run()`.
+@MainActor @Observable final class Reader {
+  enum Failure: Error { case nothingSelected, noAPIKey, playback(any Error) }
+  enum Source { case selection, text(String) }
+  enum Presentation: Equatable { case starting, playing, paused, failed(String), stopped }
+  struct Dependencies {
+    var selection: (@escaping @MainActor () -> Bool) async -> String?
+    var cleanup: () async -> Void
+    var key: () async -> String?
+    var request: (URLRequest) -> any ReadingRequest
+    var player: any ReadingPlayback
   }
-
-  enum Source {
-    case selection
-    /// Text already in hand, so there is no copy and no wait for the paste restore.
-    case text(String)
-  }
-
-  /// About 100ms of 16-bit mono audio, the most gathered before it is scheduled.
-  private static let bufferBytes = Speech.sampleRate / 10 * 2
-
-  private let player: SpeechPlayer
-  private let clipboard: Clipboard
-  private var task: Task<Void, any Error>?
-  private var isPaused = false
+  private let source: Source
+  private let settings: Settings
+  private let dependencies: Dependencies
+  private let onPresentation: @MainActor (Reader) -> Void
+  private var request: (any ReadingRequest)?
+  private var stopped = false
+  private var hasRun = false
   private var playbackStarted = false
+  private(set) var presentation: Presentation = .starting
+  private(set) var level = 0.0
+  let id: UUID
+  let startedAt = Date.now
+  private(set) var pausedAt: Date?
+  private(set) var pausedDuration: TimeInterval = 0
 
-  /// `onLevel` receives the level of the audio as it plays.
-  init(
-    _ source: Source,
-    settings: Settings,
-    clipboard: Clipboard,
-    onLevel: @escaping @MainActor (Double) -> Void
+  init(_ source: Source, id: UUID = UUID(), settings: Settings, dependencies: Dependencies,
+    onPresentation: @escaping @MainActor (Reader) -> Void = { _ in }
   ) {
-    self.clipboard = clipboard
-    player = SpeechPlayer(onLevel: onLevel)
-    task = Task { try await read(source, settings) }
+    self.id = id
+    self.source = source; self.settings = settings
+    self.dependencies = dependencies; self.onPresentation = onPresentation
   }
 
-  /// Returns when the audio has finished or the reading was stopped. Throws why it failed
-  /// otherwise.
-  func finished() async throws {
-    guard let task else { return }
-    do {
-      try await task.value
-    } catch where task.isCancelled {
-      // Stopped: the cancelled request's error is not a failure.
-    }
+  func receiveLevel(_ level: Double) {
+    guard !stopped, presentation == .playing else { return }
+    self.level = level; onPresentation(self)
   }
-
   func stop() {
-    task?.cancel()
-    player.stop()
+    guard !stopped else { return }
+    stopped = true
+    request?.cancel(); dependencies.player.stop()
+    presentation = .stopped; level = 0
+    onPresentation(self)
   }
-
-  func togglePause() -> Bool {
-    isPaused.toggle()
-    if playbackStarted {
-      if isPaused { player.pause() } else { player.resume() }
+  func togglePause() {
+    guard !stopped else { return }
+    if let pausedAt {
+      pausedDuration += Date.now.timeIntervalSince(pausedAt); self.pausedAt = nil
+      if playbackStarted { dependencies.player.resume() }
+      presentation = playbackStarted ? .playing : .starting
+    } else {
+      pausedAt = .now
+      if playbackStarted { dependencies.player.pause() }
+      presentation = .paused
     }
-    return isPaused
+    level = 0; onPresentation(self)
+  }
+  private func checkStopped() throws {
+    try Task.checkCancellation()
+    if stopped { throw CancellationError() }
   }
 
-  private func read(_ source: Source, _ settings: Settings) async throws {
+  /// Returns exactly once, after selection restoration and player/request teardown.
+  func run() async -> (any Error)? {
+    precondition(!hasRun); hasRun = true
+    var failure: (any Error)?
+    do {
+      try await withTaskCancellationHandler { try await read() } onCancel: {
+        Task { @MainActor in self.stop() }
+      }
+    }
+    catch { if !stopped && !Task.isCancelled { failure = error } }
+    request?.cancel(); request = nil
+    dependencies.player.stop()
+    await dependencies.cleanup()
+    if stopped || Task.isCancelled { failure = nil }
+    level = 0
+    if let failure { presentation = .failed(String(describing: failure)) }
+    else { presentation = .stopped }
+    stopped = true
+    onPresentation(self)
+    return failure
+  }
+
+  private func read() async throws {
+    try checkStopped()
     let spoken: String
     switch source {
     case .selection:
-      let selection = await clipboard.copySelection(cancelled: { [weak self] in
-        self?.task?.isCancelled != false
-      })
-      try Task.checkCancellation()
-      guard let selection else { throw Failure.nothingSelected }
-      spoken = selection
-    case .text(let text):
-      spoken = text
+      let selected = await dependencies.selection { [weak self] in self?.stopped != false }
+      try checkStopped()
+      guard let selected, !selected.isEmpty else { throw Failure.nothingSelected }
+      spoken = selected
+    case .text(let text): spoken = text
     }
-    let apiKey = await Task.detached { Keychain.apiKey() }.value
+    let apiKey = await dependencies.key()
+    try checkStopped()
     guard let apiKey else { throw Failure.noAPIKey }
-    try Task.checkCancellation()
-
-    let text = Speech.capped(spoken)
-    let request = Speech.request(text: text, settings: settings, apiKey: apiKey)
-    let (bytes, response) = try await URLSession.shared.bytes(for: request)
-    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard (200..<300).contains(status) else { throw STTError(httpStatus: status) }
-    // A stop during the request may land after its response arrived.
-    try Task.checkCancellation()
-
-    do { try player.start() } catch { throw Failure.playback(error) }
-    playbackStarted = true
-    if isPaused { player.pause() }
-    defer { player.stop() }
-    var decoder = PCMDecoder()
-    var chunk = Data(capacity: Self.bufferBytes)
-    for try await byte in bytes {
-      chunk.append(byte)
-      guard chunk.count == Self.bufferBytes else { continue }
-      player.schedule(decoder.samples(from: chunk))
-      chunk.removeAll(keepingCapacity: true)
+    let request = dependencies.request(Speech.request(text: Speech.capped(spoken), settings: settings, apiKey: apiKey))
+    self.request = request
+    let decoder = ReadingDecoder()
+    // One 100 ms decode chunk waits for capacity before taking more response bytes.
+    let chunkBytes = Speech.sampleRate / 10 * 2
+    while let data = try await request.next() {
+      try checkStopped()
+      if !playbackStarted {
+        do { try dependencies.player.start() } catch { throw Failure.playback(error) }
+        playbackStarted = true
+        if pausedAt != nil { dependencies.player.pause() }
+        presentation = pausedAt != nil ? .paused : .playing; onPresentation(self)
+      }
+      for start in stride(from: 0, to: data.count, by: chunkBytes) {
+        let chunk = data.subdata(in: start..<min(start + chunkBytes, data.count))
+        let samples = await decoder.decode(chunk)
+        try checkStopped()
+        try await dependencies.player.schedule(samples)
+      }
     }
-    player.schedule(decoder.samples(from: chunk))
-    await player.finished()
+    try checkStopped()
+    if playbackStarted { try await dependencies.player.finished() }
   }
 }

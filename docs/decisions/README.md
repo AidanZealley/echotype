@@ -18,7 +18,7 @@ delete it.
 | 0006 | [API key in the Keychain, errors in the menu bar until the overlay exists](0006-api-key-and-error-surface.md) | Accepted; error surface superseded by 0009, hand-seeded key by 0010 |
 | 0007 | [Known gaps handed to later milestones](0007-known-gaps.md) | Open |
 | 0008 | [The pill: a text-first layout with a level glow](0008-pill-design.md) | Accepted |
-| 0009 | [How the overlay behaves during a session](0009-overlay-behaviour.md) | Accepted; meter input superseded by 0012; lifetime/presentation by 0024 |
+| 0009 | [How the overlay behaves during a session](0009-overlay-behaviour.md) | Accepted; meter input superseded by 0012; dictation lifetime/presentation by 0024; reading lifetime/presentation by 0018 |
 | 0010 | [How settings and the API key are stored](0010-settings-storage-and-api-key.md) | Accepted |
 | 0011 | [The settings window makes EchoType a regular app while it is open](0011-settings-window-activation.md) | Accepted; helper and close rule superseded by 0023 |
 | 0012 | [Capture the microphone with AVCaptureSession on the chosen input](0012-capture-with-avcapturesession.md) | Accepted; lifetime superseded by 0024 |
@@ -27,7 +27,7 @@ delete it.
 | 0015 | [Settings in tabs, with a masked saved key](0015-settings-window-layout.md) | Accepted |
 | 0016 | [Install to /Applications and claim the login item there](0016-install-and-claim-the-login-item.md) | Accepted |
 | 0017 | [Re-transcribe the whole recording when a dictation stops](0017-batch-pass-on-commit.md) | Superseded by [0021](0021-revise-committed-dictation.md) |
-| 0018 | [Read aloud fetches audio over REST](0018-read-aloud-audio-fetch.md) | Accepted |
+| 0018 | [Read aloud fetches audio over REST](0018-read-aloud-audio-fetch.md) | Accepted; bounded reading lifetime added; G5 passed with explicit signed takeover deferral |
 | 0019 | [Build a native macOS app with a small testable core](0019-native-macos-app-and-core-boundary.md) | Accepted |
 | 0020 | [Insert through the pasteboard and copy selections after pending pastes](0020-pasteboard-insertion-and-selection-copy.md) | Accepted; shared clipboard ownership and destination checks added 2026-09-30 |
 | 0021 | [Revise committed dictation during the session](0021-revise-committed-dictation.md) | Accepted; supersedes 0017; lifetime superseded by 0024 |
