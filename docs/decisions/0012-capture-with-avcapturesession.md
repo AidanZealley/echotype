@@ -5,6 +5,9 @@ Status: accepted, 2026-09-25 (settings gate G2). Replaces the specification's
 [0005](0005-microphone-per-session.md) and the pre-conversion meter in
 [0009](0009-overlay-behaviour.md).
 
+Lifetime and related timing/presentation rules are superseded by
+[0024](0024-dictation-operation-lifetime.md). The original record is retained below.
+
 ## Context
 
 The settings milestone added an input picker. With `AVAudioEngine` on Bluetooth earbuds

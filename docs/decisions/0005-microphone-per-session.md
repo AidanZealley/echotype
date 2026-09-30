@@ -4,6 +4,9 @@ Status: accepted, 2026-09-23 (dictation gate G1). Replaces the specification's
 original warm idle hold. Device choice and capture are superseded by
 [0012](0012-capture-with-avcapturesession.md).
 
+Lifetime and related timing/presentation rules are superseded by
+[0024](0024-dictation-operation-lifetime.md). The original record is retained below.
+
 ## Context
 
 The specification originally held the input device warm through a few minutes of

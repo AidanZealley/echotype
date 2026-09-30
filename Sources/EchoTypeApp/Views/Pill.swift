@@ -1,4 +1,5 @@
 import Foundation
+import EchoTypeCore
 
 /// Everything the overlay pill shows. The pill renders this value and nothing else, so the
 /// `--hud-demo` loop and the dictation controller, for dictation and reading alike, drive it the
@@ -7,6 +8,8 @@ struct Pill: Equatable {
   enum Phase: Equatable {
     /// The microphone is opening. Anything said now is lost, so the pill looks not ready.
     case starting
+    /// Recording continues while no conservative focused text-field identity is available.
+    case selectInput
     case listening
     /// No speech for a while. The session is still open and waiting.
     case paused
@@ -39,4 +42,6 @@ struct Pill: Equatable {
   /// Holds the displayed time still while reading is paused.
   var pausedAt: Date?
   var pausedDuration: TimeInterval = 0
+  var canCommit = true
+  var dictationHotkey: Settings.Hotkey = .optionD
 }

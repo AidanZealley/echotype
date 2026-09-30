@@ -6,6 +6,8 @@ import Foundation
 /// is tested against recorded events can be pointed at the real endpoint.
 public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked Sendable {
   private let task: URLSessionWebSocketTask
+  private let receiveLock = NSLock()
+  private var receiving: Task<Void, Never>?
 
   /// Opens the socket immediately, since a session opens it on trigger rather than at
   /// launch: an idle open socket bills streaming time.
@@ -48,17 +50,25 @@ public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked 
           switch self.task.closeCode {
           case .invalid:
             continuation.finish(throwing: self.sessionError(from: error))
-          default:
+          case .normalClosure, .goingAway:
             continuation.finish()
+          default:
+            continuation.finish(throwing: SessionError.socket("Abnormal WebSocket closure: \(self.task.closeCode.rawValue)"))
           }
         }
       }
+      receiveLock.withLock { self.receiving = receiving }
       continuation.onTermination = { _ in receiving.cancel() }
     }
   }
 
   public func close() {
     task.cancel(with: .normalClosure, reason: nil)
+  }
+
+  public func waitForClose() async {
+    let receiving = receiveLock.withLock { self.receiving }
+    await receiving?.value
   }
 
   private func send(_ message: URLSessionWebSocketTask.Message) async throws {

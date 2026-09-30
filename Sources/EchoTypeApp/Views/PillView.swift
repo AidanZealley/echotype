@@ -33,7 +33,8 @@ struct PillView: View {
   private var statusRow: some View {
     HStack(spacing: 8) {
       LevelMeter(pill: pill)
-      Text(pill.phase.name).foregroundStyle(.primary.opacity(supportingTextOpacity))
+      Text(pill.phase.name)
+        .foregroundStyle(pill.phase == .selectInput ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary.opacity(supportingTextOpacity)))
       Spacer()
       Elapsed(pill: pill)
     }
@@ -48,8 +49,16 @@ struct PillView: View {
         deviceName(device.name)
       }
       Spacer(minLength: 8)
-      if pill.phase != .inserting {
-        Text(verbatim: "⌥D stop · esc cancel").fixedSize()
+      switch pill.phase {
+      case .listening, .paused, .starting, .selectInput:
+        if pill.canCommit {
+          Text(verbatim: "\(pill.dictationHotkey == .controlOptionD ? "⌃⌥D" : "⌥D") stop · esc cancel").fixedSize()
+        } else {
+          Text(verbatim: "esc cancel").fixedSize()
+        }
+      case .transcribing:
+        Text(verbatim: "esc cancel").fixedSize()
+      default: EmptyView()
       }
     }
     .font(.system(size: 11))
@@ -112,7 +121,7 @@ private struct Transcript: View {
   var body: some View {
     Group {
       if case .error(let message) = pill.phase {
-        Text(message).foregroundStyle(.red).lineLimit(2)
+        Text(message).foregroundStyle(.red).lineHeight(.multiple(factor: 1.5)).lineLimit(2)
       } else {
         TailLayout(maximumHeight: maximumHeight) {
           text.lineHeight(.multiple(factor: 1.5))
@@ -174,6 +183,7 @@ extension Pill.Phase {
   fileprivate var name: String {
     switch self {
     case .starting: "Starting"
+    case .selectInput: "Select an input"
     case .listening: "Listening"
     case .paused: "Paused"
     case .transcribing: "Transcribing"
@@ -206,7 +216,7 @@ private struct LevelMeter: View {
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.red)
         .frame(height: 14)
-    case .starting, .listening, .paused, .reading, .readingPaused:
+    case .starting, .selectInput, .listening, .paused, .reading, .readingPaused:
       HStack(alignment: .center, spacing: 1.5) {
         ForEach(Self.weights.indices, id: \.self) { index in
           Capsule()
@@ -253,7 +263,7 @@ private struct LevelGlow: View {
   @State private var history = Array(repeating: 0.0, count: 4)
 
   var body: some View {
-    TimelineView(.animation(paused: pill.phase != .listening && pill.phase != .reading)) { timeline in
+    TimelineView(.animation(paused: pill.phase != .listening && pill.phase != .selectInput && pill.phase != .reading)) { timeline in
       let time = timeline.date.timeIntervalSinceReferenceDate
       Canvas { context, size in
         let colour: Color = pill.phase == .starting ? .gray : .blue
@@ -271,7 +281,7 @@ private struct LevelGlow: View {
   private var opacity: Double {
     switch pill.phase {
     case .starting: 0.25
-    case .listening, .reading: 0.4
+    case .listening, .selectInput, .reading: 0.4
     case .paused, .readingPaused: 0.15
     case .transcribing, .inserting, .error: 0
     }

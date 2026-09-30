@@ -14,6 +14,13 @@ public protocol WebSocketTransport: Sendable {
   /// only sends JSON.
   func messages() -> AsyncThrowingStream<String, any Error>
 
-  /// Closes the socket. Safe to call more than once.
+  /// Closes the socket and releases suspended sends/receives. Safe to call more than once.
   func close()
+
+  /// Joins adapter work after close. Synchronous test transports need no additional join.
+  func waitForClose() async
+}
+
+public extension WebSocketTransport {
+  func waitForClose() async {}
 }

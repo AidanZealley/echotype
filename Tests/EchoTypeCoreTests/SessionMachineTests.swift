@@ -75,7 +75,7 @@ struct SessionMachineTests {
 
     await transport.emit(Fixture.done)
     #expect(await running.value == .insert("one two three"))
-    #expect(await log.rest() == [.inserting, .idle])
+    #expect(await log.rest() == [.idle])
   }
 
   @Test("A session where nothing is said cancels silently")
@@ -106,7 +106,7 @@ struct SessionMachineTests {
 
     await transport.emit(Fixture.done)
     #expect(await running.value == .insert("walked away"))
-    #expect(await log.rest() == [.inserting, .idle])
+    #expect(await log.rest() == [.idle])
   }
 
   @Test("Cancelling discards everything", arguments: [false, true])
@@ -163,7 +163,7 @@ struct SessionMachineTests {
       return
     }
     #expect(text == "said and done then some")
-    #expect(await log.rest() == [.inserting, .idle])
+    #expect(await log.rest() == [.idle])
   }
 
   @Test("A socket failure keeps the segments finalised before it")
@@ -175,7 +175,7 @@ struct SessionMachineTests {
 
     await transport.fail(with: STTError.unavailable)
     #expect(await running.value == .failed(text: "half a sentence", error: .stt(.unavailable)))
-    #expect(await log.rest() == [.inserting, .idle])
+    #expect(await log.rest() == [.idle])
   }
 
   @Test("A server error keeps the segments finalised before it")
@@ -190,7 +190,7 @@ struct SessionMachineTests {
     #expect(
       await running.value
         == .failed(text: "half a sentence", error: .stt(.server(serverError))))
-    #expect(await log.rest() == [.inserting, .idle])
+    #expect(await log.rest() == [.idle])
   }
 
   @Test("A transcript.done nobody asked for ends the session as a failure")
@@ -248,7 +248,7 @@ struct SessionMachineTests {
 
     await transport.emit(Fixture.done)
     #expect(await running.value == .nothing)
-    // No `inserting`, so the macOS layer is never asked to paste an empty string.
+    // The empty outcome asks the operation to insert nothing.
     #expect(await log.rest() == [.idle])
   }
 
@@ -344,10 +344,48 @@ struct SessionMachineTests {
     await transport.emit(Fixture.done)
 
     #expect(await running.value == .insert("said and done then some"))
-    #expect(await log.rest() == [.inserting, .idle])
+    #expect(await log.rest() == [.idle])
     #expect(
       await log.latest == .init(state: .idle, committed: "said and done then some", utterance: "", provisional: ""))
   }
+  @Test("Readiness has a bounded network deadline")
+  func readinessDeadline() async {
+    let running = await start()
+    defer { transport.close() }
+    await clock.advance(by: SessionMachine.readinessTimeout)
+    guard case .failed(_, .socket) = await running.value else { Issue.record("Expected readiness failure"); return }
+  }
+
+  @Test("Cancellation before run still completes teardown and snapshots")
+  func cancellationBeforeRun() async {
+    await session.cancel()
+    #expect(await session.run() == .nothing)
+    #expect(await log.rest() == [.cancelled])
+    #expect(await transport.textFrames.isEmpty)
+  }
+
+  @Test("Closure during finalisation is failure without transcript.done")
+  func closureWithoutProtocolCompletion() async {
+    let running = await start()
+    defer { transport.close() }
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("available words", speechFinal: true))
+    await session.trigger()
+    transport.close()
+    guard case .failed(let text, .socket) = await running.value else { Issue.record("Expected incomplete protocol failure"); return }
+    #expect(text == "available words")
+  }
+
+  @Test("Pre-handshake backlog overflow fails visibly")
+  func handshakeBacklogLimit() async {
+    let running = await start()
+    defer { transport.close() }
+    await #expect(throws: SessionError.self) {
+      try await session.send(audio: Data(count: STTClient.preHandshakeBytes + 1))
+    }
+    guard case .failed(_, .socket) = await running.value else { Issue.record("Expected backlog failure"); return }
+  }
+
   private actor FinishingLog {
     var calls = 0
     var framesAtEntry: [[String]] = []
