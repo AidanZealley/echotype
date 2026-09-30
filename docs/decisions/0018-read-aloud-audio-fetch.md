@@ -36,6 +36,9 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
   change reading, and the tests can pin both.
 - `Speech.request(text:settings:apiKey:)` in `EchoTypeCore` builds the request. The app
   streams the response and maps a non-2xx status with `STTError(httpStatus:)`.
+  Speed uses the shared Settings validation policy before JSON encoding. Nonfinite or
+  out-of-range values fall back to 1.0; valid fractional values survive unchanged.
+  See [0010](0010-settings-storage-and-api-key.md).
 - Read Aloud has its own Opt+S or Ctrl+Opt+S hotkey, Ara or Altair voice, and speed
   from 0.7 to 1.5. It uses the General tab's language. The reading hotkey or
   Escape stops playback. Space pauses or resumes it. The dictation hotkey stops playback and
