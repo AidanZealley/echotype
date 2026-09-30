@@ -22,7 +22,13 @@ actor SnapshotLog {
     } else if isFinished {
       next = nil
     } else {
-      next = await withCheckedContinuation { waiter = $0 }
+      next = await withTaskCancellationHandler {
+        await withCheckedContinuation {
+          if isFinished || Task.isCancelled { $0.resume(returning: nil) } else { waiter = $0 }
+        }
+      } onCancel: {
+        Task { await self.end() }
+      }
     }
     if let next { latest = next }
     return next
@@ -56,6 +62,10 @@ actor SnapshotLog {
         buffered.append(snapshot)
       }
     }
+    end()
+  }
+
+  private func end() {
     isFinished = true
     waiter?.resume(returning: nil)
     waiter = nil

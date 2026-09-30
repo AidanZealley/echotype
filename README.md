@@ -81,7 +81,8 @@ microphone and accessibility permissions between builds.
 ```sh
 ./scripts/run.sh              # build, sign and launch .build/EchoType.app
 ./scripts/run.sh --hud-demo   # loop the overlay through its states, no mic or key needed
-swift test                    # run the core tests
+XAI_API_KEY= ECHOTYPE_FIXTURE_WAV= swift test --enable-code-coverage
+                              # deterministic core and app-adapter tests, no app launch
 ./scripts/install.sh          # build a release and replace /Applications/EchoType.app
 ```
 
@@ -89,6 +90,11 @@ swift test                    # run the core tests
 build. If you have more than one Apple Development certificate, set
 `ECHOTYPE_SIGNING_IDENTITY` to the one to use. `security find-identity -v -p codesigning`
 lists them.
+
+Deterministic tests and `swift build -c release --product EchoTypeApp` need no signing
+certificate. App tests import the executable target without running its entry point.
+The `macOS tests and release build` Actions job defines these checks on macOS 26
+with Xcode 26.6. Making it a required merge check needs a separate repository setting.
 
 Integration tests that call xAI are skipped unless `XAI_API_KEY` is set. The live
 protocol test also needs `ECHOTYPE_FIXTURE_WAV` pointing at a recording; see

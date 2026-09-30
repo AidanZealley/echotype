@@ -13,5 +13,6 @@ let package = Package(
     // Built into a signed .app bundle by scripts/deploy.sh, through run.sh for development
     // or install.sh for /Applications. That is the only supported way to launch it.
     .executableTarget(name: "EchoTypeApp", dependencies: ["EchoTypeCore"]),
+    .testTarget(name: "EchoTypeAppTests", dependencies: ["EchoTypeApp"]),
   ]
 )

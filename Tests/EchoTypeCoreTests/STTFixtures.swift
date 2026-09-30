@@ -97,14 +97,17 @@ actor BlockingWebSocketTransport: WebSocketTransport {
   private var frames: [Data] = []
   private var log: [String] = []
   private var firstSendArrived = false
-  private var isReleased = false
-  private var gate: CheckedContinuation<Void, Never>?
-  private var arrival: CheckedContinuation<Void, Never>?
+  private let gate: AsyncStream<Void>
+  private nonisolated let release: AsyncStream<Void>.Continuation
+  private let arrival: AsyncStream<Void>
+  private nonisolated let arrived: AsyncStream<Void>.Continuation
   private let stream: AsyncThrowingStream<String, any Error>
   private let continuation: AsyncThrowingStream<String, any Error>.Continuation
 
   init() {
     (stream, continuation) = AsyncThrowingStream.makeStream(of: String.self)
+    (gate, release) = AsyncStream.makeStream(of: Void.self)
+    (arrival, arrived) = AsyncStream.makeStream(of: Void.self)
   }
 
   /// Frames in the order their sends completed.
@@ -117,13 +120,12 @@ actor BlockingWebSocketTransport: WebSocketTransport {
   /// Suspends until the client's first binary send is in flight.
   func waitForFirstSend() async {
     guard !firstSendArrived else { return }
-    await withCheckedContinuation { arrival = $0 }
+    var arrivals = arrival.makeAsyncIterator()
+    _ = await arrivals.next()
   }
 
   func releaseFirstSend() {
-    isReleased = true
-    gate?.resume()
-    gate = nil
+    release.finish()
   }
 
   nonisolated func emit(_ message: String) {
@@ -133,11 +135,10 @@ actor BlockingWebSocketTransport: WebSocketTransport {
   func send(binary: Data) async throws {
     if !firstSendArrived {
       firstSendArrived = true
-      arrival?.resume()
-      arrival = nil
-      if !isReleased {
-        await withCheckedContinuation { gate = $0 }
-      }
+      arrived.yield(())
+      arrived.finish()
+      var releases = gate.makeAsyncIterator()
+      _ = await releases.next()
     }
     frames.append(binary)
     log.append("audio")
@@ -152,6 +153,8 @@ actor BlockingWebSocketTransport: WebSocketTransport {
   }
 
   nonisolated func close() {
+    release.finish()
+    arrived.finish()
     continuation.finish()
   }
 }
