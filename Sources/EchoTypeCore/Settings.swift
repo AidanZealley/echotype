@@ -80,14 +80,9 @@ public struct Settings: Equatable, Sendable {
   /// where the user walks away.
   public var hardCap: TimeInterval
 
-  /// Seconds to wait for `transcript.done` after `finalize` and `audio.done` have gone out,
-  /// before giving up and keeping whatever was already committed.
-  ///
-  /// How long a forced `finalize` takes has not been measured. The nearest measured figure is
-  /// endpointing closing a segment on its own, with the frame in hand about 3s after the last
-  /// word, and forcing the segment closed should be no slower than waiting for that. Eight
-  /// seconds leaves wide margin for a real room and a slow network while still surfacing an
-  /// endpoint that has stopped answering as a visible failure.
+  /// Seconds allowed from entering finishing to drain capture, send queued audio and
+  /// `finalize`/`audio.done` in order, and receive the final `transcript.done`.
+  /// Expiry fails the session while preserving committed text.
   public var finalizeTimeout: TimeInterval
 
   /// The chosen audio input device. `nil` means follow the system default input, so connecting
