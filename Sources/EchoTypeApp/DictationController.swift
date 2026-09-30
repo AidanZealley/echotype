@@ -58,6 +58,7 @@ import Observation
   typealias ReadingFactory = (Reader.Source, UUID, Settings,
     @escaping @MainActor (Reader) -> Void, @escaping @MainActor (Double) -> Void) -> Reader
   private let makeReader: ReadingFactory
+  private let makeDictation: ((Bool) -> DictationOperation)?
   private let focusedScreen: () -> NSScreen?
   private let showPanel: (Pill, NSScreen?) -> Void
   private let hidePanel: () -> Void
@@ -65,6 +66,7 @@ import Observation
   @ObservationIgnored private var readingTask: Task<Void, Never>?
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
+  private let speechAdmission = SpeechAdmission()
   @ObservationIgnored private var speakObserver: (any NSObjectProtocol)?
 
   /// The session's pill and the screen it stays on, from the press until the session ends.
@@ -75,8 +77,9 @@ import Observation
 
   init(store: SettingsStore, clipboard: Clipboard, makeReader: @escaping ReadingFactory,
     focusedScreen: @escaping () -> NSScreen?, showPanel: @escaping (Pill, NSScreen?) -> Void,
-    hidePanel: @escaping () -> Void
+    hidePanel: @escaping () -> Void, makeDictation: ((Bool) -> DictationOperation)? = nil
   ) {
+    self.makeDictation = makeDictation
     self.store = store; self.clipboard = clipboard; self.makeReader = makeReader
     self.focusedScreen = focusedScreen; self.showPanel = showPanel; self.hidePanel = hidePanel
   }
@@ -106,13 +109,19 @@ import Observation
     )
     monitor.start()
     self.monitor = monitor
-    // Posted by the `--mcp` process, so the text arrives from outside the app. The poster
-    // uses `deliverImmediately`, which gets past the suspension an inactive app is under.
     speakObserver = DistributedNotificationCenter.default().addObserver(
-      forName: SpeakNotification.name, object: nil, queue: .main
+      forName: SpeechDelivery.requestName, object: nil, queue: .main
     ) { [weak self] notification in
-      guard let text = notification.userInfo?[SpeakNotification.textKey] as? String else { return }
-      MainActor.assumeIsolated { self?.speak(text) }
+      guard let fields = notification.userInfo else { return }
+      let request = SpeechDelivery.Incoming(fields)
+      MainActor.assumeIsolated {
+        guard let self,
+          let reply = self.speechAdmission.receive(request, pid: getpid(),
+            now: ProcessInfo.processInfo.systemUptime, admit: self.speak)
+        else { return }
+        DistributedNotificationCenter.default().postNotificationName(
+          SpeechDelivery.replyName, object: nil, userInfo: reply, options: [.deliverImmediately])
+      }
     }
     Task { await refreshAPIKeyStatus() }
   }
@@ -155,7 +164,7 @@ import Observation
   }
 
   /// Reads `text` given by another process, under the same rules as the read-aloud hotkey,
-  /// except that a reading in progress is replaced. Dropped while a dictation or test is
+  /// except that a reading in progress is replaced. Declined while a dictation or test is
   /// starting or running, so the agent never talks over the user.
   @discardableResult func speak(_ text: String) -> Bool {
     switch phase {
@@ -242,6 +251,7 @@ import Observation
   // MARK: Dictation
 
   private func makeOperation(isTest: Bool) -> DictationOperation {
+    if let makeDictation { return makeDictation(isTest) }
     let audio = AudioCapture()
     let operation = DictationOperation(settings: store.settings, isTest: isTest,
       dependencies: .init(
