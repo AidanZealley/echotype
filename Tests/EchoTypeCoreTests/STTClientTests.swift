@@ -26,23 +26,20 @@ struct STTClientTests {
     #expect(transport.binaryFrames == [firstWords, laterWords])
   }
 
-  @Test("Stopping before transcript.created still closes the session and sends no audio")
+  @Test("Stopping before readiness retains queued audio ahead of closure")
   func finishBeforeTheSessionIsReady() async throws {
     let transport = FakeWebSocketTransport()
+    defer { transport.close() }
     let client = STTClient(transport: transport)
-
-    try await client.send(audio: Data([0x01, 0x02]))
-    try await client.finish()
-
-    #expect(transport.textFrames == [#"{"type":"finalize"}"#, #"{"type":"audio.done"}"#])
-    #expect(transport.binaryFrames.isEmpty)
-
-    // The held audio is gone rather than replayed, so a late `created` cannot send speech the
-    // user already stopped.
+    try await client.send(audio: Data([1, 2]))
+    let finish = await client.startFinishing()
+    #expect(transport.textFrames.isEmpty)
     transport.emit(Fixture.created)
-    transport.endStream()
+    transport.emit(Fixture.done)
     try await client.run()
-    #expect(transport.binaryFrames.isEmpty)
+    try await finish.value
+    #expect(transport.binaryFrames == [Data([1, 2])])
+    #expect(transport.textFrames == [#"{"type":"finalize"}"#, #"{"type":"audio.done"}"#])
   }
 
   @Test("Audio handed over during the flush stays behind what was already queued")
@@ -128,6 +125,18 @@ struct STTClientTests {
     }
   }
 
+  @Test("Buffered send failure propagates and prevents closing frames")
+  func bufferedSendFailure() async throws {
+    let transport = FailedBinaryTransport()
+    let client = STTClient(transport: transport)
+    try await client.send(audio: Data([1]))
+    transport.base.emit(Fixture.created)
+    await #expect(throws: STTError.unavailable) { try await client.run() }
+    await #expect(throws: STTError.unavailable) { try await client.finish() }
+    #expect(transport.base.textFrames.isEmpty)
+    await client.close()
+  }
+
   @Test("Each documented error status maps to a distinguishable error")
   func documentedStatusesMapToDistinctErrors() {
     #expect(STTError(httpStatus: 400) == .badRequest)
@@ -150,4 +159,12 @@ private extension STTClient {
   func startFinishing() -> Task<Void, any Error> {
     Task.immediate { try await self.finish() }
   }
+}
+
+private struct FailedBinaryTransport: WebSocketTransport {
+  let base = FakeWebSocketTransport()
+  func send(binary: Data) async throws { throw STTError.unavailable }
+  func send(text: String) async throws { try await base.send(text: text) }
+  func messages() -> AsyncThrowingStream<String, any Error> { base.messages() }
+  func close() { base.close() }
 }

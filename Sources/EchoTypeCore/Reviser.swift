@@ -12,6 +12,9 @@ public actor Reviser {
   private var attempted = 0
   private var working: Task<Void, Never>?
   private var finishing = false
+  private var finalWork: Task<Void, Never>?
+  private let finalClock: any SessionClock
+  public static let finalTimeout: TimeInterval = 3
   /// Each completed request in start order. Only one request runs at a time, so appending at
   /// completion keeps start order.
   public private(set) var attempts: [DictationTrace.Revision] = []
@@ -19,7 +22,8 @@ public actor Reviser {
   public nonisolated let updates: AsyncStream<Void>
   private nonisolated let publisher: AsyncStream<Void>.Continuation
 
-  public init(request: @escaping Request, finalRequest: Request? = nil) {
+  public init(request: @escaping Request, finalRequest: Request? = nil, finalClock: any SessionClock = SystemClock()) {
+    self.finalClock = finalClock
     self.request = request
     self.finalRequest = finalRequest ?? request
     (updates, publisher) = AsyncStream.makeStream(of: Void.self)
@@ -43,15 +47,25 @@ public actor Reviser {
     working?.cancel()
     await working?.value
     self.committed = committed
-    await revise(committed: committed, isFinal: true)
+    guard !Task.isCancelled else { publisher.finish(); return shown }
+    let work = Task { await revise(committed: committed, isFinal: true) }
+    finalWork = work
+    finalClock.schedule(at: finalClock.now + Self.finalTimeout) { work.cancel() }
+    await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+    finalClock.cancel()
+    finalWork = nil
     publisher.finish()
     return shown
   }
 
   /// Stops revisions for a cancelled session or an outcome that cannot make a final call.
-  public func stop() {
+  public func stop() async {
     finishing = true
     working?.cancel()
+    finalWork?.cancel()
+    finalClock.cancel()
+    await working?.value
+    await finalWork?.value
     publisher.finish()
   }
 

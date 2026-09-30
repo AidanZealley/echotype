@@ -3,6 +3,9 @@
 Status: accepted, 2026-09-22 (EchoTypeCore), extended 2026-09-23 (dictation) and
 2026-09-24 (overlay).
 
+Lifetime and related timing/presentation rules are superseded by
+[0024](0024-dictation-operation-lifetime.md). The original record is retained below.
+
 ## Context
 
 Streaming is billed while the socket is open, sends must not reorder, and any failure

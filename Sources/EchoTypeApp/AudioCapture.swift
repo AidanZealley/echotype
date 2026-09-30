@@ -37,9 +37,11 @@ import AVFoundation
 
   /// Reports the input that opened, including a fallback after a disconnect.
   var onDevice: @MainActor (InputDevice) -> Void = { _ in }
+  var onFailure: @MainActor (any Error) -> Void = { _ in }
 
   /// The session in progress, nil between sessions.
   private var session: Session?
+  private var cleanup: [Task<Void, Never>] = []
 
   /// Opens the input with unique ID `deviceUID`, or the system default if that is `nil` or not
   /// connected, and starts delivering chunks.
@@ -49,9 +51,15 @@ import AVFoundation
   /// a second time, or if conversion fails. Starting again finishes the previous stream.
   func start(deviceUID: String?) async throws(Failure) -> AsyncThrowingStream<Data, any Error> {
     stop()
-    let (stream, continuation) = AsyncThrowingStream.makeStream(of: Data.self)
-    let chunker = AudioChunker(continuation) { [weak self] level in self?.onLevel(level) }
-    let session = Session(deviceUID: deviceUID, chunker: chunker)
+    let (stream, continuation) = AsyncThrowingStream.makeStream(of: Data.self, bufferingPolicy: .bufferingOldest(Self.backlogChunks))
+    let id = UUID()
+    let chunker = AudioChunker(continuation,
+      onLevel: { [weak self] level in self?.onLevel(level) },
+      onFailure: { [weak self] error in
+        guard let self, let session = self.session, session.id == id else { return }
+        self.end(session, throwing: error)
+      })
+    let session = Session(id: id, deviceUID: deviceUID, chunker: chunker)
     self.session = session
     do {
       try await open(session)
@@ -60,6 +68,15 @@ import AVFoundation
       throw error
     }
     return stream
+  }
+
+  /// Two seconds of 100 ms chunks. Overflow reports failure rather than dropping speech.
+  static let backlogChunks = 20
+
+  func waitForCleanup() async {
+    let pending = cleanup
+    cleanup.removeAll()
+    for task in pending { await task.value }
   }
 
   /// Stops delivering, sends whatever is left of the last chunk, finishes the stream and
@@ -94,16 +111,17 @@ import AVFoundation
     // an open already replaced, such as the second of the two notifications a disconnect may
     // post, is ignored.
     guard session === self.session, lost === session.microphone else { return }
-    session.closeMicrophone()
+    if let close = session.closeMicrophone() { cleanup.append(close) }
     guard !session.reopened else { return end(session, throwing: Failure.captureFailed(error)) }
     session.reopened = true
-    Task {
+    let reopen = Task {
       do {
         try await open(session)
       } catch {
         end(session, throwing: error)
       }
     }
+    cleanup.append(reopen)
   }
 
   /// Ends `session` if it is still the one in progress, and does nothing otherwise.
@@ -111,7 +129,8 @@ import AVFoundation
     guard session === self.session else { return }
     self.session = nil
     session.chunker.end(throwing: error)
-    session.closeMicrophone()
+    if let close = session.closeMicrophone() { cleanup.append(close) }
+    if let error { onFailure(error) }
   }
 }
 
@@ -121,6 +140,7 @@ import AVFoundation
 /// its own session's chunker, which drops audio once that session has ended. Neither can reach
 /// the next session's microphone or stream.
 @MainActor private final class Session {
+  let id: UUID
   /// The chosen input, kept so a reopen chooses the same way.
   let deviceUID: String?
   let chunker: AudioChunker
@@ -129,15 +149,16 @@ import AVFoundation
   /// Whether the device has been lost and reopened once already.
   var reopened = false
 
-  init(deviceUID: String?, chunker: AudioChunker) {
+  init(id: UUID, deviceUID: String?, chunker: AudioChunker) {
+    self.id = id
     self.deviceUID = deviceUID
     self.chunker = chunker
   }
 
-  func closeMicrophone() {
-    guard let microphone else { return }
+  func closeMicrophone() -> Task<Void, Never>? {
+    guard let microphone else { return nil }
     self.microphone = nil
-    Task { await microphone.close() }
+    return Task { await microphone.close() }
   }
 }
 

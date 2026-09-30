@@ -25,14 +25,17 @@ final class AudioChunker: NSObject, Sendable, AVCaptureAudioDataOutputSampleBuff
 
   private let state: Mutex<State>
   /// Receives the level of the first buffer and then of each chunk, while delivering.
+  private let onFailure: @MainActor @Sendable (any Error) -> Void
   private let onLevel: @MainActor @Sendable (Double) -> Void
 
   init(
     _ continuation: AsyncThrowingStream<Data, any Error>.Continuation,
-    onLevel: @escaping @MainActor @Sendable (Double) -> Void
+    onLevel: @escaping @MainActor @Sendable (Double) -> Void,
+    onFailure: @escaping @MainActor @Sendable (any Error) -> Void
   ) {
     state = Mutex(State(continuation: continuation))
     self.onLevel = onLevel
+    self.onFailure = onFailure
   }
 
   private var isDelivering: Bool { state.withLock { $0.continuation != nil } }
@@ -40,7 +43,12 @@ final class AudioChunker: NSObject, Sendable, AVCaptureAudioDataOutputSampleBuff
   /// Finishes delivery. A clean end flushes the partial chunk; a failure does not.
   func end(throwing error: (any Error)? = nil) {
     state.withLock { state in
-      if error == nil, !state.pending.isEmpty { state.continuation?.yield(state.pending) }
+      if error == nil, !state.pending.isEmpty,
+        case .dropped = state.continuation?.yield(state.pending) {
+        state.continuation?.finish(throwing: CaptureError("Audio capture backlog exceeded"))
+        state = State()
+        return
+      }
       state.continuation?.finish(throwing: error)
       state = State()
     }
@@ -68,14 +76,22 @@ final class AudioChunker: NSObject, Sendable, AVCaptureAudioDataOutputSampleBuff
         }
         converted = try Self.convert(buffer, with: state.converter!)
       } catch {
-        continuation.finish(throwing: AudioCapture.Failure.captureFailed(error))
+        let failure = AudioCapture.Failure.captureFailed(error)
+        continuation.finish(throwing: failure)
+        Task { @MainActor in onFailure(failure) }
         state = State()
         return nil
       }
       state.pending.append(converted)
       var sent = 0
       while state.pending.count - sent >= Self.chunkBytes {
-        continuation.yield(Data(state.pending[sent..<sent + Self.chunkBytes]))
+        if case .dropped = continuation.yield(Data(state.pending[sent..<sent + Self.chunkBytes])) {
+          let failure = CaptureError("Audio capture backlog exceeded")
+          continuation.finish(throwing: failure)
+          Task { @MainActor in onFailure(failure) }
+          state = State()
+          return nil
+        }
         sent += Self.chunkBytes
       }
       // The level of what is sent, measured after conversion, so any format reads the same.

@@ -4,6 +4,9 @@ Status: accepted, 2026-09-27. Live timing and window updated 2026-09-28. Rejecte
 revisions advance and the window shrinks to 50 words from 2026-09-29. Supersedes
 the batch pass in [0017](0017-batch-pass-on-commit.md).
 
+Lifetime and related timing/presentation rules are superseded by
+[0024](0024-dictation-operation-lifetime.md). The original record is retained below.
+
 ## Context
 
 The streaming transcript can put a full stop at a thinking pause and preserve words the

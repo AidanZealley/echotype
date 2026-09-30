@@ -5,6 +5,15 @@ Status: accepted, 2026-09-24 (overlay gate G2). Supersedes the error surface in
 [0012](0012-capture-with-avcapturesession.md). Live revision superseded click-to-stop
 on 2026-09-26 during the preview redesign.
 
+Lifetime and related timing/presentation rules are superseded by
+[0024](0024-dictation-operation-lifetime.md). The original record is retained below.
+
+Aidan's 2026-09-30 addition shows "Select an input" while recording without a
+conservative focused destination text field. "Starting" remains until microphone audio
+flows. Focus readiness is advisory and updates during silence; recording and finishing-time
+destination capture keep their existing behavior. Dictation error text uses the transcript's
+1.5 line-height multiple. Select an input uses the existing near-limit timer semantic orange. Implementation is recorded in 0024. G4 passed under Aidan's approved reduced-core scope; alternate-theme and changed error/amber layout checks remain unverified.
+
 ## Context
 
 The overlay must never take focus, since a lost focus sends the insertion nowhere. It also

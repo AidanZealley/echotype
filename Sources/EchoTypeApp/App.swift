@@ -80,9 +80,10 @@ struct EchoTypeApp: App {
     if controller.hasAPIKey == nil { return "Checking API key…" }
     return switch controller.state {
     case .idle: "Ready"
+    case .starting: "Starting"
     case .listening: "Listening"
     case .paused: "Paused"
-    case .finalizing, .inserting: "Finishing"
+    case .finishing, .inserting: "Finishing"
     case .cancelled: "Cancelled"
     }
   }
