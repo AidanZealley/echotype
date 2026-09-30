@@ -37,13 +37,13 @@ public enum Speech {
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     let encoder = JSONEncoder()
     encoder.keyEncodingStrategy = .convertToSnakeCase
-    // Strings, finite doubles and integers always encode.
+    // Speed is validated; all other body fields are strings, booleans or integers.
     request.httpBody = try! encoder.encode(
       Body(
         text: text,
         voiceId: settings.voice,
         language: settings.language,
-        speed: settings.speechSpeed,
+        speed: settings.validatedSpeechSpeed,
         outputFormat: .init(codec: "pcm", sampleRate: sampleRate),
         optimizeStreamingLatency: 0,
         textNormalization: false

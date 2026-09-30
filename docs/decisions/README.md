@@ -19,7 +19,7 @@ delete it.
 | 0007 | [Known gaps handed to later milestones](0007-known-gaps.md) | Open |
 | 0008 | [The pill: a text-first layout with a level glow](0008-pill-design.md) | Accepted |
 | 0009 | [How the overlay behaves during a session](0009-overlay-behaviour.md) | Accepted; meter input superseded by 0012; dictation lifetime/presentation by 0024; reading lifetime/presentation by 0018 |
-| 0010 | [How settings and the API key are stored](0010-settings-storage-and-api-key.md) | Accepted |
+| 0010 | [How settings and the API key are stored](0010-settings-storage-and-api-key.md) | Accepted; compatible speech-speed validation added 2026-09-30 |
 | 0011 | [The settings window makes EchoType a regular app while it is open](0011-settings-window-activation.md) | Accepted; helper and close rule superseded by 0023 |
 | 0012 | [Capture the microphone with AVCaptureSession on the chosen input](0012-capture-with-avcapturesession.md) | Accepted; lifetime superseded by 0024 |
 | 0013 | [The Test button, launch at login and the permission rows](0013-test-button-and-system-rows.md) | Accepted; key field superseded by 0015 |

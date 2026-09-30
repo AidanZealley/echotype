@@ -106,6 +106,15 @@ public struct Settings: Equatable, Sendable {
   /// The speaking rate, from 0.7 to 1.5, the endpoint's range.
   public var speechSpeed: Double
 
+  public static let speechSpeedRange = 0.7...1.5
+  public static let defaultSpeechSpeed = 1.0
+
+  /// Storage and speech requests share this fallback, including for programmatic values.
+  public var validatedSpeechSpeed: Double {
+    Self.speechSpeedRange.contains(speechSpeed) && speechSpeed.isFinite
+      ? speechSpeed : Self.defaultSpeechSpeed
+  }
+
   /// Whether a dictation ending in a request like "reply with EchoType" is sent with Return.
   public var sendReplyRequests: Bool
 
@@ -120,7 +129,7 @@ public struct Settings: Equatable, Sendable {
     cleanUp: Bool = true,
     readAloudHotkey: Hotkey = .optionS,
     voice: String = "ara",
-    speechSpeed: Double = 1.0,
+    speechSpeed: Double = Settings.defaultSpeechSpeed,
     sendReplyRequests: Bool = true
   ) {
     self.hotkey = hotkey
@@ -170,6 +179,7 @@ extension Settings: Codable {
     voice = (try? container.decodeIfPresent(String.self, forKey: .voice)) ?? defaults.voice
     speechSpeed =
       (try? container.decodeIfPresent(Double.self, forKey: .speechSpeed)) ?? defaults.speechSpeed
+    speechSpeed = validatedSpeechSpeed
     sendReplyRequests =
       (try? container.decodeIfPresent(Bool.self, forKey: .sendReplyRequests))
       ?? defaults.sendReplyRequests
@@ -184,7 +194,7 @@ extension Settings: Codable {
     try container.encode(cleanUp, forKey: .cleanUp)
     try container.encode(readAloudHotkey, forKey: .readAloudHotkey)
     try container.encode(voice, forKey: .voice)
-    try container.encode(speechSpeed, forKey: .speechSpeed)
+    try container.encode(validatedSpeechSpeed, forKey: .speechSpeed)
     try container.encode(sendReplyRequests, forKey: .sendReplyRequests)
   }
 
@@ -195,7 +205,7 @@ extension Settings: Codable {
 
   /// The value to store.
   public func encoded() -> Data {
-    // Strings, integers, booleans and finite doubles always encode.
+    // The only persisted double is validated before encoding; the other fields always encode.
     try! JSONEncoder().encode(self)
   }
 }

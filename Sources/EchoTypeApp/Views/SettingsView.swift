@@ -190,7 +190,7 @@ private struct ReadAloudTab: View {
       LabeledContent("Speed") {
         HStack {
           // The endpoint's range.
-          Slider(value: $store.settings.speechSpeed, in: 0.7...1.5, step: 0.1)
+          Slider(value: $store.settings.speechSpeed, in: EchoTypeCore.Settings.speechSpeedRange, step: 0.1)
           Text(store.settings.speechSpeed, format: .number.precision(.fractionLength(1)))
             .monospacedDigit()
             .frame(width: 28, alignment: .trailing)

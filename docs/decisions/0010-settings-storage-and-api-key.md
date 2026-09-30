@@ -1,6 +1,6 @@
 # 0010 How settings and the API key are stored
 
-Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-27 for cleanup.
+Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-30 for compatible speech-speed validation.
 Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 ## Context
@@ -15,11 +15,18 @@ Keychain item the app cannot read without a prompt.
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
   `keyterms`, `language`, `inputDeviceID` (omitted when `nil`), `cleanUp`,
-  `readAloudHotkey` (shaped like `hotkey`), `voice` and `speechSpeed`. The key names and
+  `readAloudHotkey` (shaped like `hotkey`), `voice`, `speechSpeed` and
+  `sendReplyRequests`. The key names and
   the modifier bit positions are the upgrade contract.
 - Each field decodes on its own and falls back to its default, so a missing or unreadable
   field resets only itself and adding a field never resets the hotkey. Data that is not a
   JSON object gives all defaults.
+- Speech speed must be finite and within 0.7 through 1.5. Invalid stored values fall back
+  to 1.0 without discarding other preferences. Valid fractional speeds are preserved.
+  `Settings.validatedSpeechSpeed` supplies the same value to settings encoding and speech
+  requests, including when callers construct or mutate Settings with NaN or infinity.
+  The slider uses the shared range and retains its 0.1 step. Storage keys and modifier bits
+  are unchanged; there is no migration or schema version.
 - `cleanUp` defaults to `true`. The former `batchOnCommit` key is ignored, so an old
   batch preference does not govern the new revision behavior (see
   [0021](0021-revise-committed-dictation.md)).
@@ -38,7 +45,7 @@ Keychain item the app cannot read without a prompt.
 - The read-aloud hotkey offers Opt+S and Ctrl+Opt+S (`Settings.Hotkey.readAloudPresets`).
 - `SettingsStore` in the app is the only writer of `UserDefaults`. The hotkey monitor
   reads the current hotkey on every key event, so a change applies without a relaunch.
-  The controller snapshots the settings once at the start of each session.
+  The coordinator snapshots settings when reserving dictation, Test or reading.
 - The API key lives only in the Keychain, as one generic password item whose service
   is the bundle identifier in `Resources/Info.plist` and whose account is `xai`.
   `Keychain.save` deletes every item under that service, then adds the new one.
@@ -50,6 +57,10 @@ Keychain item the app cannot read without a prompt.
 
 - `SettingsTests` pins a literal stored payload, including both hotkey presets, so a
   change to the key names or the modifier bits fails the suite.
+- `SettingsValidationTests` exercises stored malformed/out-of-range values and public
+  construction/mutation through actual JSON persistence and speech request encoding.
+  Coordinator coverage preserves a previous Last Dictation across Test and checks that
+  dictation/read-aloud hotkeys, Escape, Space and supplied speech cannot take over Test.
 - Delete-then-add leaves a gap of microseconds with no key, and a failed add leaves none.
   The window reports a failed save. Changing this means checking the Keychain paths by
   hand again.
