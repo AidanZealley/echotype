@@ -48,7 +48,9 @@ struct PillView: View {
         deviceName(device.name)
       }
       Spacer(minLength: 8)
-      Text(verbatim: "⌥D stop · esc cancel").fixedSize()
+      if pill.phase != .inserting {
+        Text(verbatim: "⌥D stop · esc cancel").fixedSize()
+      }
     }
     .font(.system(size: 11))
     .foregroundStyle(.primary.opacity(supportingTextOpacity))
@@ -175,6 +177,7 @@ extension Pill.Phase {
     case .listening: "Listening"
     case .paused: "Paused"
     case .transcribing: "Transcribing"
+    case .inserting: "Inserting"
     case .reading: "Reading"
     case .readingPaused: "Paused"
     case .error: "Error transcribing"
@@ -193,7 +196,7 @@ private struct LevelMeter: View {
 
   var body: some View {
     switch pill.phase {
-    case .transcribing:
+    case .transcribing, .inserting:
       ProgressView()
         .controlSize(.mini)
         .tint(Color.primary.opacity(indicatorOpacity))
@@ -270,7 +273,7 @@ private struct LevelGlow: View {
     case .starting: 0.25
     case .listening, .reading: 0.4
     case .paused, .readingPaused: 0.15
-    case .transcribing, .error: 0
+    case .transcribing, .inserting, .error: 0
     }
   }
 

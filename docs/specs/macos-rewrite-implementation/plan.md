@@ -19,7 +19,7 @@ Workstream states: Not started, Implementation, Review, Remediation, Closure rev
 | # | Workstream | Depends on | Status |
 |---|---|---|---|
 | 1 | [Establish Mac verification](01-verification.md) | Workflow approval | Accepted |
-| 2 | [Own clipboard and destination](02-clipboard-destination.md) | 1 | Not started |
+| 2 | [Own clipboard and destination](02-clipboard-destination.md) | 1 | Accepted |
 | 3 | [Own dictation lifetime](03-dictation.md) | 2 | Not started |
 | 4 | [Own reading lifetime](04-reading.md) | 3 | Not started |
 | 5 | [Acknowledge MCP admission](05-mcp-admission.md) | 4 | Not started |
@@ -60,8 +60,8 @@ These contracts freeze behavior and dependency direction. Details owned solely w
 | Gate | Owner and placement | Status | Candidate | Required evidence and resume condition |
 |---|---|---|---|---|
 | G1 Mac/toolchain/CI | 1, after closure before acceptance | Passed | Workstream 1 on `refactor/macos-lifecycle`, base `2e17817`; local tests/build and fresh closure pass; Aidan approved Actions deferral on 2026-09-30; CI unverified; required-check configuration pending | Swift tests and release build on Mac; passing Actions run or explicit approval to defer Actions execution; record whether merge-check configuration needs Aidan |
-| G2 Destination feasibility | 2, during implementation before independent review | Pending | TBD | Repeated stable editing-target identity plus changed-field detection in native, terminal and Electron editors; conservative recovery for unsupported targets; failure changing supported scope requires Aidan's decision |
-| G3 Clipboard integration | 2, after closure before acceptance | Pending | TBD | Signed paste/copy/restoration, recovery and Return suppression; external clipboard writes and reading Copy cleanup checked |
+| G2 Destination feasibility | 2, during implementation before independent review | Passed | Adapter SHA-256 `ea177e90…`; base `70bbbd5`. Native TextEdit 1.21, Electron VS Code 1.139.1 and user-approved Ghostty 1.3.1 pass three stable trials and same-window Find changes each; focus-away and unavailable checks pass | Evidence re-audited 2026-09-30. Aidan explicitly approved Ghostty and confirmed same-window Find in E2-G2-TARGET. Terminal.app remains unverified; permission/attribution limits remain recorded |
+| G3 Clipboard integration | 2, after closure before acceptance | Passed | Reviewed candidate base `70bbbd5`, executable SHA-256 `4bdd633e…`; separate signed driver uses exact Clipboard/Destination source | Signed TextEdit Copy/paste/Return, seeded string/HTML restoration, acknowledged stopped Copy followed by insertion, separate-process external writer, same-window destination loss before paste and before Return, and unavailable System Settings focus pass. Driver-only timing holds/failed attempts recorded; no permissions changed. Disposable TextEdit test document remains open for user discard |
 | G4 Dictation/device behavior | 3, after closure before acceptance | Pending | TBD | Signed hotkeys/cancellation/last-word behavior and mic release; chosen input, disconnect and Bluetooth checks as available; network live test only with explicit authority |
 | G5 Reading/playback | 4, after closure before acceptance | Pending | TBD | Signed selection Copy, stop/replacement/Space, pause queue bounds and dictation takeover; no stale levels or playback |
 | G6 Two-process MCP | 5, during implementation before independent review, then verify final candidate | Pending | TBD | Signed real `--mcp` exchanges accepted/busy/unavailable/unconfirmed; reply receipt while app inactive, main-actor expiry, modern/legacy modes, no app launch or accidental playback after expired admission |
@@ -75,7 +75,7 @@ All rows 1 through 6 must be Accepted. Tests and the unsigned release executable
 
 ## Escalations
 
-None. Resolved decisions remain in the owning handoff and decision log.
+No unresolved escalations. E2-G2-TARGET is resolved into packet 2 and the decision log.
 
 ## Completion summary
 
@@ -94,4 +94,5 @@ The final lead fills these fields before its acceptance commit so the orchestrat
 | 2026-09-29 | Clipboard before dictation; UI with feature owners | Prove editing-target identity before consumers and avoid deferred recovery/cancellation UI | Proposed in draft workflow | 2 through 5 |
 | 2026-09-29 | Correlated distributed-notification request/reply with five-second admission wait | Extend existing delivery narrowly; signed two-process gate verifies feasibility | Proposed in draft workflow | 5 |
 | 2026-09-30 | Workstream 1 drift: none. Direct executable-target app tests work without a production split | Local SwiftPM import and adapter tests pass without app startup; recovery confirms reviewed code and local checks | Within approved packet scope | 1 |
+| 2026-09-30 | Workstream 2 Accepted. Approved validation drift: Ghostty replaces Terminal.app for G2; Terminal.app remains unverified. No architecture drift | E2-G2-TARGET answered "Yes, accept Ghostty; Find opened in the same window." G2 evidence audited; complete clipboard/recovery integration passed independent review, one R1 remediation and fresh closure. G3 signed service trials passed after closure. Final targeted run passed 31 tests. Narrow Pill ownership extension hides cancellation during insertion; temporary probes removed, logs preserved | Aidan, E2-G2-TARGET, 2026-09-30; remaining implementation within approved specification | 2 through 4 and final reporting |
 | 2026-09-30 | Defer the first Actions execution. CI remains unverified; required-check configuration remains an administrator follow-up | E1-CI resolved. Continue local work after G1; no publication or PR authorised | Aidan, explicit answer recorded in E1-CI on 2026-09-30 | 1 and final reporting |

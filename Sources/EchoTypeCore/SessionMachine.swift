@@ -84,6 +84,8 @@ public actor SessionMachine {
     case failed(any Error)
   }
 
+  private let onFinishing: @Sendable () async -> Void
+  private var finishingEffect: Task<Void, Never>?
   private let transport: any WebSocketTransport
   private let settings: Settings
   private let clock: any SessionClock
@@ -104,7 +106,10 @@ public actor SessionMachine {
   private var heardSpeech = false
   private var ending: Ending?
 
-  public init(transport: any WebSocketTransport, settings: Settings, clock: any SessionClock) {
+  public init(transport: any WebSocketTransport, settings: Settings, clock: any SessionClock,
+    onFinishing: @escaping @Sendable () async -> Void = {}
+  ) {
+    self.onFinishing = onFinishing
     self.transport = transport
     self.settings = settings
     self.clock = clock
@@ -122,7 +127,7 @@ public actor SessionMachine {
     guard state == .idle else { return .nothing }
     begin()
     let ending = await readUntilEnd()
-    return conclude(ending)
+    return await conclude(ending)
   }
 
   /// Hands one chunk of audio to the endpoint. Audio streams while paused too, since pausing is
@@ -136,6 +141,17 @@ public actor SessionMachine {
   public func trigger() async {
     guard isActive else { return }
     await beginFinalizing()
+  }
+
+  /// Operation-bound effect before capture drain. Idempotent across stop, reply and hard cap.
+  public func enterFinishing() async {
+    guard isActive else { return }
+    await finishEffect()
+  }
+
+  private func finishEffect() async {
+    if finishingEffect == nil { finishingEffect = Task { await onFinishing() } }
+    await finishingEffect?.value
   }
 
   /// Escape: discard everything.
@@ -261,6 +277,8 @@ public actor SessionMachine {
 
   /// The only route to `finalizing`: an explicit trigger or the hard cap.
   private func beginFinalizing() async {
+    await enterFinishing()
+    guard isActive else { return }
     transition(to: .finalizing)
     do {
       try await client.finish()
@@ -290,7 +308,13 @@ public actor SessionMachine {
     transport.close()
   }
 
-  private func conclude(_ ending: Ending) -> Outcome {
+  private func conclude(_ ending: Ending) async -> Outcome {
+    if case .cancelled = ending {
+      // Join an effect already requested before cancellation, without starting a new one.
+      await finishingEffect?.value
+    } else {
+      await finishEffect()
+    }
     // Recorded so that a late trigger or cancel is rejected rather than transitioning a session
     // that has already ended.
     decide(ending)

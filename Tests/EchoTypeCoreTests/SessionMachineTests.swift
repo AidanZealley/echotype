@@ -348,4 +348,78 @@ struct SessionMachineTests {
     #expect(
       await log.latest == .init(state: .idle, committed: "said and done then some", utterance: "", provisional: ""))
   }
+  private actor FinishingLog {
+    var calls = 0
+    var framesAtEntry: [[String]] = []
+    func record(_ frames: [String]) { calls += 1; framesAtEntry.append(frames) }
+  }
+
+  @Test("Finishing effect precedes protocol close and runs once", arguments: ["stop", "hardCap", "failure", "cancel"])
+  func finishingEffectOrdering(path: String) async {
+    let effect = FinishingLog()
+    let session = SessionMachine(transport: transport, settings: Settings(), clock: clock,
+      onFinishing: { await effect.record(await transport.textFrames) })
+    let snapshots = SnapshotLog(session.snapshots)
+    let running = Task { await session.run() }
+    defer { running.cancel(); transport.close() }
+    #expect(await snapshots.next() == .listening)
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("words", speechFinal: true))
+    switch path {
+    case "stop":
+      // Controller enters finishing before stopping/draining capture; trigger follows drain.
+      await session.enterFinishing()
+      #expect(await effect.calls == 1)
+      #expect(await transport.textFrames.isEmpty)
+      await session.enterFinishing()
+      await session.trigger()
+      await transport.emit(Fixture.done)
+    case "hardCap":
+      await clock.advance(by: 300)
+      await transport.emit(Fixture.done)
+    case "failure":
+      await transport.fail(with: SessionError.socket("lost"))
+    default:
+      await session.cancel()
+    }
+    _ = await running.value
+    #expect(await effect.calls == (path == "cancel" ? 0 : 1))
+    #expect(await effect.framesAtEntry.allSatisfy { $0.isEmpty })
+  }
+
+  @Test("Concurrent finishing requests await the same effect before protocol closure")
+  func finishingEffectIsAwaited() async {
+    let (entered, signal) = AsyncStream<Void>.makeStream()
+    let (released, release) = AsyncStream<Void>.makeStream()
+    defer { signal.finish(); release.finish(); transport.close() }
+    let effect = FinishingLog()
+    let session = SessionMachine(transport: transport, settings: Settings(), clock: clock,
+      onFinishing: {
+        await effect.record(await transport.textFrames)
+        signal.yield(())
+        for await _ in released { break }
+      })
+    let snapshots = SnapshotLog(session.snapshots)
+    let running = Task { await session.run() }
+    defer { running.cancel() }
+    #expect(await snapshots.next() == .listening)
+    await transport.emit(Fixture.created)
+    let stop = Task { await session.enterFinishing() }
+    for await _ in entered { break }
+    let trigger = await session.startTriggering()
+    #expect(await transport.textFrames.isEmpty)
+    release.yield(())
+    await stop.value
+    await trigger.value
+    #expect(await effect.calls == 1)
+    #expect(await transport.textFrames == closingFrames)
+    await transport.emit(Fixture.done)
+    _ = await running.value
+  }
+
+}
+
+private extension SessionMachine {
+  // Run until trigger actually suspends on the finishing effect before releasing that effect.
+  func startTriggering() -> Task<Void, Never> { Task.immediate { await self.trigger() } }
 }

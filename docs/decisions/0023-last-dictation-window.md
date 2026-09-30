@@ -67,3 +67,20 @@ diagnostic detail included. The flag no longer exists.
 - Selecting and copying the marked text includes the commit marks.
 - Every dictation keeps its revision windows and replies in memory until the next
   dictation that reaches `running` replaces them.
+
+## Lifecycle rewrite update, 2026-09-30
+
+The trace now stores `finalText` separately from `insertion` and `sending`. Insertion
+records not attempted, attempted, cancelled or skipped with changed/unavailable focus.
+Sending records not requested, attempted or skipped. A successful transcript outcome is
+`completed`; neither it nor a synthetic paste claims the editor received the text.
+The previous `inserted` field and outcome are removed. Traces remain in memory, so no
+stored-history migration or compatibility alias is needed.
+
+Marks compare streamed text with final cleanup output, including recovery results where
+paste was skipped. Last Dictation shows that final text with explicit Copy text, keeps
+Copy as JSON and describes attempted/skipped paste and Return. Both Copy actions queue
+through the shared clipboard owner. Recovery updates the trace and shows a brief pill
+message; it never opens the window or copies automatically. Cancelled results retain
+diagnostics without exposing final text as a recovery result. Existing retention and
+window activation rules remain.

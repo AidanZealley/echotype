@@ -3,7 +3,7 @@ import EchoTypeCore
 import SwiftUI
 
 /// The Last Dictation window: the last dictation's commits, revision requests and the words the
-/// inserted text lost or re-punctuated. It only renders `controller.lastTrace`, so a dictation
+/// cleanup output lost or re-punctuated. It only renders `controller.lastTrace`, so a dictation
 /// ending updates it without ordering it front or taking focus.
 struct LastDictationWindow: View {
   static let id = "last-dictation"
@@ -16,6 +16,10 @@ struct LastDictationWindow: View {
           Text(trace.summary)
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
+          if !trace.finalText.isEmpty {
+            LabeledText(label: "Final text", text: trace.finalText)
+            Button("Copy text") { Task { await controller.copyLastDictation(trace.finalText) } }
+          }
           MarkedText(trace: trace)
           if !trace.revisions.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
@@ -41,8 +45,7 @@ struct LastDictationWindow: View {
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     encoder.dateEncodingStrategy = .iso8601
     guard let data = try? encoder.encode(trace) else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string)
+    Task { await controller.copyLastDictation(String(decoding: data, as: UTF8.self)) }
   }
 }
 
@@ -84,7 +87,7 @@ private struct LabeledText: View {
   }
 }
 
-/// The streamed words marked against the inserted text, as one selectable paragraph. SwiftUI's
+/// The streamed words marked against the final cleanup text, as one selectable paragraph. SwiftUI's
 /// `Text` has no hover for part of a paragraph, so this is a text view, which shows each run's
 /// tooltip: the streamed form of a changed word, and the time since the previous commit at a
 /// commit mark.
@@ -155,8 +158,8 @@ private struct MarkedText: NSViewRepresentable {
           .foregroundColor: NSColor.systemRed,
           .strikethroughStyle: NSUnderlineStyle.single.rawValue,
         ])
-      case .changed(let inserted):
-        append(inserted, [.foregroundColor: NSColor.systemOrange, .toolTip: mark.word])
+      case .changed(let revised):
+        append(revised, [.foregroundColor: NSColor.systemOrange, .toolTip: mark.word])
       }
     }
     return result
@@ -170,7 +173,7 @@ private func seconds(_ interval: TimeInterval) -> String {
 
 extension DictationTrace {
   /// For example `42s · 138 words · 9 commits · 11 requests: 7 accepted, 2 rejected, 1 failed`,
-  /// followed by the outcome when nothing was inserted or the session failed.
+  /// followed by the outcome and attempted or skipped paste/Return.
   fileprivate var summary: String {
     let duration = Duration.seconds((endedAt ?? startedAt).timeIntervalSince(startedAt))
     var parts = [
@@ -180,10 +183,20 @@ extension DictationTrace {
       cleanUp ? requestCounts : "cleanup off",
     ]
     switch outcome {
-    case .inserted: break
+    case .completed: break
     case .nothing: parts.append("empty")
     case .cancelled: parts.append("cancelled")
     case .failed(let error): parts.append("failed: \(error)")
+    }
+    switch insertion {
+    case .attempted: parts.append("paste attempted")
+    case .skipped: parts.append("paste skipped; Copy text to recover")
+    case .notAttempted, .cancelled: break
+    }
+    switch sending {
+    case .attempted: parts.append("Return attempted")
+    case .skipped: parts.append("sending skipped")
+    case .notRequested: break
     }
     return parts.joined(separator: " · ")
   }

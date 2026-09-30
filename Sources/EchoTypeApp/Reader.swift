@@ -23,7 +23,7 @@ import Foundation
   private static let bufferBytes = Speech.sampleRate / 10 * 2
 
   private let player: SpeechPlayer
-  private let inserter: Inserter
+  private let clipboard: Clipboard
   private var task: Task<Void, any Error>?
   private var isPaused = false
   private var playbackStarted = false
@@ -32,10 +32,10 @@ import Foundation
   init(
     _ source: Source,
     settings: Settings,
-    inserter: Inserter,
+    clipboard: Clipboard,
     onLevel: @escaping @MainActor (Double) -> Void
   ) {
-    self.inserter = inserter
+    self.clipboard = clipboard
     player = SpeechPlayer(onLevel: onLevel)
     task = Task { try await read(source, settings) }
   }
@@ -68,8 +68,9 @@ import Foundation
     let spoken: String
     switch source {
     case .selection:
-      try await inserter.waitForRestore()
-      let selection = await Pasteboard.copySelection()
+      let selection = await clipboard.copySelection(cancelled: { [weak self] in
+        self?.task?.isCancelled != false
+      })
       try Task.checkCancellation()
       guard let selection else { throw Failure.nothingSelected }
       spoken = selection

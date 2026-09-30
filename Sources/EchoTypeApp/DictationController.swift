@@ -71,7 +71,10 @@ import Observation
   /// The monitor reads the hotkey from it live; each session reads a copy of the rest.
   private let store: SettingsStore
   private let audio = AudioCapture()
-  private let inserter = Inserter()
+  private let clipboard = Clipboard()
+  private var destination: Destination?
+  private var insertionCancelled = false
+  private var insertionBegan = false
   @ObservationIgnored private let panel = OverlayPanel()
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
@@ -132,7 +135,7 @@ import Observation
     case .starting, .abandoned, .testing:
       break
     case .running:
-      Task { commit() }
+      Task { await commit() }
     case .reading(let reader):
       // The reading ends on its own once stopped, and leaves the pill to the dictation.
       phase = .starting
@@ -181,7 +184,7 @@ import Observation
     let reader = Reader(
       source,
       settings: store.settings,
-      inserter: inserter,
+      clipboard: clipboard,
       onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
     phase = .reading(reader)
     Task { await read(reader) }
@@ -203,6 +206,8 @@ import Observation
     case .abandoned:
       return true
     case .running(let session):
+      guard !insertionBegan else { return false }
+      insertionCancelled = true
       Task { await session.cancel() }
       return true
     }
@@ -234,7 +239,8 @@ import Observation
   /// Commits by ending capture rather than triggering the session here. The pump sends what is
   /// still queued and the partial last chunk `stop()` flushes, then triggers, so the last word
   /// reaches xAI before `audio.done`. A second commit does nothing.
-  private func commit() {
+  private func commit() async {
+    if case .running(let session) = phase { await session.enterFinishing() }
     audio.stop()
   }
 
@@ -245,6 +251,9 @@ import Observation
     defer { phase = .idle }
     // Read once, here, so a change in Settings never reaches a session already running.
     let settings = store.settings
+    destination = nil
+    insertionCancelled = false
+    insertionBegan = false
     showStarting()
     switch await start(settings) {
     case .abandoned:
@@ -267,15 +276,15 @@ import Observation
       if settings.sendReplyRequests, audioFailure == nil, case .insert(let text) = outcome {
         sends = ReplyRequest.matches(text)
       }
-      await finish(outcome, audioFailure: audioFailure, sends: sends)
-      await publishTrace(outcome, audioFailure: audioFailure, reviser: reviser)
+      let insertion = await finish(outcome, audioFailure: audioFailure, sends: sends)
+      await publishTrace(outcome, audioFailure: audioFailure, reviser: reviser, insertion: insertion)
     }
   }
 
-  /// Completes the trace `run` recorded with what `finish` did, and publishes it. `inserted` is
-  /// the text `finish` passed to the inserter, and the failure is the one it showed.
+  /// Publishes available final text and the clipboard transaction attempts separately.
   private func publishTrace(
-    _ outcome: SessionMachine.Outcome, audioFailure: (any Error)?, reviser: Reviser?
+    _ outcome: SessionMachine.Outcome, audioFailure: (any Error)?, reviser: Reviser?,
+    insertion: Clipboard.InsertionResult
   ) async {
     guard var trace else { return }
     self.trace = nil
@@ -284,16 +293,22 @@ import Observation
     trace.revisions = await reviser?.attempts ?? []
     switch outcome {
     case .insert(let text):
-      trace.inserted = text
-      trace.outcome = .inserted
+      trace.finalText = text
+      trace.outcome = .completed
     case .failed(let text, let error):
-      trace.inserted = text
+      trace.finalText = text
       trace.outcome = .failed(describe(error))
     case .nothing:
       // `run` recorded `.cancelled` if the session was cancelled.
       break
     }
     if let audioFailure { trace.outcome = .failed(describe(audioFailure)) }
+    trace.insertion = insertion.insertion
+    trace.sending = insertion.sending
+    if insertion.insertion == .cancelled {
+      trace.finalText = ""
+      trace.outcome = .cancelled
+    }
     lastTrace = trace
   }
 
@@ -338,7 +353,7 @@ import Observation
 
     let commitAfterFive = Task {
       try? await Task.sleep(for: .seconds(5))
-      if !Task.isCancelled { commit() }
+      if !Task.isCancelled { await commit() }
     }
     let (outcome, audioFailure) = await run(session, streaming: chunks, reviser: nil, endsOnReplyRequest: false)
     // A session that ended early must not have a later one committed for it.
@@ -383,8 +398,16 @@ import Observation
     // The socket opens here, on trigger, because an idle open socket bills streaming time.
     let transport = URLSessionWebSocketTransport(
       url: STTConnection.streamingURL(settings: settings), apiKey: apiKey)
-    let session = SessionMachine(transport: transport, settings: settings, clock: SystemClock())
+    let session = SessionMachine(
+      transport: transport, settings: settings, clock: SystemClock(),
+      onFinishing: { [weak self] in await self?.captureDestination() })
     return .started(session, chunks, apiKey: apiKey)
+  }
+
+  /// Invoked by the session at finishing entry, never by a presentation snapshot.
+  private func captureDestination() {
+    if case .running = phase, !insertionCancelled { destination = DestinationFocus().capture() }
+    audio.stop()
   }
 
   private var isAbandoned: Bool {
@@ -419,7 +442,7 @@ import Observation
     var committedLength = 0
     for await snapshot in session.snapshots {
       if snapshot.committed.count > committedLength {
-        if endsOnReplyRequest, ReplyRequest.matches(snapshot.committed) { commit() }
+        if endsOnReplyRequest, ReplyRequest.matches(snapshot.committed) { await commit() }
         // Committed text only grows at its end, so the suffix is the new segment. This
         // includes the tail `transcript.done` commits.
         trace?.commits.append(.init(
@@ -465,6 +488,7 @@ import Observation
         try? await session.send(audio: chunk)
       }
     } catch {
+      await session.enterFinishing()
       failure = error
     }
     await session.trigger()
@@ -473,31 +497,35 @@ import Observation
 
   private func finish(
     _ outcome: SessionMachine.Outcome, audioFailure: (any Error)?, sends: Bool
-  ) async {
+  ) async -> Clipboard.InsertionResult {
     var failure = audioFailure
+    let text: String
     switch outcome {
-    case .insert(let text):
-      if sends { await insertAndSend(text) } else { inserter.insert(text) }
-    case .nothing:
-      break
-    case .failed(let text, let error):
-      if !text.isEmpty { inserter.insert(text) }
+    case .insert(let final): text = final
+    case .nothing: text = ""
+    case .failed(let final, let error):
+      text = final
       failure = failure ?? error
     }
-    end(showing: failure.map(describe))
+    let result = await clipboard.insert(
+      text, destination: destination, sends: sends,
+      cancelled: { self.insertionCancelled },
+      onBegin: {
+        self.insertionBegan = true
+        self.updatePill { $0.phase = .inserting }
+      })
+    var message = failure.map(describe)
+    if case .skipped = result.insertion {
+      message = [message, "Destination changed or unavailable. Copy the text from Last Dictation."].compactMap { $0 }.joined(separator: " ")
+    } else if case .skipped = result.sending {
+      message = "Sending skipped because the destination changed. Text is in Last Dictation."
+    }
+    end(showing: message)
+    return result
   }
 
-  // MARK: Sending
-
-  /// How long the focused app gets to take the paste before Return, one value for every app.
-  private static let returnDelay = Duration.milliseconds(200)
-
-  /// The one place that sends: inserts, waits for the paste to land, then presses Return.
-  private func insertAndSend(_ text: String) async {
-    inserter.insert(text)
-    try? await Task.sleep(for: Self.returnDelay)
-    inserter.pressReturn()
-  }
+  /// Last Dictation Copy shares the clipboard owner with reading and insertion.
+  func copyLastDictation(_ text: String) async { await clipboard.copy(text) }
 
   // MARK: Reading
 
