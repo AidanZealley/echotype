@@ -18,6 +18,7 @@ struct Pill: Equatable {
     /// Clipboard transaction owns completion; Escape no longer cancels.
     case inserting
     /// Reading the selection aloud. The level is the audio's as it plays.
+    case readingStarting
     case reading
     /// Reading is paused by the user, with its place in the audio retained.
     case readingPaused

@@ -14,6 +14,12 @@ flows. Focus readiness is advisory and updates during silence; recording and fin
 destination capture keep their existing behavior. Dictation error text uses the transcript's
 1.5 line-height multiple. Select an input uses the existing near-limit timer semantic orange. Implementation is recorded in 0024. G4 passed under Aidan's approved reduced-core scope; alternate-theme and changed error/amber layout checks remain unverified.
 
+Reading's accepted lifecycle rewrite derives Starting, Reading and Paused from the
+operation, including remembered pause before audio arrives. Stop hides the reading pill
+while Copy cleanup finishes. Old callbacks cannot update a replacement's pill or levels.
+The implementation and bounded playback policy are recorded in [0018](0018-read-aloud-audio-fetch.md).
+G5 passes with signed startup pause/held repeats, playing pause/resume, paused Escape/pill removal and newest-only audible startup supersession. Replacement isolation is deterministically reviewed; signed pending-Copy and paused-reading dictation takeover remain unverified under Aidan's explicit deferral.
+
 ## Context
 
 The overlay must never take focus, since a lost focus sends the insertion nowhere. It also

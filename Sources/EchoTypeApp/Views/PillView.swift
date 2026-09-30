@@ -188,6 +188,7 @@ extension Pill.Phase {
     case .paused: "Paused"
     case .transcribing: "Transcribing"
     case .inserting: "Inserting"
+    case .readingStarting: "Starting"
     case .reading: "Reading"
     case .readingPaused: "Paused"
     case .error: "Error transcribing"
@@ -206,7 +207,7 @@ private struct LevelMeter: View {
 
   var body: some View {
     switch pill.phase {
-    case .transcribing, .inserting:
+    case .transcribing, .inserting, .readingStarting:
       ProgressView()
         .controlSize(.mini)
         .tint(Color.primary.opacity(indicatorOpacity))
@@ -283,7 +284,7 @@ private struct LevelGlow: View {
     case .starting: 0.25
     case .listening, .selectInput, .reading: 0.4
     case .paused, .readingPaused: 0.15
-    case .transcribing, .inserting, .error: 0
+    case .transcribing, .inserting, .readingStarting, .error: 0
     }
   }
 

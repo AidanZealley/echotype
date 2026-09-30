@@ -5,8 +5,16 @@ import Observation
 
 /// Reserves commands synchronously and owns each admitted operation's top-level task.
 @MainActor @Observable final class DictationController {
-  enum State { case idle, starting, listening, paused, finishing, inserting, cancelled }
+  enum State { case idle, starting, listening, reading, paused, finishing, inserting, cancelled }
   var state: State {
+    if case .reading(let reader) = phase {
+      return switch reader.presentation {
+      case .starting: .starting
+      case .playing: .reading
+      case .paused: .paused
+      case .failed, .stopped: .idle
+      }
+    }
     guard case .dictating(let operation) = phase else { return .idle }
     switch operation.presentation {
     case .starting: return .starting
@@ -46,9 +54,15 @@ import Observation
 
   /// The monitor reads the hotkey from it live; each session reads a copy of the rest.
   private let store: SettingsStore
-  private let clipboard = Clipboard()
+  private let clipboard: Clipboard
+  typealias ReadingFactory = (Reader.Source, UUID, Settings,
+    @escaping @MainActor (Reader) -> Void, @escaping @MainActor (Double) -> Void) -> Reader
+  private let makeReader: ReadingFactory
+  private let focusedScreen: () -> NSScreen?
+  private let showPanel: (Pill, NSScreen?) -> Void
+  private let hidePanel: () -> Void
   @ObservationIgnored private var operationTask: Task<DictationOperation.Result, Never>?
-  @ObservationIgnored private let panel = OverlayPanel()
+  @ObservationIgnored private var readingTask: Task<Void, Never>?
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
   @ObservationIgnored private var speakObserver: (any NSObjectProtocol)?
@@ -59,8 +73,26 @@ import Observation
   /// Fades an error pill after it has been read.
   private var errorFade: Task<Void, Never>?
 
-  init(store: SettingsStore) {
-    self.store = store
+  init(store: SettingsStore, clipboard: Clipboard, makeReader: @escaping ReadingFactory,
+    focusedScreen: @escaping () -> NSScreen?, showPanel: @escaping (Pill, NSScreen?) -> Void,
+    hidePanel: @escaping () -> Void
+  ) {
+    self.store = store; self.clipboard = clipboard; self.makeReader = makeReader
+    self.focusedScreen = focusedScreen; self.showPanel = showPanel; self.hidePanel = hidePanel
+  }
+
+  convenience init(store: SettingsStore) {
+    let clipboard = Clipboard()
+    let panel = OverlayPanel()
+    self.init(store: store, clipboard: clipboard, makeReader: { source, id, settings, present, level in
+      Reader(source, id: id, settings: settings, dependencies: .init(
+        selection: { await clipboard.copySelection(cancelled: $0) },
+        cleanup: { await clipboard.waitForCleanup() },
+        key: { await Task.detached { Keychain.apiKey() }.value },
+        request: { SpeechRequest($0) }, player: SpeechPlayer(onLevel: level)), onPresentation: present)
+    }, focusedScreen: { NSScreen.forFocusedWindow() }, showPanel: { pill, screen in
+      if let screen { panel.show(pill, on: screen) }
+    }, hidePanel: { panel.hide() })
     let monitor = HotkeyMonitor(
       store: store,
       onHotkey: { [weak self] hotkey in
@@ -97,7 +129,7 @@ import Observation
   // MARK: Input
 
   /// Called inside the event tap.
-  private func hotkeyPressed() {
+  func hotkeyPressed() {
     switch phase {
     case .idle:
       startDictation()
@@ -111,12 +143,12 @@ import Observation
   }
 
   /// Called inside the event tap.
-  private func readAloudPressed() {
+  func readAloudPressed() {
     switch phase {
     case .idle:
       startReading(.selection)
     case .reading(let reader):
-      Task { reader.stop() }
+      reader.stop()
     case .dictating, .testing:
       break
     }
@@ -125,43 +157,73 @@ import Observation
   /// Reads `text` given by another process, under the same rules as the read-aloud hotkey,
   /// except that a reading in progress is replaced. Dropped while a dictation or test is
   /// starting or running, so the agent never talks over the user.
-  private func speak(_ text: String) {
+  @discardableResult func speak(_ text: String) -> Bool {
     switch phase {
     case .idle:
       startReading(.text(text))
+      return true
     case .reading(let reader):
-      // The old reading's task sees it no longer owns the phase and leaves the pill alone.
-      reader.stop()
-      startReading(.text(text))
+      startReading(.text(text), replacing: reader)
+      return true
     case .dictating, .testing:
-      break
+      return false
     }
   }
 
-  private func startReading(_ source: Reader.Source) {
+  /// Admission reserves the successor synchronously. Its startup waits for the old run and
+  /// clipboard cleanup, so packet 5 can reply as soon as this boundary accepts the request.
+  private func startReading(_ source: Reader.Source, replacing old: Reader? = nil) {
+    let previous = readingTask
+    old?.stop()
     lastError = nil
     errorFade?.cancel()
-    screen = NSScreen.forFocusedWindow()
-    // The pill shows at once, for a selection and for given text alike; an empty selection
-    // then turns it into its error.
-    pill = Pill(phase: .reading, isReading: true, startedAt: .now)
-    let reader = Reader(
-      source,
-      settings: store.settings,
-      clipboard: clipboard,
-      onLevel: { [weak self] level in self?.updatePill { $0.level = level } })
-    phase = .reading(reader)
-    Task { await read(reader) }
+    let settings = store.settings
+    let id = UUID()
+    let operation = makeReader(source, id, settings, { [weak self] reader in
+      guard self?.isReading(reader) == true else { return }
+      self?.showReading(reader)
+    }, { [weak self] level in
+      guard let self, case .reading(let reader) = self.phase, reader.id == id else { return }
+      reader.receiveLevel(level)
+    })
+    phase = .reading(operation)
+    // Focus lookup and playback setup stay outside the event-tap callback.
+    readingTask = Task {
+      if isReading(operation) {
+        screen = focusedScreen()
+        showReading(operation)
+      }
+      await previous?.value
+      await clipboard.waitForCleanup()
+      let failure = await operation.run()
+      guard isReading(operation) else { return }
+      phase = .idle; readingTask = nil
+      end(showing: failure.map(describe))
+    }
+  }
+
+  private func showReading(_ reader: Reader) {
+    let phase: Pill.Phase
+    switch reader.presentation {
+    case .starting: phase = .readingStarting
+    case .playing: phase = .reading
+    case .paused: phase = .readingPaused
+    case .failed(let message): phase = .error(message)
+    case .stopped: end(); return
+    }
+    pill = Pill(phase: phase, isReading: true, level: reader.level,
+      startedAt: reader.startedAt, pausedAt: reader.pausedAt, pausedDuration: reader.pausedDuration)
+    updatePill { _ in }
   }
 
   /// Called inside the event tap. Escape belongs to the focused app unless a session is
   /// starting or running, or a reading is under way.
-  private func escapePressed() -> Bool {
+  func escapePressed() -> Bool {
     switch phase {
     case .idle, .testing:
       return false
     case .reading(let reader):
-      Task { reader.stop() }
+      reader.stop()
       return true
     case .dictating(let operation):
       guard operation.canCancel else { return false }
@@ -171,26 +233,10 @@ import Observation
   }
 
   /// Space belongs to the focused app except during a reading.
-  private func spacePressed(repeated: Bool) -> Bool {
+  func spacePressed(repeated: Bool) -> Bool {
     guard case .reading(let reader) = phase else { return false }
-    if !repeated { Task { toggleReadingPause(reader) } }
+    if !repeated { reader.togglePause() }
     return true
-  }
-
-  private func toggleReadingPause(_ reader: Reader) {
-    guard isReading(reader) else { return }
-    let paused = reader.togglePause()
-    updatePill {
-      let now = Date.now
-      if paused {
-        $0.pausedAt = now
-      } else if let pausedAt = $0.pausedAt {
-        $0.pausedDuration += now.timeIntervalSince(pausedAt)
-        $0.pausedAt = nil
-      }
-      $0.phase = paused ? .readingPaused : .reading
-      $0.level = 0
-    }
   }
 
   // MARK: Dictation
@@ -250,8 +296,14 @@ import Observation
   private func startDictation(after reader: Reader? = nil) {
     let operation = makeOperation(isTest: false)
     phase = .dictating(operation)
+    let previousReading = readingTask
+    readingTask = nil
+    if let reader {
+      reader.stop()
+      end()
+    }
     operationTask = Task {
-      reader?.stop()
+      await previousReading?.value
       await clipboard.waitForCleanup()
       let result = await operation.run()
       guard owns(operation) else { return result }
@@ -289,21 +341,18 @@ import Observation
     }
   }
 
+  /// Joins the operation reserved at call time, including selection restoration.
+  func waitForCompletion() async {
+    let reading = readingTask
+    let dictation = operationTask
+    await reading?.value
+    _ = await dictation?.value
+  }
+
   /// Last Dictation Copy shares the clipboard owner with reading and insertion.
   func copyLastDictation(_ text: String) async { await clipboard.copy(text) }
 
   // MARK: Reading
-
-  /// One reading, from the press until the audio ends, it is stopped or it fails. The reader
-  /// reads the settings once, when it is created at the press, which also sets up its pill.
-  private func read(_ reader: Reader) async {
-    var failure: (any Error)?
-    do { try await reader.finished() } catch { failure = error }
-    // A dictation took over, and owns the phase and the pill now.
-    guard isReading(reader) else { return }
-    phase = .idle
-    end(showing: failure.map(describe))
-  }
 
   private func isReading(_ reader: Reader) -> Bool {
     if case .reading(let current) = phase { current === reader } else { false }
@@ -316,31 +365,31 @@ import Observation
   private func showStarting() {
     lastError = nil
     errorFade?.cancel()
-    screen = NSScreen.forFocusedWindow()
+    screen = focusedScreen()
     pill = Pill(phase: .starting, startedAt: .now, canCommit: false, dictationHotkey: store.settings.hotkey)
     updatePill { _ in }
   }
 
   /// Changes the live pill and shows it. Does nothing once the session's pill has ended.
   private func updatePill(_ change: (inout Pill) -> Void) {
-    guard var pill, let screen else { return }
+    guard var pill else { return }
     change(&pill)
     pill.dictationHotkey = store.settings.hotkey
     self.pill = pill
-    panel.show(pill, on: screen)
+    showPanel(pill, screen)
   }
 
   /// Ends the session's pill: fades it, or shows `error` in red for three seconds first.
   private func end(showing error: String? = nil) {
     lastError = error
-    guard var pill, let screen else { return }
+    guard var pill else { return }
     self.pill = nil
-    guard let error else { return panel.hide() }
+    guard let error else { return hidePanel() }
     pill.phase = .error(error)
-    panel.show(pill, on: screen)
+    showPanel(pill, screen)
     errorFade = Task {
       try? await Task.sleep(for: .seconds(3))
-      if !Task.isCancelled { panel.hide() }
+      if !Task.isCancelled { hidePanel() }
     }
   }
 
