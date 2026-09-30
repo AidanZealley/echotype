@@ -28,7 +28,7 @@ public final class MCPServer {
     anything needed from the user. For summaries, describe relevant code blocks in plain sentences \
     and omit markdown, file paths, tables and URLs unless asked. Put spoken text only in the tool's \
     text argument. After the call, send the full written answer as the final message. The tool returns once \
-    EchoType has the text, so do not wait for playback.
+    EchoType admits the reading, so do not wait for playback.
     """
 
   private typealias JSON = [String: Any]

@@ -31,6 +31,6 @@ delete it.
 | 0019 | [Build a native macOS app with a small testable core](0019-native-macos-app-and-core-boundary.md) | Accepted |
 | 0020 | [Insert through the pasteboard and copy selections after pending pastes](0020-pasteboard-insertion-and-selection-copy.md) | Accepted; shared clipboard ownership and destination checks added 2026-09-30 |
 | 0021 | [Revise committed dictation during the session](0021-revise-committed-dictation.md) | Accepted; supersedes 0017; lifetime superseded by 0024 |
-| 0022 | [Voice replies: EchoType sends, the agent speaks a summary first, over a hand-written MCP server](0022-voice-replies.md) | Accepted |
+| 0022 | [Voice replies: EchoType sends, the agent speaks a summary first, over a hand-written MCP server](0022-voice-replies.md) | Accepted; acknowledged admission reviewed, signed G6 passed with explicit signed busy deferral |
 | 0023 | [A Last Dictation window shows the last dictation's trace](0023-last-dictation-window.md) | Accepted; final text and paste/Return attempts separated 2026-09-30 |
 | 0024 | [One operation owns dictation through insertion](0024-dictation-operation-lifetime.md) | Accepted; G4 passed under approved reduced-core scope; named manual checks unverified |

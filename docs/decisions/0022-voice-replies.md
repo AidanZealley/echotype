@@ -42,11 +42,17 @@ because of code blocks, paths and markdown, and speech is billed per character.
   legacy client at startup. The official Swift SDK implements only `2025-11-25`, and one
   tool doesn't justify the dependency. The dual-era support is a compatibility boundary
   that stays until legacy clients are gone.
-- **Delivery is a distributed notification.** The `--mcp` process finds the running app by
-  bundle identifier and posts the text with `deliverImmediately`. It never starts a second
-  app. With no app running, the tool returns an error. Any local process could post the
-  notification, but all it can do is have EchoType read text aloud, so it has no
-  authentication.
+- **Delivery uses correlated distributed notifications.** The `--mcp` process finds the
+  running app by bundle identifier and sends a UUID, intended GUI PID, text and five-second
+  system-uptime expiry with `deliverImmediately`. It registers for the reply before posting
+  and services the main run loop while stdin is read on a background thread. It creates no
+  NSApplication and never starts another app. The running coordinator checks shape, target
+  and expiry on its main actor, then reserves reading before replying. Idle accepts; reading,
+  including startup or pause, accepts a replacement after required cleanup; dictation and
+  microphone Test return busy. Nothing queues for later speech. Duplicate live requests
+  repeat their original reply without repeating playback; expiry bounds that temporary state.
+  Core retains a throwing delivery closure and has no macOS notification types. The obsolete
+  fire-and-forget path is removed.
 
 - **Setup is text to copy.** Settings has an Agents tab with the registration
   command for Claude Code and Codex and optional instructions to paste into an agent's
@@ -66,3 +72,27 @@ because of code blocks, paths and markdown, and speech is billed per character.
   server on its first thread and the cause is unknown.
 - Agent behaviour depends on the tool description and, optionally, instructions the user
   copies into their agent's instruction file.
+
+## Accepted admission rewrite, 2026-09-30
+
+Success means the running app admitted reading, before playback completes. Unavailable,
+busy, expired, invalid request and unconfirmed delivery are separate tool errors. A missing
+reply cannot establish rejection, because admission may already have happened. EchoType
+reports that uncertainty and never automatically retries. Correlation and expiry prevent
+accidental cross-request/restarted-app delivery; they do not authenticate local processes.
+Any local process can still ask EchoType to speak, as the original decision allowed.
+
+Deterministic tests drive the actual coordinator through dictation startup, final revision,
+insertion, Test and reading replacement. A signed production `--mcp` executable received
+real notifications from a separate signed fake responder with stdin held open, concurrent
+clients, modern/legacy requests, busy replies and five-second unconfirmed responses.
+That establishes CLI receive feasibility, not the running GUI's admission callback.
+Early signed-app G6 passed after Aidan authorised the development GUI-only restart and
+at most four short TTS requests. The actual inactive GUI admitted concurrent modern and
+legacy CLI requests; unavailable/no-launch behavior, expired and malformed rejection, and
+old-PID ignore passed. Independent review passed the implementation and 29 targeted tests.
+Signed busy-operation preservation is explicitly deferred using reviewed actual coordinator
+phase/Test evidence. Fresh closure and final reviewed-candidate signed recheck pass on the unchanged executable.
+All four authorised G6 requests are charged; prior lifecycle allowances and deferrals remain
+unchanged. Signed busy-operation validation remains unverified under the explicit deferral.
+Candidate details and exact commands are in [packet 5](../specs/macos-rewrite-implementation/05-mcp-admission.md).
