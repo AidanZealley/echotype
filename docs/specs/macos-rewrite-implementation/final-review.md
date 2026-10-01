@@ -93,9 +93,9 @@ One review test for duplicate replay and one trivial message assertion were remo
   - Dictation takeover during reading was clean, then showed Select an input until a field was focused.
   - MCP modern and legacy modes against the running candidate returned Speaking in about 30 ms each. Readings were confirmed by screenshot (pill Reading, then cleared); the Mac's output was muted at the time.
   - MCP during dictation returned the busy tool error, and nothing was queued.
-  - Last Dictation is legible in light and dark mode.
+  - Last Dictation and Settings are legible in light and dark mode.
 - Correction found: in light mode over dark windows, the glass turns mid-grey and orange "Select an input" text was illegible. Aidan compared variants on real glass in both themes and chose a fixed orange dot (sRGB 0.91, 0.42, 0) beside plain text, with an orange level glow. Dictation's final-minute timer uses the same treatment, and readings no longer show it. Commit `af38ee8`; decisions 0009 and 0024 updated.
-- Not checked: Settings window appearance in both themes, the final-minute timer dot on screen (it needs a four-minute dictation), VoiceOver names, and the hardware/permission items already deferred at G4/G5. Settings changed only its speed slider range on this branch.
+- Not checked: the final-minute timer dot on screen (it needs a four-minute dictation), VoiceOver names, and the hardware/permission items already deferred at G4/G5.
 - Lasting decisions: destination identity verification stays; paste follows focus at stop and is skipped after a later change. Warnings use a dot and glow, never coloured text.
 
 ## Completion record
@@ -104,6 +104,6 @@ Before acceptance, copy a concise, self-contained summary of these facts into th
 
 - Delivered outcomes: see plan Completion summary.
 - Final verification: 80 core and 61 app deterministic tests and the release build pass at `af38ee8`; signed G7 candidate checks pass as recorded above.
-- External validation pending: CI execution and required-check configuration (approved deferral); Settings theme check, on-screen final-minute dot and VoiceOver; the earlier G2/G4/G5/G6 deferrals.
+- External validation pending: CI execution and required-check configuration (approved deferral); on-screen final-minute dot and VoiceOver; the earlier G2/G4/G5/G6 deferrals.
 - Specification drift: none in architecture. Presentation drift approved by Aidan: warning dot and glow instead of orange text.
 - Deferred optional observations: O1 fixture limitation; SessionMachine lifecycle redesign specified separately.
