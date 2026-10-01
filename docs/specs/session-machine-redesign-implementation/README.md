@@ -69,7 +69,9 @@ Use `Agent` with `subagent_type: general-purpose` and `run_in_background: false`
 
 ## Branch and commit model
 
-- One integration branch, `refactor/session-finishing`, created from the approved HEAD of `refactor/macos-lifecycle`. The plan records the branch and starting commit.
+- This redesign completes the macOS lifecycle rewrite. Its target is `refactor/macos-lifecycle`, which merges to `main` as one complete rewrite only after this workflow is Accepted. Nothing here merges to `main`.
+- The integration branch is either `refactor/macos-lifecycle` itself or a working branch created from its HEAD, such as `refactor/session-finishing`. Aidan chooses in the starter prompt. The plan records the branch and starting commit.
+- When a working branch is used, it must stay fast-forwardable onto `refactor/macos-lifecycle`. Do not rebase or rewrite `refactor/macos-lifecycle`. Bringing the accepted work back is Aidan's step, not an agent's.
 - Implementation stays uncommitted through implementation, review and remediation, so the reviewer sees one coherent diff.
 - Each workstream ends in exactly one commit with the code, the record and the lead's plan updates. Subject format: `<plain-language change> (workstream N)`, or `(final)` for the final review.
 - End commit messages with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
@@ -219,4 +221,4 @@ escalation: <plan.md escalation id, or none>
 
 ## Completion report
 
-Report from the plan's Completion summary: delivered outcomes, verification, G1 evidence, pending external checks, drift and deferred Optional observations. CI remains unverified unless an Actions run exists.
+Report from the plan's Completion summary: delivered outcomes, verification, G1 evidence, pending external checks, drift and deferred Optional observations. CI remains unverified unless an Actions run exists. If a working branch was used, end with the command that brings it back: `git switch refactor/macos-lifecycle && git merge --ff-only <working branch>`. Remind Aidan that `refactor/macos-lifecycle` is then ready to merge to `main` as the complete rewrite.

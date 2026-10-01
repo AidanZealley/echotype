@@ -1,6 +1,6 @@
 # Starter prompt
 
-Paste this into a fresh Claude Code session in the repository root.
+Paste this into a fresh Claude Code session in the repository root. To work on a separate branch instead, replace "Work directly on refactor/macos-lifecycle" with "Create refactor/session-finishing from the current HEAD of refactor/macos-lifecycle". You then fast-forward `refactor/macos-lifecycle` to it after the workflow completes.
 
 ```text
 Orchestrate the complete implementation of the SessionMachine redesign.
@@ -8,8 +8,9 @@ Orchestrate the complete implementation of the SessionMachine redesign.
 Read docs/specs/session-machine-redesign-implementation/README.md and plan.md. Do not read the
 specification, task packets, diffs or findings; the workstream leads own those.
 
-Create refactor/session-finishing from the current HEAD of refactor/macos-lifecycle and record the
-branch and starting commit in the plan.
+This work completes the macOS lifecycle rewrite on refactor/macos-lifecycle. Work directly on
+refactor/macos-lifecycle. Record the branch and starting commit in the plan. Do not merge
+anything into main.
 
 Then loop: read the plan, spawn a workstream lead for the next workstream passing only its packet
 path. The lead records its own status, drift and escalation before committing, so read its return
