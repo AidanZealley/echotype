@@ -1,19 +1,17 @@
-import EchoTypeCore
 import Foundation
 import Synchronization
 
-protocol ReadingRequest: Sendable {
-  func next() async throws -> Data?
-  func cancel()
-}
-
+/// The body of one HTTP response, pulled piece by piece as it arrives.
+///
 /// A serial delegate delivers fixed-size pieces through a finite queue. Capacity blocks
-/// this callback before another piece is copied, so pause backpressures application intake.
-/// URLSession owns callback delivery and its internal buffering; callback size is not a limit.
-final class SpeechRequest: NSObject, ReadingRequest, URLSessionDataDelegate, Sendable {
+/// this callback before another piece is copied, so a consumer that stops pulling backpressures
+/// application intake. URLSession owns callback delivery and its internal buffering; callback
+/// size is not a limit. See decision 0018.
+final class StreamingResponse: NSObject, URLSessionDataDelegate, Sendable {
   static let maximumBufferedBytes = 256 * 1024
   static let chunkBytes = 64 * 1024
   private let capacity = DispatchSemaphore(value: maximumBufferedBytes / chunkBytes)
+  private let errorForStatus: @Sendable (Int) -> ProviderError
   private struct State {
     var chunks: [Data] = []
     var waiter: CheckedContinuation<Data?, any Error>?
@@ -24,7 +22,12 @@ final class SpeechRequest: NSObject, ReadingRequest, URLSessionDataDelegate, Sen
   }
   private let state = Mutex(State())
 
-  init(_ request: URLRequest, configuration: URLSessionConfiguration = .ephemeral) {
+  /// Sends the request immediately. A non-2xx status throws the provider's mapping of it.
+  init(
+    _ request: URLRequest, errorForStatus: @escaping @Sendable (Int) -> ProviderError,
+    configuration: URLSessionConfiguration = .ephemeral
+  ) {
+    self.errorForStatus = errorForStatus
     super.init()
     let delegateQueue = OperationQueue()
     delegateQueue.maxConcurrentOperationCount = 1
@@ -33,6 +36,8 @@ final class SpeechRequest: NSObject, ReadingRequest, URLSessionDataDelegate, Sen
     state.withLock { $0.session = session; $0.task = task }
     task.resume()
   }
+
+  /// The next piece of at most `chunkBytes`, or nil at the end of the body.
   func next() async throws -> Data? {
     try Task.checkCancellation()
     return try await withTaskCancellationHandler {
@@ -72,7 +77,7 @@ final class SpeechRequest: NSObject, ReadingRequest, URLSessionDataDelegate, Sen
   ) {
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     guard (200..<300).contains(status) else {
-      completionHandler(.cancel); end(XAI.error(httpStatus: status)); return
+      completionHandler(.cancel); end(errorForStatus(status)); return
     }
     completionHandler(.allow)
   }
@@ -95,10 +100,4 @@ final class SpeechRequest: NSObject, ReadingRequest, URLSessionDataDelegate, Sen
     }
   }
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) { end(error) }
-}
-
-/// Serial decoding runs on this actor's executor, never on the UI actor.
-actor ReadingDecoder {
-  private var decoder = PCMDecoder()
-  func decode(_ data: Data) -> [Float] { decoder.samples(from: data) }
 }

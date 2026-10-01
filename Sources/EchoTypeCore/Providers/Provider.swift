@@ -105,6 +105,100 @@ public struct Transcript: Equatable, Sendable {
   }
 }
 
+// MARK: Read aloud
+
+/// Text to speech. `speak` starts one reading; nothing is requested until the stream is created.
+public struct VoiceService: Sendable {
+  /// A short list chosen by hand. The first is the default.
+  public var voices: [Voice]
+  /// The speaking rate as a multiplier, where 1 is normal.
+  public var speedRange: ClosedRange<Double>
+  /// The longest text one reading accepts, counted in Unicode scalars.
+  public var maximumCharacters: Int
+  public var speak: @Sendable (SpeechRequest) -> any SpeechStream
+
+  public init(
+    voices: [Voice], speedRange: ClosedRange<Double>, maximumCharacters: Int,
+    speak: @escaping @Sendable (SpeechRequest) -> any SpeechStream
+  ) {
+    self.voices = voices
+    self.speedRange = speedRange
+    self.maximumCharacters = maximumCharacters
+    self.speak = speak
+  }
+
+  /// The text cut to its first `maximumCharacters`. Counts Unicode scalars rather than
+  /// `Character`s, so a selection full of multi-scalar emoji still fits a limit the provider
+  /// may count in code points.
+  public func capped(_ text: String) -> String {
+    String(text.unicodeScalars.prefix(maximumCharacters))
+  }
+}
+
+public struct Voice: Hashable, Identifiable, Sendable {
+  /// The provider's own name for the voice, stored in Settings.
+  public var id: String
+  /// Shown in the Read Aloud tab.
+  public var name: String
+
+  public init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+}
+
+public struct SpeechRequest: Equatable, Sendable {
+  public var text: String
+  /// One of the service's voice ids.
+  public var voice: String
+  /// Within the service's `speedRange`.
+  public var speed: Double
+  /// BCP-47 language tag.
+  public var language: String
+  public var credential: String?
+
+  public init(text: String, voice: String, speed: Double, language: String, credential: String?) {
+    self.text = text
+    self.voice = voice
+    self.speed = speed
+    self.language = language
+    self.credential = credential
+  }
+
+  /// The request for one reading of already capped text, with the stored voice, the validated
+  /// speed and the dictation language.
+  public init(text: String, settings: Settings, credential: String?) {
+    self.init(
+      text: text, voice: settings.voice, speed: settings.validatedSpeechSpeed,
+      language: settings.language, credential: credential)
+  }
+}
+
+/// One reading's audio, pulled by a single consumer, the reader.
+///
+/// Pulling is the backpressure: while playback is paused the reader stops calling `next()`, and
+/// the adapter must not read ahead from the provider without bound. Every chunk of one stream
+/// has the same sample rate and holds at most 100 ms of audio.
+public protocol SpeechStream: Sendable {
+  /// The next chunk, or nil at the end. Failures throw `ProviderError`; anything else is a
+  /// connection or cancellation failure.
+  func next() async throws -> SpeechAudio?
+  /// Stops the request and makes a pending `next()` throw. The caller stops pulling after
+  /// cancelling and must not rely on later results. May be called at any time and more than once.
+  func cancel()
+}
+
+/// Mono Float32 samples in -1...1.
+public struct SpeechAudio: Equatable, Sendable {
+  public var sampleRate: Int
+  public var samples: [Float]
+
+  public init(sampleRate: Int, samples: [Float]) {
+    self.sampleRate = sampleRate
+    self.samples = samples
+  }
+}
+
 // MARK: Cleanup
 
 /// Revises a window of committed dictation. `Reviser` owns the prompt, the windows and the

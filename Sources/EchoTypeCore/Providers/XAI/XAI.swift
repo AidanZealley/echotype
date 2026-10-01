@@ -11,6 +11,14 @@ public enum XAI {
         request: Transcriber.urlRequest(for: request), errorForStatus: error(httpStatus:)))
   }
 
+  /// Read aloud through one streamed `POST /v1/tts` request per reading.
+  public static let voice = VoiceService(
+    voices: Speech.voices, speedRange: Speech.speedRange,
+    maximumCharacters: Speech.maximumCharacters
+  ) { request in
+    Speech.Stream(body: StreamingResponse(Speech.urlRequest(for: request), errorForStatus: error(httpStatus:)))
+  }
+
   /// Cleanup through the chat completions endpoint.
   public static let cleanup = CleanupService(revise: Cleanup.revise)
 

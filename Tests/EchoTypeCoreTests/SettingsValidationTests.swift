@@ -15,13 +15,10 @@ import Testing
   }
 
   @Test(arguments: [0.7, 1.25, 1.5])
-  func validSpeedSurvivesStorageAndRequest(speed: Double) throws {
+  func validSpeedSurvivesStorageAndRequest(speed: Double) {
     let settings = Settings(speechSpeed: speed)
     #expect(Settings(decoding: settings.encoded()) == settings)
-    let request = Speech.request(text: "Hello", settings: settings, apiKey: "fake")
-    let data = try #require(request.httpBody)
-    let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    #expect(body["speed"] as? Double == speed)
+    #expect(SpeechRequest(text: "Hello", settings: settings, credential: nil).speed == speed)
   }
 
   @Test(arguments: [Double.nan, .infinity, -.infinity, 0.69, 1.51])
@@ -35,11 +32,9 @@ import Testing
       #expect(storage["speechSpeed"] as? Double == Settings().speechSpeed)
       #expect(storage["voice"] as? String == "altair")
       #expect(Settings(decoding: encoded) == Settings(voice: "altair"))
-      let request = Speech.request(text: "Hello", settings: settings, apiKey: "fake")
-      let data = try #require(request.httpBody)
-      let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-      #expect(body["speed"] as? Double == Settings().speechSpeed)
-      #expect(body["voice_id"] as? String == "altair")
+      let request = SpeechRequest(text: "Hello", settings: settings, credential: nil)
+      #expect(request.speed == Settings().speechSpeed)
+      #expect(request.voice == "altair")
     }
   }
 }

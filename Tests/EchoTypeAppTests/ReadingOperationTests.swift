@@ -4,35 +4,39 @@ import Foundation
 import Synchronization
 import Testing
 
-private final class FakeSpeechRequest: ReadingRequest, Sendable {
+private final class FakeSpeechStream: SpeechStream {
   private struct State {
-    var data: [Data]
-    var pending: CheckedContinuation<Data?, any Error>?
-    var cancelled = false
+    var audio: [SpeechAudio]
+    var pending: CheckedContinuation<SpeechAudio?, any Error>?
+    var error: (any Error)?
     var finished = false
   }
   private let state: Mutex<State>
   let entered = ReadingGate()
-  init(_ data: [Data] = [], finished: Bool = false) { state = Mutex(State(data: data, finished: finished)) }
-  func next() async throws -> Data? {
+  /// Each element is one chunk of 24 kHz samples.
+  init(_ chunks: [[Float]] = [], finished: Bool = false) {
+    state = Mutex(State(audio: chunks.map { SpeechAudio(sampleRate: 24_000, samples: $0) }, finished: finished))
+  }
+  func next() async throws -> SpeechAudio? {
     entered.open()
     return try await withCheckedThrowingContinuation { continuation in
       state.withLock {
-        if $0.cancelled { continuation.resume(throwing: CancellationError()) }
-        else if !$0.data.isEmpty { continuation.resume(returning: $0.data.removeFirst()) }
+        if let error = $0.error { continuation.resume(throwing: error) }
+        else if !$0.audio.isEmpty { continuation.resume(returning: $0.audio.removeFirst()) }
         else if $0.finished { continuation.resume(returning: nil) }
         else { $0.pending = continuation }
       }
     }
   }
-  func cancel() {
-    state.withLock { $0.cancelled = true; $0.pending?.resume(throwing: CancellationError()); $0.pending = nil }
+  func cancel() { fail(CancellationError()) }
+  func fail(_ error: any Error) {
+    state.withLock { $0.error = $0.error ?? error; $0.pending?.resume(throwing: error); $0.pending = nil }
   }
 }
 
 @MainActor private final class ReadingFixture {
   let playback = PlaybackFixture()
-  let request: FakeSpeechRequest
+  let request: FakeSpeechStream
   let selectionEntered = ReadingGate()
   let selectionRelease = ReadingGate()
   let keyEntered = ReadingGate()
@@ -41,13 +45,13 @@ private final class FakeSpeechRequest: ReadingRequest, Sendable {
   var suspendSelection = false
   var suspendKey = false
   var selection: String? = "Selected text"
-  var requests: [URLRequest] = []
+  var requests: [SpeechRequest] = []
   let cleanupEntered = ReadingGate()
   let cleanupRelease = ReadingGate()
   var suspendCleanup = false
   var cleanup = 0
   var keys = 0
-  init(_ request: FakeSpeechRequest = FakeSpeechRequest()) { self.request = request }
+  init(_ request: FakeSpeechStream = FakeSpeechStream()) { self.request = request }
   func reader(_ source: Reader.Source = .text("Hello"), id: UUID = UUID(),
     settings: Settings = Settings(), onPresentation: @escaping @MainActor (Reader) -> Void = { _ in }
   ) -> Reader {
@@ -64,7 +68,9 @@ private final class FakeSpeechRequest: ReadingRequest, Sendable {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return "fake"
-      }, request: { self.requests.append($0); return self.request }, player: playback.player), onPresentation: onPresentation)
+      }, voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 5) {
+          request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
+        }, player: playback.player), onPresentation: onPresentation)
   }
 }
 
@@ -99,7 +105,7 @@ private final class FakeSpeechRequest: ReadingRequest, Sendable {
   }
 
   @Test func startupPauseSurvivesFirstAudioAndPausedStopResolvesCompletion() async {
-    let request = FakeSpeechRequest([Data([0, 0, 1, 0])], finished: true)
+    let request = FakeSpeechStream([[0, 1 / 32768]], finished: true)
     let fixture = ReadingFixture(request); let reader = fixture.reader()
     reader.togglePause()
     #expect(reader.presentation == .paused)
@@ -120,13 +126,13 @@ private final class FakeSpeechRequest: ReadingRequest, Sendable {
   }
 
   @Test func fasterThanPlaybackResponseStopsAtQueueLimit() async {
-    let request = FakeSpeechRequest([Data(repeating: 0, count: Speech.sampleRate * 2)])
+    let request = FakeSpeechStream(Array(repeating: Array(repeating: 0, count: 2_400), count: 20))
     let fixture = ReadingFixture(request); let reader = fixture.reader()
     let full = ReadingGate()
     fixture.playback.onSchedule = { if fixture.playback.scheduled == 5 { full.open() } }
     let task = Task { await reader.run() }
     await full.wait()
-    #expect(fixture.playback.player.queuedFrames == SpeechPlayer.maximumQueuedFrames)
+    #expect(fixture.playback.player.queuedFrames == fixture.playback.player.maximumQueuedFrames)
     reader.togglePause(); reader.stop()
     #expect(await task.value == nil)
     #expect(fixture.playback.scheduled == 5)
@@ -163,7 +169,7 @@ extension ReadingOperationTests {
   @Test(arguments: Boundary.allCases)
   func replacementReservesThenJoinsCleanupAndRejectsOldCallbacks(_ boundary: Boundary) async {
     let audio = boundary == .playing || boundary == .paused || boundary == .completion
-    let first = ReadingFixture(FakeSpeechRequest(audio ? [Data([0, 0])] : [], finished: boundary == .completion))
+    let first = ReadingFixture(FakeSpeechStream(audio ? [[0]] : [], finished: boundary == .completion))
     first.suspendSelection = boundary == .selection
     first.suspendCleanup = true
     let fixture = ReadingCoordinatorFixture(first: first)
@@ -197,7 +203,7 @@ extension ReadingOperationTests {
 
   @Test(arguments: [false, true])
   func startupSpaceRepeatsAndDictationTakeoverDuringCopy(_ playing: Bool) async {
-    let first = ReadingFixture(FakeSpeechRequest(playing ? [Data([0, 0])] : [], finished: playing))
+    let first = ReadingFixture(FakeSpeechStream(playing ? [[0]] : [], finished: playing))
     first.suspendSelection = !playing; first.suspendCleanup = true
     let fixture = ReadingCoordinatorFixture(first: first)
     let controller = fixture.controller
@@ -241,7 +247,7 @@ extension ReadingOperationTests {
   }
 
   @Test func taskCancellationWhileAwaitingPlaybackStopsResources() async {
-    let fixture = ReadingFixture(FakeSpeechRequest([Data([0, 0])], finished: true))
+    let fixture = ReadingFixture(FakeSpeechStream([[0]], finished: true))
     let reader = fixture.reader()
     let task = Task { await reader.run() }
     await fixture.scheduled.wait()
@@ -251,101 +257,24 @@ extension ReadingOperationTests {
   }
 }
 
-/// Holds URLSession open without a socket. Tests drive its delegate with deterministic data,
-/// including a framework callback larger than the application queue.
-private final class SilentSpeechProtocol: URLProtocol, @unchecked Sendable {
-  override class func canInit(with request: URLRequest) -> Bool { true }
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-  override func startLoading() {}
-  override func stopLoading() {}
-}
-
 extension ReadingOperationTests {
-  private func requestFixture() -> (SpeechRequest, URLSession, URLSessionDataTask) {
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [SilentSpeechProtocol.self]
-    let request = URLRequest(url: URL(string: "https://speech.invalid")!)
-    let session = URLSession(configuration: configuration)
-    return (SpeechRequest(request, configuration: configuration), session, session.dataTask(with: request))
+  @Test func cappedTextAndSettingsReachTheVoiceService() async {
+    let fixture = ReadingFixture(FakeSpeechStream(finished: true))
+    let reader = fixture.reader(.text("Hello there"), settings: Settings(language: "en-GB", voice: "altair", speechSpeed: 1.2))
+    #expect(await reader.run() == nil)
+    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "altair", speed: 1.2, language: "en-GB", credential: "fake")])
   }
 
-  @Test func largeResponseCallbackDeliversBoundedChunksInOrder() async throws {
-    let (request, session, task) = requestFixture()
-    defer { request.cancel(); session.invalidateAndCancel() }
-    let data = Data((0..<(SpeechRequest.maximumBufferedBytes * 3 + 17)).map { UInt8($0 % 251) })
-    let producer = Task.detached {
-      request.urlSession(session, dataTask: task, didReceive: data)
-      request.urlSession(session, task: task, didCompleteWithError: nil)
-    }
-    var received = Data()
-    while let chunk = try await request.next() {
-      #expect(chunk.count <= SpeechRequest.chunkBytes)
-      received.append(chunk)
-    }
-    await producer.value
-    #expect(received == data)
-  }
-
-  @Test func stopReleasesResponseCallbackWaitingForQueueCapacity() async {
-    let (request, session, task) = requestFixture()
-    defer { request.cancel(); session.invalidateAndCancel() }
-    request.urlSession(session, dataTask: task,
-      didReceive: Data(repeating: 0, count: SpeechRequest.maximumBufferedBytes))
-    let entered = ReadingGate()
-    let producer = Task.detached {
-      entered.open()
-      request.urlSession(session, dataTask: task, didReceive: Data([1]))
-    }
-    await entered.wait()
-    request.cancel()
-    await producer.value
-    do { _ = try await request.next(); Issue.record("Stop retained queued bytes") }
-    catch is CancellationError {} catch { Issue.record(error) }
-  }
-
-  @Test func responseQueuePreservesChunksAndEOF() async throws {
-    let (request, session, task) = requestFixture()
-    defer { request.cancel(); session.invalidateAndCancel() }
-    request.urlSession(session, dataTask: task, didReceive: Data([1]))
-    request.urlSession(session, dataTask: task, didReceive: Data([2, 3]))
-    request.urlSession(session, task: task, didCompleteWithError: nil)
-    #expect(try await request.next() == Data([1]))
-    #expect(try await request.next() == Data([2, 3]))
-    #expect(try await request.next() == nil)
-  }
-
-  @Test func nonSuccessStatusAndNetworkFailureReachReadingOutcome() async {
-    for code: URLError.Code? in [nil, .networkConnectionLost, .timedOut] {
-      let (request, session, task) = requestFixture()
-      defer { request.cancel(); session.invalidateAndCancel() }
-      if let code {
-        request.urlSession(session, task: task, didCompleteWithError: URLError(code))
-      } else {
-        let response = HTTPURLResponse(url: task.originalRequest!.url!, statusCode: 429,
-          httpVersion: nil, headerFields: nil)!
-        request.urlSession(session, dataTask: task, didReceive: response) { _ in }
-      }
-      let playback = PlaybackFixture()
-      let reader = Reader(.text("Hello"), settings: Settings(), dependencies: .init(
-        selection: { _ in nil }, cleanup: {}, key: { "fake" }, request: { _ in request }, player: playback.player))
-      let failure = await reader.run()
-      if let code { #expect((failure as? URLError)?.code == code) }
-      else { #expect(failure as? ProviderError == .rateLimited) }
-      if case .failed = reader.presentation {} else { Issue.record("Missing failure presentation") }
-      #expect(playback.started == 0)
-    }
-  }
-
-  @Test func cancellingAnEmptyResponseQueueResolvesItsAwait() async {
-    let (request, session, _) = requestFixture()
-    defer { request.cancel(); session.invalidateAndCancel() }
-    let next = Task { try await request.next() }
-    next.cancel()
-    do { _ = try await next.value; Issue.record("Cancelled request succeeded") }
-    catch is CancellationError {} catch { Issue.record(error) }
+  @Test func streamFailureReachesReadingOutcome() async {
+    let fixture = ReadingFixture(); let reader = fixture.reader()
+    let task = Task { await reader.run() }
+    await fixture.request.entered.wait()
+    fixture.request.fail(ProviderError.rateLimited)
+    #expect(await task.value as? ProviderError == .rateLimited)
+    if case .failed = reader.presentation {} else { Issue.record("Missing failure presentation") }
+    #expect(fixture.playback.started == 0)
   }
 }
-
 
 extension ReadingOperationTests {
   @Test func backToBackReplacementsKeepTheOriginalCleanupJoin() async {
