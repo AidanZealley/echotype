@@ -40,12 +40,19 @@ meant editing each of them.
 
 ## Adding a provider
 
-1. Create `Providers/<Name>/` with its description and one adapter per service.
+1. Create `Providers/<Name>/` with its description and one adapter per service. Give it a
+   stable id, name, summary and credential requirement. Supply transcription and read
+   aloud, with a non-empty voice list whose first voice is the default and a speed range
+   that includes 1. Set cleanup to `nil` if the provider has no cleanup service. Follow the
+   neutral contracts in `Provider.swift` for events, cancellation and audio delivery.
 2. Add it to `Providers.all`.
 3. Add fixture tests for its adapters.
 
-The dictation and reading wiring, error messages, menu bar status and Keychain pick it up
-with no further change.
+Settings, the Provider picker and feature list, Read Aloud voices and speed, Keyterms
+limit, dictation and reading wiring, error messages, menu bar status and Keychain pick it
+up with no further change. Reading choices use the provider id as their storage key.
+Cleanup is always on when its service is present; no capability flags or cleanup toggle
+are needed.
 
 ## Consequences
 

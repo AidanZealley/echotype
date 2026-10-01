@@ -23,17 +23,20 @@ when you stop. Select some text and press a second hotkey to hear it read back.
 - **Live transcript.** An overlay beside the focused window shows words as they arrive,
   along with the microphone in use and the elapsed time.
 - **Clean up text.** Sentences split by pauses are joined and phrases you take back are
-  dropped while you talk. Your words are never swapped for different ones.
-- **Keyterms.** Add up to 100 names and bits of jargon so they're spelled correctly.
+  dropped while you talk. Cleanup runs whenever the selected provider supports it. Your
+  words are never swapped for different ones.
+- **Keyterms.** Add names and bits of jargon so they're spelled correctly. The selected
+  provider sets the limit, currently 100 saved terms with xAI.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
-  pauses, and you can choose the voice and speed.
+  pauses. Voice and speed are remembered for each provider.
+- **Provider.** Choose a provider in Settings, see its supported features and manage its
+  API key. xAI supplies transcription, read aloud and cleanup.
 - **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
   and copies it as JSON.
 - **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
   toggle to turn the hotkeys off. Your API key is kept in the Keychain.
 
 <p align="center">
-  <img src="docs/images/settings-general.png" width="280" alt="General settings">
   <img src="docs/images/settings-keyterms.png" width="280" alt="Keyterms settings">
   <img src="docs/images/settings-read-aloud.png" width="280" alt="Read aloud settings">
 </p>
@@ -50,7 +53,8 @@ You need macOS 26 or later and an [xAI API key](https://console.x.ai).
 4. Allow **Device Control and Data Access** (Accessibility on older versions of macOS)
    when asked. EchoType needs it for the hotkeys and to paste text.
 5. Click the waveform icon in the menu bar, choose **Settings…**, and paste your key into
-   the **API Key** tab. **Test** records five seconds and shows what it heard.
+   the **Provider** tab with xAI selected. **Save** keeps it in the Keychain. **Test**
+   records five seconds and shows what it heard.
 6. Press <kbd>⌥</kbd><kbd>D</kbd> in any text field and start talking. macOS asks for
    microphone access the first time.
 
@@ -104,3 +108,8 @@ The code is split into `EchoTypeCore`, which holds the session, protocol and set
 logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.
 [`docs/decisions`](docs/decisions/README.md) records why things work the way they do, and
 [`docs/releasing.md`](docs/releasing.md) covers packaging a DMG for release.
+
+To add a provider, create `Sources/EchoTypeCore/Providers/<Name>/` with its description
+and service adapters, add it to `Providers.all`, and add fixture tests. Settings and
+operation wiring use the registry. The [provider adapter decision](docs/decisions/0025-provider-adapters.md)
+sets out the contracts and required defaults.

@@ -106,7 +106,7 @@ import Observation
     try checkStopped()
     guard dependencies.credential.isSatisfied(by: apiKey) else { throw Failure.noAPIKey }
     let voice = dependencies.voice
-    let stream = voice.speak(SpeechRequest(text: voice.capped(spoken), settings: settings, credential: apiKey))
+    let stream = voice.speak(SpeechRequest(text: voice.capped(spoken), settings: settings, voice: voice, credential: apiKey))
     self.stream = stream
     // Each short chunk waits for playback capacity before the stream is pulled again.
     while let audio = try await stream.next() {

@@ -22,7 +22,7 @@ Workstream states: Not started, Implementing, Review, Remediation, Closure revie
 | 2 | [Cleanup adapter and always-on cleanup](02-cleanup.md) | 1 | Accepted |
 | 3 | [Read-aloud adapter](03-read-aloud.md) | 2 | Accepted |
 | 4 | [Provider registry and credentials](04-registry-credentials.md) | 3 | Accepted |
-| 5 | [Provider settings and window](05-settings-window.md) | 4 | Not started |
+| 5 | [Provider settings and window](05-settings-window.md) | 4 | Accepted |
 | Final | [Whole-feature review](final-review.md) | 1 to 5 | Not started |
 
 ## Why these boundaries
@@ -88,6 +88,7 @@ None open.
 | 2026-10-01 | Cleanup dependency: `DictationOperation.Dependencies` takes `cleanup: CleanupService?` and its own `revisionClock` for the final budget; `Reviser` takes the service and credential and owns `Reviser.prompt`. No specification drift. `docs/images/settings-general.png` still shows the removed toggle and has no owner; the final review's documentation check should replace or drop it | Declaration details the specification leaves open; recorded for workstream 4's wiring and the final review | Workstream 2 lead | 4, Final |
 | 2026-10-01 | Read-aloud contract: `VoiceService` holds voices (first is the default), `speedRange`, `maximumCharacters` and `speak`, with `capped(_:)`; `SpeechRequest(text:settings:credential:)` builds requests; `SpeechStream` promises one sample rate and chunks of at most 100 ms, and `cancel()` only guarantees that a pending `next()` throws. The app wires `XAI.voice` in the reader factory and the Read Aloud tab, and `Settings.speechSpeedRange` duplicates `XAI.voice.speedRange` until workstream 5. No specification drift | Declaration details the specification leaves open; recorded for workstream 4's wiring and 5's settings | Workstream 3 lead | 4, 5 |
 | 2026-10-01 | Registry and credentials accepted with no specification drift: `Settings.provider` stores `ProviderID`; `Providers[id]` resolves the selected provider and defaults unknown ids; `.none` satisfies credential checks without reading Keychain. Workstream 5 should isolate key-editor state by provider when adding its picker. Final review should include the provider-specific microphone copy in `Resources/Info.plist` | Declaration details and deferred observations from workstream 4's independent review; Keychain Mac verification remains G3 | Workstream 4 lead | 5, Final |
+| 2026-10-01 | Provider settings and window accepted with no specification drift: `Settings.reading` is a JSON object keyed by provider id; `Reading.validated(for:)` supplies per-field fallbacks. `SpeechRequest` receives the selected voice service; legacy migration remains in the registry to keep Settings provider-neutral. ProviderControls identity isolates key-editor state per provider. The obsolete General screenshot is removed | Required reading seams and documentation cleanup, with 29 targeted tests and the app build passing; appearance, upgrade and live checks remain in G3 | Workstream 5 lead | Final, Apple follow-up |
 
 ## Completion summary
 
