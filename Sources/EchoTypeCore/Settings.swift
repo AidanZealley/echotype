@@ -62,6 +62,9 @@ public struct Settings: Equatable, Sendable {
 
   public var hotkey: Hotkey
 
+  /// The provider that supplies every service. Read it with `Providers[settings.provider]`.
+  public var provider: ProviderID
+
   /// Domain terms sent to the transcription API to improve accuracy on jargon.
   ///
   /// The endpoint accepts up to 100, and they are the highest-value accuracy lever available:
@@ -113,6 +116,7 @@ public struct Settings: Equatable, Sendable {
 
   public init(
     hotkey: Hotkey = .optionD,
+    provider: ProviderID = Providers.all[0].id,
     keyterms: [String] = [],
     language: String = "en",
     silenceTimeout: TimeInterval = 10,
@@ -125,6 +129,7 @@ public struct Settings: Equatable, Sendable {
     sendReplyRequests: Bool = true
   ) {
     self.hotkey = hotkey
+    self.provider = provider
     self.keyterms = keyterms
     self.language = language
     self.silenceTimeout = silenceTimeout
@@ -149,7 +154,7 @@ public struct Settings: Equatable, Sendable {
 /// keys, `batchOnCommit` and `cleanUp`, are ignored.
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
-    case hotkey, keyterms, language, inputDeviceID
+    case hotkey, provider, keyterms, language, inputDeviceID
     case readAloudHotkey, voice, speechSpeed, sendReplyRequests
   }
 
@@ -158,6 +163,9 @@ extension Settings: Codable {
     let defaults = Settings()
     self = defaults
     hotkey = (try? container.decodeIfPresent(Hotkey.self, forKey: .hotkey)) ?? defaults.hotkey
+    // An id no registered provider has, such as one removed since, gives the default.
+    let storedProvider = try? container.decodeIfPresent(ProviderID.self, forKey: .provider)
+    provider = Providers[storedProvider ?? defaults.provider].id
     keyterms =
       (try? container.decodeIfPresent([String].self, forKey: .keyterms)) ?? defaults.keyterms
     language =
@@ -178,6 +186,7 @@ extension Settings: Codable {
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(hotkey, forKey: .hotkey)
+    try container.encode(provider, forKey: .provider)
     try container.encode(keyterms, forKey: .keyterms)
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)

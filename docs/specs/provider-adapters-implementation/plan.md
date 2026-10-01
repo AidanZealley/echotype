@@ -21,7 +21,7 @@ Workstream states: Not started, Implementing, Review, Remediation, Closure revie
 | 1 | [Transcription adapter](01-transcription.md) | Workflow approval | Accepted |
 | 2 | [Cleanup adapter and always-on cleanup](02-cleanup.md) | 1 | Accepted |
 | 3 | [Read-aloud adapter](03-read-aloud.md) | 2 | Accepted |
-| 4 | [Provider registry and credentials](04-registry-credentials.md) | 3 | Not started |
+| 4 | [Provider registry and credentials](04-registry-credentials.md) | 3 | Accepted |
 | 5 | [Provider settings and window](05-settings-window.md) | 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1 to 5 | Not started |
 
@@ -87,6 +87,7 @@ None open.
 | 2026-10-01 | `LiveTranscriber` contract clarified: `finish()` may come before `.ready` when no audio was sent, and an adapter may yield a final `.transcript` just before `.finished`. `STTError` is deleted rather than made private, and xAI `error` events throw `ProviderError.failed(message)` | Keeps the starting commit's xAI behaviour and makes the guarantees explicit for later adapters | Workstream 1 lead, within the specification's "declaration details may differ" | 1, 4, Apple follow-up |
 | 2026-10-01 | Cleanup dependency: `DictationOperation.Dependencies` takes `cleanup: CleanupService?` and its own `revisionClock` for the final budget; `Reviser` takes the service and credential and owns `Reviser.prompt`. No specification drift. `docs/images/settings-general.png` still shows the removed toggle and has no owner; the final review's documentation check should replace or drop it | Declaration details the specification leaves open; recorded for workstream 4's wiring and the final review | Workstream 2 lead | 4, Final |
 | 2026-10-01 | Read-aloud contract: `VoiceService` holds voices (first is the default), `speedRange`, `maximumCharacters` and `speak`, with `capped(_:)`; `SpeechRequest(text:settings:credential:)` builds requests; `SpeechStream` promises one sample rate and chunks of at most 100 ms, and `cancel()` only guarantees that a pending `next()` throws. The app wires `XAI.voice` in the reader factory and the Read Aloud tab, and `Settings.speechSpeedRange` duplicates `XAI.voice.speedRange` until workstream 5. No specification drift | Declaration details the specification leaves open; recorded for workstream 4's wiring and 5's settings | Workstream 3 lead | 4, 5 |
+| 2026-10-01 | Registry and credentials accepted with no specification drift: `Settings.provider` stores `ProviderID`; `Providers[id]` resolves the selected provider and defaults unknown ids; `.none` satisfies credential checks without reading Keychain. Workstream 5 should isolate key-editor state by provider when adding its picker. Final review should include the provider-specific microphone copy in `Resources/Info.plist` | Declaration details and deferred observations from workstream 4's independent review; Keychain Mac verification remains G3 | Workstream 4 lead | 5, Final |
 
 ## Completion summary
 

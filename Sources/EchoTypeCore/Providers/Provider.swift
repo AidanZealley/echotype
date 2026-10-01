@@ -3,6 +3,68 @@ import Foundation
 // The neutral contracts every provider's adapters implement. Code outside `Providers/<Name>/`
 // names no provider; it holds service values and talks to them only through these types.
 
+/// One provider: its description and the services it supplies. The user picks one, and it
+/// supplies every service; services are never split across providers. `Providers.all` lists
+/// them.
+public struct Provider: Identifiable, Sendable {
+  /// Stored in `Settings.provider` and used as the Keychain account.
+  public var id: ProviderID
+  /// Shown in Settings and used to word errors.
+  public var name: String
+  /// One line for Settings, such as what it costs and what it needs.
+  public var summary: String
+  public var credential: Credential
+  public var transcription: TranscriptionService
+  public var voice: VoiceService
+  /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
+  public var cleanup: CleanupService?
+
+  public init(
+    id: ProviderID, name: String, summary: String, credential: Credential,
+    transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?
+  ) {
+    self.id = id
+    self.name = name
+    self.summary = summary
+    self.credential = credential
+    self.transcription = transcription
+    self.voice = voice
+    self.cleanup = cleanup
+  }
+}
+
+/// A provider's stable identifier. Renaming one would reset the choice and lose the stored key
+/// on every install that selected it.
+public struct ProviderID: RawRepresentable, Hashable, Codable, Sendable,
+  ExpressibleByStringLiteral
+{
+  public var rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+
+  public init(stringLiteral value: String) {
+    self.init(rawValue: value)
+  }
+}
+
+/// What a provider needs from the user before it can be used.
+public enum Credential: Equatable, Sendable {
+  /// Nothing; the provider always counts as having its credential.
+  case none
+  /// An API key the user saves in Settings, kept in the Keychain under the provider's id.
+  case apiKey(placeholder: String)
+
+  /// Whether `key`, the stored key or nil, is enough to use the provider.
+  public func isSatisfied(by key: String?) -> Bool {
+    switch self {
+    case .none: true
+    case .apiKey: key != nil
+    }
+  }
+}
+
 /// A failure a provider reports, in the form the app words for the user.
 public enum ProviderError: Error, Equatable, Sendable {
   case rejectedCredential

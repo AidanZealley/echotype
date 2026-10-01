@@ -10,6 +10,9 @@ import Observation
   struct Dependencies {
     var selection: (@escaping @MainActor () -> Bool) async -> String?
     var cleanup: () async -> Void
+    /// What the provider needs before a reading starts.
+    var credential: Credential
+    /// The provider's stored key, or nil.
     var key: () async -> String?
     var voice: VoiceService
     var player: any ReadingPlayback
@@ -101,7 +104,7 @@ import Observation
     }
     let apiKey = await dependencies.key()
     try checkStopped()
-    guard let apiKey else { throw Failure.noAPIKey }
+    guard dependencies.credential.isSatisfied(by: apiKey) else { throw Failure.noAPIKey }
     let voice = dependencies.voice
     let stream = voice.speak(SpeechRequest(text: voice.capped(spoken), settings: settings, credential: apiKey))
     self.stream = stream

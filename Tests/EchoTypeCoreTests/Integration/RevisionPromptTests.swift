@@ -1,4 +1,4 @@
-import EchoTypeCore
+@testable import EchoTypeCore
 import Foundation
 import Testing
 
