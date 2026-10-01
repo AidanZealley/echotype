@@ -91,7 +91,7 @@ import Observation
         selection: { await clipboard.copySelection(cancelled: $0) },
         cleanup: { await clipboard.waitForCleanup() },
         key: { await Task.detached { Keychain.apiKey() }.value },
-        request: { SpeechRequest($0) }, player: SpeechPlayer(onLevel: level)), onPresentation: present)
+        voice: XAI.voice, player: SpeechPlayer(onLevel: level)), onPresentation: present)
     }, focusedScreen: { NSScreen.forFocusedWindow() }, showPanel: { pill, screen in
       if let screen { panel.show(pill, on: screen) }
     }, hidePanel: { panel.hide() })

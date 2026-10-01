@@ -46,7 +46,9 @@ private final class AdmissionTranscriber: LiveTranscriber {
       let reader = Reader(source, id: id, settings: settings, dependencies: .init(
         selection: { _ in nil }, cleanup: {}, key: {
           self.readingEntered.open(); await self.readingRelease.wait(); return nil
-        }, request: { _ in fatalError("No network expected") }, player: SpeechPlayer(onLevel: { _ in })), onPresentation: present)
+        }, voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 1) { _ in
+          fatalError("No network expected")
+        }, player: SpeechPlayer(onLevel: { _ in })), onPresentation: present)
       self.readers.append(reader); return reader
     }, focusedScreen: { nil }, showPanel: { _, _ in }, hidePanel: {},
     makeDictation: { test in

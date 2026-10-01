@@ -34,10 +34,10 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
 - The request sends `"optimize_streaming_latency": 0` and `"text_normalization": false`
   explicitly, rather than omitting them, so a change to the endpoint's defaults can't
   change reading, and the tests can pin both.
-- `Speech.request(text:settings:apiKey:)` in `EchoTypeCore` builds the request. The app
-  streams the response and maps a non-2xx status with `STTError(httpStatus:)`.
-  Speed uses the shared Settings validation policy before JSON encoding. Nonfinite or
-  out-of-range values fall back to 1.0; valid fractional values survive unchanged.
+- The xAI voice adapter, `XAI.voice` in `Providers/XAI/`, builds the request, streams the
+  response and maps a non-2xx status with `XAI.error(httpStatus:)`. Speed uses the shared
+  Settings validation policy before it reaches the request. Nonfinite or out-of-range values
+  fall back to 1.0; valid fractional values survive unchanged.
   See [0010](0010-settings-storage-and-api-key.md).
 - Read Aloud has its own Opt+S or Ctrl+Opt+S hotkey, Ara or Altair voice, and speed
   from 0.7 to 1.5. It uses the General tab's language. The reading hotkey or
@@ -130,3 +130,24 @@ remain unverified. The saturated-queue cancellation fixture acknowledges produce
 rather than the actual capacity wait; an independent stalled-consumer localhost probe
 established that cancellation releases the blocked callback. No production observation
 hook was added solely for that fixture.
+
+## Provider adapters, 2026-10-01
+
+Reading now goes through the neutral `VoiceService` in `Providers/Provider.swift`. `Reader`
+caps the text with the service's `maximumCharacters`, builds a `SpeechRequest` (text,
+voice id, validated speed, language and credential) and pulls `SpeechAudio` from the
+`SpeechStream` that `speak` returns. It no longer builds requests or decodes PCM.
+`SpeechPlayer` takes its format, its 100 ms level tap and its 500 ms queue limit from the
+first chunk's sample rate instead of a constant.
+
+The xAI adapter keeps everything above unchanged: one `POST /v1/tts` with the same body,
+the voices Ara and Altair, the 0.7 to 1.5 range, the 60,000-character cap and 24 kHz
+16-bit PCM. The bounded streaming body is `StreamingResponse` in `Providers/HTTP/`, with
+the same 64 KiB pieces and four capacity slots, and maps a failed status through the
+provider's mapping. The xAI stream is an actor, so decoding stays off the UI actor. It
+takes the next body piece only after yielding the last 100 ms chunk of the previous one, so
+the copied-buffer bound and backpressure described above are unchanged: while playback is
+paused the reader stops pulling, the stream stops taking pieces and the body's callback
+waits for capacity. A stream promises chunks of at most 100 ms with one sample rate.
+`Settings.speechSpeedRange` duplicates the xAI range until reading choices are stored per
+provider.

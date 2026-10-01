@@ -92,12 +92,13 @@ public struct Settings: Equatable, Sendable {
   /// The chord that reads the selection aloud, and stops a reading.
   public var readAloudHotkey: Hotkey
 
-  /// The text to speech voice id, one of `Speech.voices`.
+  /// The read-aloud voice id, one of the voice service's `voices`.
   public var voice: String
 
-  /// The speaking rate, from 0.7 to 1.5, the endpoint's range.
+  /// The speaking rate as a multiplier, within `speechSpeedRange`.
   public var speechSpeed: Double
 
+  /// Matches the only voice service's `speedRange` until reading choices are stored per provider.
   public static let speechSpeedRange = 0.7...1.5
   public static let defaultSpeechSpeed = 1.0
 

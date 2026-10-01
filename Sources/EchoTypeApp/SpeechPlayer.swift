@@ -2,7 +2,8 @@ import AVFoundation
 import EchoTypeCore
 
 @MainActor protocol ReadingPlayback: AnyObject {
-  func start() throws
+  /// Configures playback for the stream's rate. Every scheduled chunk has that rate.
+  func start(sampleRate: Int) throws
   func pause()
   func resume()
   func schedule(_ samples: [Float]) async throws
@@ -13,9 +14,8 @@ import EchoTypeCore
 /// One reading's playback queue. Completion callbacks carry buffer identities so callbacks
 /// delivered after Stop cannot decrement a new queue or resume an obsolete waiter.
 @MainActor final class SpeechPlayer: ReadingPlayback {
-  static let maximumQueuedFrames = Speech.sampleRate / 2 // 500 ms, including playing audio.
   struct Output {
-    var start: () throws -> Void
+    var start: (_ sampleRate: Int) throws -> Void
     var pause: () -> Void
     var resume: () -> Void
     var schedule: ([Float], @escaping @Sendable () -> Void) -> Void
@@ -25,6 +25,8 @@ import EchoTypeCore
   private var stopped = true
   private var buffers: [UUID: Int] = [:]
   private(set) var queuedFrames = 0
+  /// 500 ms at the stream's rate, including playing audio. Set by `start`.
+  private(set) var maximumQueuedFrames = 0
   private var capacity: CheckedContinuation<Void, any Error>?
   private var completion: CheckedContinuation<Void, any Error>?
 
@@ -32,19 +34,23 @@ import EchoTypeCore
 
   convenience init(onLevel: @escaping @MainActor (Double) -> Void) {
     let audio = PlaybackAudio(onLevel: onLevel)
-    self.init(output: .init(start: { try audio.start() }, pause: { audio.pause() },
+    self.init(output: .init(start: { try audio.start(sampleRate: $0) }, pause: { audio.pause() },
       resume: { audio.resume() }, schedule: { audio.schedule($0, completion: $1) },
       stop: { audio.stop() }))
   }
 
-  func start() throws { try output.start(); stopped = false }
+  func start(sampleRate: Int) throws {
+    try output.start(sampleRate)
+    maximumQueuedFrames = sampleRate / 2
+    stopped = false
+  }
   func pause() { if !stopped { output.pause() } }
   func resume() { if !stopped { output.resume() } }
 
   func schedule(_ samples: [Float]) async throws {
     guard !samples.isEmpty else { return }
-    precondition(samples.count <= Self.maximumQueuedFrames)
-    while !stopped, queuedFrames + samples.count > Self.maximumQueuedFrames {
+    precondition(stopped || samples.count <= maximumQueuedFrames)
+    while !stopped, queuedFrames + samples.count > maximumQueuedFrames {
       try await withTaskCancellationHandler {
         try await withCheckedThrowingContinuation { capacity = $0 }
       } onCancel: { Task { @MainActor in self.stop() } }
@@ -89,19 +95,21 @@ import EchoTypeCore
 @MainActor private final class PlaybackAudio {
   private lazy var engine = AVAudioEngine()
   private lazy var node = AVAudioPlayerNode()
-  private let format = AVAudioFormat(standardFormatWithSampleRate: Double(Speech.sampleRate), channels: 1)!
+  private var format: AVAudioFormat?
   private var generation = 0
   private var active = false
   private let onLevel: @MainActor (Double) -> Void
   init(onLevel: @escaping @MainActor (Double) -> Void) {
     self.onLevel = onLevel
   }
-  func start() throws {
+  func start(sampleRate: Int) throws {
+    let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1)!
+    self.format = format
     engine.attach(node)
     engine.connect(node, to: engine.mainMixerNode, format: format)
     generation += 1
     let generation = generation
-    node.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Speech.sampleRate / 10), format: format,
+    node.installTap(onBus: 0, bufferSize: AVAudioFrameCount(sampleRate / 10), format: format,
       block: Self.levelTap { [weak self] level in
         guard let self, self.active, self.generation == generation, self.node.isPlaying else { return }
         self.onLevel(level)
@@ -118,7 +126,7 @@ import EchoTypeCore
     node.stop(); node.removeTap(onBus: 0); engine.stop()
   }
   func schedule(_ samples: [Float], completion: @escaping @Sendable () -> Void) {
-    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {
+    guard let format, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {
       completion(); return
     }
     buffer.frameLength = buffer.frameCapacity

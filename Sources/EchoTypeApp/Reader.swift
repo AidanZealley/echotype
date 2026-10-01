@@ -11,14 +11,14 @@ import Observation
     var selection: (@escaping @MainActor () -> Bool) async -> String?
     var cleanup: () async -> Void
     var key: () async -> String?
-    var request: (URLRequest) -> any ReadingRequest
+    var voice: VoiceService
     var player: any ReadingPlayback
   }
   private let source: Source
   private let settings: Settings
   private let dependencies: Dependencies
   private let onPresentation: @MainActor (Reader) -> Void
-  private var request: (any ReadingRequest)?
+  private var stream: (any SpeechStream)?
   private var stopped = false
   private var hasRun = false
   private var playbackStarted = false
@@ -44,7 +44,7 @@ import Observation
   func stop() {
     guard !stopped else { return }
     stopped = true
-    request?.cancel(); dependencies.player.stop()
+    stream?.cancel(); dependencies.player.stop()
     presentation = .stopped; level = 0
     onPresentation(self)
   }
@@ -76,7 +76,7 @@ import Observation
       }
     }
     catch { if !stopped && !Task.isCancelled { failure = error } }
-    request?.cancel(); request = nil
+    stream?.cancel(); stream = nil
     dependencies.player.stop()
     await dependencies.cleanup()
     if stopped || Task.isCancelled { failure = nil }
@@ -102,25 +102,19 @@ import Observation
     let apiKey = await dependencies.key()
     try checkStopped()
     guard let apiKey else { throw Failure.noAPIKey }
-    let request = dependencies.request(Speech.request(text: Speech.capped(spoken), settings: settings, apiKey: apiKey))
-    self.request = request
-    let decoder = ReadingDecoder()
-    // One 100 ms decode chunk waits for capacity before taking more response bytes.
-    let chunkBytes = Speech.sampleRate / 10 * 2
-    while let data = try await request.next() {
+    let voice = dependencies.voice
+    let stream = voice.speak(SpeechRequest(text: voice.capped(spoken), settings: settings, credential: apiKey))
+    self.stream = stream
+    // Each short chunk waits for playback capacity before the stream is pulled again.
+    while let audio = try await stream.next() {
       try checkStopped()
       if !playbackStarted {
-        do { try dependencies.player.start() } catch { throw Failure.playback(error) }
+        do { try dependencies.player.start(sampleRate: audio.sampleRate) } catch { throw Failure.playback(error) }
         playbackStarted = true
         if pausedAt != nil { dependencies.player.pause() }
         presentation = pausedAt != nil ? .paused : .playing; onPresentation(self)
       }
-      for start in stride(from: 0, to: data.count, by: chunkBytes) {
-        let chunk = data.subdata(in: start..<min(start + chunkBytes, data.count))
-        let samples = await decoder.decode(chunk)
-        try checkStopped()
-        try await dependencies.player.schedule(samples)
-      }
+      try await dependencies.player.schedule(audio.samples)
     }
     try checkStopped()
     if playbackStarted { try await dependencies.player.finished() }

@@ -177,8 +177,8 @@ private struct ReadAloudTab: View {
         }
       }
       Picker("Voice", selection: $store.settings.voice) {
-        ForEach(Speech.voices, id: \.self) { voice in
-          Text(verbatim: voice.capitalized).tag(voice)
+        ForEach(XAI.voice.voices) { voice in
+          Text(verbatim: voice.name).tag(voice.id)
         }
       }
       LabeledContent("Speed") {
