@@ -1,4 +1,4 @@
-import EchoTypeCore
+@testable import EchoTypeCore
 import Foundation
 import Testing
 
@@ -59,8 +59,12 @@ enum LiveSession {
 )
 func liveStreamingSessionRecordsItsEventSequence() async throws {
   let recording = try WAVRecording(contentsOf: URL(fileURLWithPath: LiveSession.fixturePath))
-  let url = STTConnection.streamingURL(settings: Settings())
-  let transport = URLSessionWebSocketTransport(url: url, apiKey: LiveSession.apiKey)
+  let request = TranscriptionRequest(
+    settings: Settings(), keytermLimit: XAI.transcription.keytermLimit,
+    credential: LiveSession.apiKey)
+  let url = XAI.Transcriber.streamingURL(for: request)
+  let transport = URLSessionWebSocketTransport(
+    request: XAI.Transcriber.urlRequest(for: request), errorForStatus: XAI.error(httpStatus:))
   let log = SessionLog(recording: recording, url: url)
 
   let receiving = Task {
@@ -177,10 +181,10 @@ actor SessionLog {
   private let url: URL
   private let start = Date()
   private var lines: [String] = []
-  private var assembler = TranscriptAssembler()
+  private var assembler = XAI.TranscriptAssembler()
   private var audioSeconds = 0.0
   private var transportFailure: (any Error)?
-  private var serverError: STTEvent.ServerError?
+  private var serverError: XAI.Event.ServerError?
   private var audioStreamClosed = false
   private var partialCount = 0
   private var doneArrivedEarly = false
@@ -216,10 +220,10 @@ actor SessionLog {
 
   /// Records one server frame verbatim.
   func record(_ message: String) {
-    let event: STTEvent?
+    let event: XAI.Event?
     let annotation: String
     do {
-      event = try STTEvent.decode(message)
+      event = try XAI.Event.decode(message)
       annotation = event == nil ? "   <-- JSON WITH AN UNDOCUMENTED type" : ""
     } catch {
       event = nil

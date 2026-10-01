@@ -1,14 +1,14 @@
 # Provider adapters implementation plan
 
-Status: draft; implementation has not started. Workflow approval: pending.
+Status: in progress. Workflow approval: approved by Aidan on 2026-10-01.
 
 ## Orchestration record
 
-- Integration branch: `TBD`, proposed `refactor/provider-adapters`
-- Starting commit: `TBD`
+- Integration branch: `refactor/provider-adapters`
+- Starting commit: `f55bfad`
 - Review command: `lead subagents`, inherited model and effort
 - Specification approved: by Aidan on 2026-10-01; its committed version is the starting commit
-- Started: `TBD`
+- Started: 2026-10-01
 
 This file is the resume record. Only one lead is active at a time. The execution procedure, recovery rules and lead prompts are in the [README](README.md).
 
@@ -18,7 +18,7 @@ Workstream states: Not started, Implementing, Review, Remediation, Closure revie
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Transcription adapter](01-transcription.md) | Workflow approval | Not started |
+| 1 | [Transcription adapter](01-transcription.md) | Workflow approval | Accepted |
 | 2 | [Cleanup adapter and always-on cleanup](02-cleanup.md) | 1 | Not started |
 | 3 | [Read-aloud adapter](03-read-aloud.md) | 2 | Not started |
 | 4 | [Provider registry and credentials](04-registry-credentials.md) | 3 | Not started |
@@ -61,7 +61,7 @@ These are frozen. A defect in one is raised as an escalation naming the owning w
 
 | Gate | Owner and placement | Status | Candidate | Required evidence and resume condition |
 |---|---|---|---|---|
-| G1 Dictation | 1, after closure before acceptance | Pending | TBD | Aidan reports that a signed candidate with xAI passes: normal dictation, stopping mid-sentence keeps the final words, Escape during Transcribing inserts nothing, and the Settings Test button shows what it heard |
+| G1 Dictation | 1, after closure before acceptance | Passed | `.build/EchoType-workflow.app` from workstream 1's uncommitted state on `f55bfad` | Aidan reports that a signed candidate with xAI passes: normal dictation, stopping mid-sentence keeps the final words, Escape during Transcribing inserts nothing, and the Settings Test button shows what it heard |
 | G2 Read aloud | 3, after closure before acceptance | Pending | TBD | Aidan reports that a signed candidate passes: reading a selection with each voice, Space to pause and resume, stopping with the hotkey, and an agent's MCP `speak` call |
 | G3 Whole feature | Final, after focused closure before acceptance | Pending | TBD | Aidan reports that a signed candidate passes the specification's Mac checks: the upgrade keeps the existing key, voice and speed; dictation shows cleanup requests in Last Dictation; read aloud, MCP `speak` and Test work; a wrong key shows "xAI rejected the API key", with the real key restored afterwards; the Provider tab is checked in both themes |
 
@@ -78,13 +78,13 @@ CI is not run by this workflow because nothing is pushed; the completion report 
 
 ## Escalations
 
-None.
+None open.
 
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-10-01 | `LiveTranscriber` contract clarified: `finish()` may come before `.ready` when no audio was sent, and an adapter may yield a final `.transcript` just before `.finished`. `STTError` is deleted rather than made private, and xAI `error` events throw `ProviderError.failed(message)` | Keeps the starting commit's xAI behaviour and makes the guarantees explicit for later adapters | Workstream 1 lead, within the specification's "declaration details may differ" | 1, 4, Apple follow-up |
 
 ## Completion summary
 

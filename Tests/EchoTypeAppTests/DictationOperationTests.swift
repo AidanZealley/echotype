@@ -6,7 +6,7 @@ import Synchronization
 import Testing
 
 // These tests drive `DictationOperation` only through its dependencies, its admission signals and
-// its presentation, and assert outcomes: inserted text, frames on the wire, the trace and which
+// its presentation, and assert outcomes: inserted text, calls to the transcriber, the trace and which
 // resources were released. They must keep passing unchanged while the session's internals move.
 
 private final class Gate: Sendable {
@@ -20,7 +20,7 @@ private final class Gate: Sendable {
 
 /// Places the fakes pass through, and presentation the operation publishes.
 enum Point: Hashable, Sendable {
-  case captureStart, key, socket, binarySend, closingFrame, audioDone, captureStop, captureRelease
+  case captureStart, key, transcriberStart, audioSend, finish, finished, captureStop, captureRelease
   case destination, revision
   /// Insertion before and after the clipboard boundary.
   case insertion, clipboard
@@ -92,63 +92,70 @@ private final class ManualClock: SessionClock, Sendable {
   }
 }
 
-private let finalize = #"{"type":"finalize"}"#
-private let audioDone = #"{"type":"audio.done"}"#
-
-/// Records sent frames (binary frames as `audio <first byte>`) and lets the test emit events.
-/// Answers `audio.done` with `transcript.done` unless told not to.
-private final class Transport: WebSocketTransport, Sendable {
+/// Records calls (audio as `audio <first byte>`, then `finish`) and lets the test emit events.
+/// Answers `finish()` with `.finished` unless told not to.
+private final class Transcriber: LiveTranscriber {
   private struct State {
-    var frames: [String] = []
+    var calls: [String] = []
+    var committed = ""
     var failing: Point?
-    var answersAudioDone = true
+    var answersFinish = true
+    var closed = false
   }
   private let points: Points
   private let state = Mutex(State())
-  private let incoming: AsyncThrowingStream<String, any Error>
-  private let publisher: AsyncThrowingStream<String, any Error>.Continuation
+  let events: AsyncThrowingStream<TranscriptionEvent, any Error>
+  private let publisher: AsyncThrowingStream<TranscriptionEvent, any Error>.Continuation
   init(_ points: Points) {
     self.points = points
-    (incoming, publisher) = AsyncThrowingStream.makeStream()
+    (events, publisher) = AsyncThrowingStream.makeStream()
   }
 
-  var frames: [String] { state.withLock { $0.frames } }
-  /// Sends at this point throw.
+  var calls: [String] { state.withLock { $0.calls } }
+  var closed: Bool { state.withLock { $0.closed } }
+  /// Calls at this point throw.
   func fail(at point: Point) { state.withLock { $0.failing = point } }
-  func withholdTranscriptDone() { state.withLock { $0.answersAudioDone = false } }
+  func withholdFinished() { state.withLock { $0.answersFinish = false } }
 
-  func emit(_ text: String) { publisher.yield(text) }
+  func emit(_ event: TranscriptionEvent) { publisher.yield(event) }
+  /// Commits `words` after what was already said.
   func say(_ words: String) {
-    emit("{\"type\":\"transcript.partial\",\"text\":\"\(words)\",\"is_final\":true,\"speech_final\":true}")
+    let committed = state.withLock { state in
+      state.committed = state.committed.isEmpty ? words : "\(state.committed) \(words)"
+      return state.committed
+    }
+    emit(.transcript(Transcript(committed: committed)))
+    emit(.speech)
   }
-  /// The server closes the socket.
+  /// The provider ends the events.
   func disconnect() { publisher.finish() }
 
-  func send(binary: Data) async throws {
-    try await pass(.binarySend)
-    state.withLock { $0.frames.append("audio \(binary.first ?? 0)") }
+  func send(audio: Data) async throws {
+    try await pass(.audioSend)
+    state.withLock { $0.calls.append("audio \(audio.first ?? 0)") }
   }
-  func send(text: String) async throws {
-    try await pass(.closingFrame)
+  func finish() async throws {
+    try await pass(.finish)
     let answers = state.withLock { state in
-      state.frames.append(text)
-      return text == audioDone && state.answersAudioDone
+      state.calls.append("finish")
+      return state.answersFinish
     }
-    if text == audioDone { points.record(.audioDone) }
-    if answers { emit(#"{"type":"transcript.done"}"#) }
+    points.record(.finished)
+    if answers { emit(.finished) }
   }
   private func pass(_ point: Point) async throws {
     await points.pass(point)
     try Task.checkCancellation()
-    if state.withLock({ $0.failing == point }) { throw STTError.unavailable }
+    if state.withLock({ $0.failing == point }) { throw ProviderError.unavailable }
   }
-  func messages() -> AsyncThrowingStream<String, any Error> { incoming }
-  /// Closing releases suspended sends, as a real socket does.
+  /// Closing releases suspended calls, as a real connection does.
   func close() {
-    points.release(.binarySend)
-    points.release(.closingFrame)
+    state.withLock { $0.closed = true }
+    points.release(.audioSend)
+    points.release(.finish)
     publisher.finish()
   }
+  func waitForClose() async {}
 }
 
 private struct Insertion: Equatable {
@@ -158,7 +165,7 @@ private struct Insertion: Equatable {
 
 @MainActor private final class Harness {
   let points = Points()
-  let transport: Transport
+  let transcriber: Transcriber
   let clock = ManualClock()
   let testClock = ManualClock()
   let revisionClock = ManualClock()
@@ -173,7 +180,7 @@ private struct Insertion: Equatable {
   var insertionResult = Clipboard.InsertionResult(insertion: .attempted, sending: .notRequested)
 
   init() {
-    transport = Transport(points)
+    transcriber = Transcriber(points)
     (capture, chunks) = AsyncThrowingStream.makeStream()
   }
 
@@ -197,7 +204,10 @@ private struct Insertion: Equatable {
           await points.pass(.key)
           return "fake-key"
         },
-        transport: { _, _ in points.record(.socket); return self.transport },
+        transcription: TranscriptionService(keytermLimit: 100) { _ in
+          await points.pass(.transcriberStart)
+          return self.transcriber
+        },
         captureDestination: { points.record(.destination); return self.focusedDestination },
         insert: { text, destination, sends, cancelled, begin in
           self.insertedDestination = destination
@@ -221,7 +231,7 @@ private struct Insertion: Equatable {
         switch phase {
         case .capturing(let snapshot, _):
           if snapshot.state == .paused { points.record(.paused) }
-          if !snapshot.committed.isEmpty { points.record(.heard) }
+          if !snapshot.transcript.committed.isEmpty { points.record(.heard) }
         case .finishing: points.record(.finishing)
         default: break
         }
@@ -231,8 +241,8 @@ private struct Insertion: Equatable {
   /// Runs the operation until `words` are committed.
   func start(_ operation: DictationOperation, saying words: String = "spoken words") async -> Task<DictationOperation.Result, Never> {
     let task = Task { await operation.run() }
-    transport.emit(#"{"type":"transcript.created"}"#)
-    transport.say(words)
+    transcriber.emit(.ready)
+    transcriber.say(words)
     await points.reached(.heard)
     return task
   }
@@ -240,7 +250,7 @@ private struct Insertion: Equatable {
 
 /// What ends capture and starts finishing.
 enum Trigger: Sendable, CaseIterable { case stop, replyRequest, hardCap }
-enum ReadinessFailure: Sendable, CaseIterable { case noCreated, backlog }
+enum ReadinessFailure: Sendable, CaseIterable { case noReady, backlog }
 
 @Suite(.timeLimit(.minutes(1))) @MainActor
 struct DictationOperationTests {
@@ -313,12 +323,12 @@ struct DictationOperationTests {
     operation.cancel()
     let result = await operation.run()
     #expect(result.outcome == .nothing && result.startupFailure == nil && result.trace == nil)
-    #expect(h.points.count(.captureStart) == 0 && h.points.count(.key) == 0 && h.points.count(.socket) == 0)
+    #expect(h.points.count(.captureStart) == 0 && h.points.count(.key) == 0 && h.points.count(.transcriberStart) == 0)
     #expect(h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
     #expect(h.presented == [.cancelled])
   }
 
-  @Test("Cancellation during capture or key setup never opens a socket", arguments: [Point.captureStart, .key])
+  @Test("Cancellation during capture or key setup never starts a transcriber", arguments: [Point.captureStart, .key])
   func cancelledStartup(at point: Point) async {
     let h = Harness()
     h.points.hold(point)
@@ -329,10 +339,24 @@ struct DictationOperationTests {
     h.points.release(point)
     let result = await task.value
     #expect(result.outcome == .nothing && result.trace == nil)
-    #expect(h.points.count(.socket) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
+    #expect(h.points.count(.transcriberStart) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
   }
 
-  @Test("Capture failure during key setup prevents a later socket open")
+  @Test("Escape while the transcriber starts closes it without running a session")
+  func cancelledWhileStarting() async {
+    let h = Harness()
+    h.points.hold(.transcriberStart)
+    let operation = h.operation()
+    let task = Task { await operation.run() }
+    await h.points.reached(.transcriberStart)
+    operation.cancel()
+    h.points.release(.transcriberStart)
+    let result = await task.value
+    #expect(result.outcome == .nothing && result.trace == nil && h.transcriber.closed)
+    #expect(h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
+  }
+
+  @Test("Capture failure during key setup prevents a later transcriber start")
   func captureFailureDuringStartup() async {
     let h = Harness()
     h.points.hold(.key)
@@ -343,62 +367,62 @@ struct DictationOperationTests {
     h.points.release(.key)
     let result = await task.value
     guard case .failed = result.outcome else { Issue.record("Expected startup failure"); return }
-    #expect(h.points.count(.socket) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
+    #expect(h.points.count(.transcriberStart) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
     #expect(result.startupFailure != nil && result.trace == nil)
   }
 
-  @Test("Readiness fails the session without transcript.created in five seconds or past the held audio bound",
+  @Test("Readiness fails the session without .ready in five seconds or past the held audio bound",
     arguments: ReadinessFailure.allCases)
   func readinessFailure(_ failure: ReadinessFailure) async {
     let h = Harness()
     let operation = h.operation()
-    if failure == .backlog { h.speak(Data(count: STTClient.preHandshakeBytes + 1)) }
+    if failure == .backlog { h.speak(Data(count: SessionMachine.heldAudioLimit + 1)) }
     let task = Task { await operation.run() }
     await h.clock.armed.wait()
-    if failure == .noCreated { await h.clock.advance(5) }
+    if failure == .noReady { await h.clock.advance(5) }
     guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected readiness failure"); return }
-    #expect(text.isEmpty && h.transport.frames.isEmpty && h.points.count(.captureRelease) == 1)
+    #expect(text.isEmpty && h.transcriber.calls.isEmpty && h.points.count(.captureRelease) == 1)
   }
 
   // MARK: Finishing
 
-  @Test("Stop, reply request and hard cap drain captured audio before the closing frames", arguments: Trigger.allCases)
+  @Test("Stop, reply request and hard cap drain captured audio before finish()", arguments: Trigger.allCases)
   func drainsBeforeClosing(_ trigger: Trigger) async {
     let h = Harness()
     h.finalChunk = Data([2])
     let operation = h.operation()
     let task = await h.start(operation)
     // The first chunk is still on its way out when finishing begins.
-    h.points.hold(.binarySend)
+    h.points.hold(.audioSend)
     h.speak(Data([1]))
-    await h.points.reached(.binarySend)
+    await h.points.reached(.audioSend)
     switch trigger {
     case .stop: operation.commit(); operation.commit() // A repeated stop finishes once.
-    case .replyRequest: h.transport.say("Reply with EchoType")
+    case .replyRequest: h.transcriber.say("Reply with EchoType")
     case .hardCap: Task { await h.clock.advance(operation.settings.hardCap) }
     }
     await h.points.reached(.captureStop)
-    h.points.release(.binarySend)
+    h.points.release(.audioSend)
     let result = await task.value
-    #expect(h.transport.frames == ["audio 1", "audio 2", finalize, audioDone])
+    #expect(h.transcriber.calls == ["audio 1", "audio 2", "finish"])
     let text = trigger == .replyRequest ? "spoken words Reply with EchoType" : "spoken words"
     #expect(result.outcome == .insert(text))
     #expect(h.insertions == [.init(text: text, sends: trigger == .replyRequest)])
     #expect(result.trace?.insertion == .attempted)
   }
 
-  @Test("The finishing deadline starts when finishing begins and covers transcript.done", arguments: [false, true])
+  @Test("The finishing deadline starts when finishing begins and covers .finished", arguments: [false, true])
   func finishingDeadline(expires: Bool) async {
     let h = Harness()
-    h.transport.withholdTranscriptDone()
+    h.transcriber.withholdFinished()
     let operation = h.operation()
     let task = await h.start(operation)
     await h.clock.advance(9) // Listening time does not count against the deadline.
     operation.commit()
-    await h.points.reached(.audioDone)
+    await h.points.reached(.finished)
     let timeout = operation.settings.finalizeTimeout
     await h.clock.advance(expires ? timeout : timeout - 0.1)
-    h.transport.emit(#"{"type":"transcript.done"}"#)
+    h.transcriber.emit(.finished)
     let outcome = await task.value.outcome
     if expires {
       guard case .failed(let text, _) = outcome else { Issue.record("Expected timeout"); return }
@@ -410,13 +434,13 @@ struct DictationOperationTests {
   }
 
   @Test("A stalled send or capture drain ends at the finishing deadline and releases capture",
-    arguments: [Point.binarySend, .closingFrame, .captureStop])
+    arguments: [Point.audioSend, .finish, .captureStop])
   func stalledFinishing(at point: Point) async {
     let h = Harness()
     let operation = h.operation()
     let task = await h.start(operation)
     h.points.hold(point)
-    if point == .binarySend { h.speak(Data([1])) }
+    if point == .audioSend { h.speak(Data([1])) }
     operation.commit()
     // Stopping capture follows arming the deadline.
     await h.points.reached(.captureStop)
@@ -427,14 +451,14 @@ struct DictationOperationTests {
     #expect(h.points.count(.captureRelease) == 1)
   }
 
-  @Test("A send failure preserves committed words and never sends Return", arguments: [Point.binarySend, .closingFrame])
+  @Test("A send failure preserves committed words and never sends Return", arguments: [Point.audioSend, .finish])
   func sendFailure(at point: Point) async {
     let h = Harness()
-    h.transport.fail(at: point)
+    h.transcriber.fail(at: point)
     h.finalChunk = Data([1])
     let operation = h.operation()
     let task = await h.start(operation, saying: "Reply with EchoType")
-    guard case .failed(let text, .stt(.unavailable)) = await task.value.outcome else { Issue.record("Expected send failure"); return }
+    guard case .failed(let text, .provider(.unavailable)) = await task.value.outcome else { Issue.record("Expected send failure"); return }
     #expect(text == "Reply with EchoType")
     #expect(h.insertions == [.init(text: "Reply with EchoType", sends: false)])
     #expect(h.points.count(.captureRelease) == 1)
@@ -445,25 +469,25 @@ struct DictationOperationTests {
     let h = Harness()
     let operation = h.operation()
     let task = await h.start(operation)
-    h.points.hold(.binarySend)
+    h.points.hold(.audioSend)
     h.speak(Data([1]))
-    await h.points.reached(.binarySend)
+    await h.points.reached(.audioSend)
     operation.captureFailed(CaptureError("Audio capture backlog exceeded"))
     guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected capture failure"); return }
     #expect(text == "spoken words" && h.insertions == [.init(text: "spoken words", sends: false)])
     #expect(h.points.count(.captureRelease) == 1)
   }
 
-  @Test("An unrequested transcript.done or socket close while listening fails with the committed words",
+  @Test("An unrequested .finished or end of events while listening fails with the committed words",
     arguments: [false, true])
   func unrequestedEnd(disconnect: Bool) async {
     let h = Harness()
     let operation = h.operation()
     let task = await h.start(operation)
-    if disconnect { h.transport.disconnect() } else { h.transport.emit(#"{"type":"transcript.done"}"#) }
+    if disconnect { h.transcriber.disconnect() } else { h.transcriber.emit(.finished) }
     guard case .failed(let text, .socket) = await task.value.outcome else { Issue.record("Expected closed"); return }
     #expect(text == "spoken words" && h.insertions == [.init(text: "spoken words", sends: false)])
-    #expect(!h.transport.frames.contains(finalize))
+    #expect(!h.transcriber.calls.contains("finish"))
   }
 
   @Test("Insertion targets the destination focused when finishing begins, not before or after", arguments: [true, false])
@@ -476,11 +500,11 @@ struct DictationOperationTests {
     let atStop = available ? destination(target: 4) : nil
     let late = destination(target: 5)
     h.focusedDestination = atStop
-    h.points.hold(.closingFrame)
+    h.points.hold(.finish)
     operation.commit()
-    await h.points.reached(.closingFrame)
+    await h.points.reached(.finish)
     h.focusedDestination = late
-    h.points.release(.closingFrame)
+    h.points.release(.finish)
     _ = await task.value
     #expect(DestinationFocus(lookup: { atStop }).verify(h.insertedDestination) == (available ? .matching : .unavailable))
     #expect(DestinationFocus(lookup: { late }).verify(h.insertedDestination) == (available ? .changed : .unavailable))
@@ -488,7 +512,7 @@ struct DictationOperationTests {
 
   // MARK: Revision and insertion
 
-  @Test("Escape cancels through drain, closing and final revision", arguments: [Point.captureStop, .closingFrame, .revision])
+  @Test("Escape cancels through drain, closing and final revision", arguments: [Point.captureStop, .finish, .revision])
   func escapeWhileFinishing(at point: Point) async {
     let h = Harness()
     h.points.hold(point)
@@ -567,11 +591,11 @@ struct DictationOperationTests {
     let operation = h.operation(test: true)
     let task = Task { await operation.run() }
     await h.points.reached(.captureStart)
-    h.transport.emit(#"{"type":"transcript.created"}"#)
-    h.transport.say("test words")
+    h.transcriber.emit(.ready)
+    h.transcriber.say("test words")
     // The first binary send acknowledges that the operation installed its pump and Test timer.
     h.speak(Data([1]))
-    await h.points.reached(.binarySend)
+    await h.points.reached(.audioSend)
     operation.microphoneReady()
     await h.clock.advance(1)
     operation.microphoneReady()

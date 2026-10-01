@@ -24,16 +24,14 @@ public enum Speech {
 
   /// The `POST /v1/tts` request. It pins `optimize_streaming_latency` to 0 and
   /// `text_normalization` to false rather than omitting them, so a change to the endpoint's
-  /// defaults can't change reading. The app maps a non-2xx status with `STTError(httpStatus:)`.
+  /// defaults can't change reading. The app maps a non-2xx status with `XAI.error(httpStatus:)`.
   public static func request(text: String, settings: Settings, apiKey: String) -> URLRequest {
     guard let url = URL(string: "https://api.x.ai/v1/tts") else {
       preconditionFailure("The speech URL is a constant and cannot be invalid")
     }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    for (field, value) in STTConnection.headers(apiKey: apiKey) {
-      request.setValue(value, forHTTPHeaderField: field)
-    }
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     let encoder = JSONEncoder()
     encoder.keyEncodingStrategy = .convertToSnakeCase

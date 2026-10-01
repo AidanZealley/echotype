@@ -4,17 +4,17 @@ import Testing
 
 @Suite(.timeLimit(.minutes(1)))
 struct SessionMachineTests {
-  let transport = ScriptedTransport()
+  let transcriber = ScriptedTranscriber()
   let clock = TestClock()
   let session: SessionMachine
   let log: SnapshotLog
 
   init() {
-    session = SessionMachine(transport: transport, settings: Settings(), clock: clock)
+    session = SessionMachine(transcriber: transcriber, settings: Settings(), clock: clock)
     log = SnapshotLog(session.snapshots)
   }
 
-  /// Starts the session and waits until it is listening, which is also what proves its message
+  /// Starts the session and waits until it is listening, which is also what proves its event
   /// loop is running before a test scripts anything.
   private func start() async -> Task<SessionMachine.Outcome, Never> {
     let running = Task { await session.run() }
@@ -22,58 +22,59 @@ struct SessionMachineTests {
     return running
   }
 
-  private var closingFrames: [String] {
-    [#"{"type":"finalize"}"#, #"{"type":"audio.done"}"#]
+  /// What a provider reports when someone speaks: the complete committed transcript so far,
+  /// then evidence of speech.
+  private func say(_ committed: String) async {
+    await transcriber.emit(committed: committed)
+    await transcriber.emit(.speech)
   }
 
-  @Test("Ten seconds of quiet pauses the session and speech resumes it")
+  // MARK: Silence, pause and hard cap
+
+  @Test("Ten seconds without speech pauses the session and speech resumes it")
   func quietPausesAndSpeechResumes() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("a thought", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("a thought")
 
-    // The endpoint keeps sending partials at about 1 Hz through a silence, with empty text, so
-    // their arrival must not count as activity.
+    // A transcript without speech, such as a provider's empty updates through a silence, is not
+    // activity.
     await clock.advance(by: 5)
-    await transport.emit(Fixture.partial(""))
+    await transcriber.emit(committed: "a thought")
     await clock.advance(by: 5)
     #expect(await log.next() == .paused)
 
-    await transport.emit(Fixture.partial("and another"))
+    await transcriber.emit(.speech)
     #expect(await log.next() == .listening)
 
     await session.cancel()
     _ = await running.value
   }
 
-  @Test("Pause and resume cycles accumulate every segment in order")
+  @Test("Pause and resume cycles keep the latest transcript and insert it")
   func pauseCyclesAccumulateText() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("one", isFinal: true, speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("one")
 
     await clock.advance(by: 10)
     #expect(await log.next() == .paused)
-    await transport.emit(Fixture.partial("tw"))
+    #expect(await log.latest == .init(state: .paused, transcript: .init(committed: "one")))
+    await say("one two")
     #expect(await log.next() == .listening)
-    // The endpoint sends the closing frame twice, identical but for `speech_final`, so the
-    // duplicate must not become a second segment.
-    await transport.emit(Fixture.partial("two", isFinal: true))
-    await transport.emit(Fixture.partial("two", isFinal: true, speechFinal: true))
 
     await clock.advance(by: 10)
     #expect(await log.next() == .paused)
-    await transport.emit(Fixture.partial("thre"))
+    await say("one two three")
     #expect(await log.next() == .listening)
-    await transport.emit(Fixture.partial("three", isFinal: true, speechFinal: true))
 
     await session.finish()
     #expect(await log.next() == .finalizing)
-    #expect(await transport.textFrames == closingFrames)
+    #expect(await transcriber.calls == [.finish])
 
-    await transport.emit(Fixture.done)
+    await transcriber.emit(.finished)
     #expect(await running.value == .insert("one two three"))
     #expect(await log.rest() == [.idle])
   }
@@ -81,43 +82,45 @@ struct SessionMachineTests {
   @Test("A session where nothing is said cancels silently")
   func nothingSaidCancelsSilently() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial(""))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await transcriber.emit(committed: "")
 
     await clock.advance(by: 10)
     #expect(await running.value == .nothing)
     #expect(await log.rest() == [.cancelled])
-    // Nothing was finalised, so the session never asked the endpoint for a transcript.
-    #expect(await transport.textFrames.isEmpty)
+    // Nothing was finalised, so the session never asked for a transcript.
+    #expect(await transcriber.calls.isEmpty)
   }
 
   @Test("The hard cap ends the session and commits what accumulated")
   func hardCapCommits() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("walked away", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("walked away")
 
     await clock.advance(by: 300)
     #expect(await log.next() == .paused)
     #expect(await log.next() == .finalizing)
     // The owner drains its audio before closing, so the session never closes on its own.
-    #expect(await transport.textFrames.isEmpty)
+    #expect(await transcriber.calls.isEmpty)
     await session.sendClosing()
-    #expect(await transport.textFrames == closingFrames)
+    #expect(await transcriber.calls == [.finish])
 
-    await transport.emit(Fixture.done)
+    await transcriber.emit(.finished)
     #expect(await running.value == .insert("walked away"))
     #expect(await log.rest() == [.idle])
   }
 
+  // MARK: Cancellation
+
   @Test("Cancelling discards everything", arguments: [false, true])
   func cancellingDiscardsEverything(afterPausing: Bool) async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("private thoughts", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("private thoughts")
 
     if afterPausing {
       await clock.advance(by: 10)
@@ -127,37 +130,174 @@ struct SessionMachineTests {
     await session.cancel()
     #expect(await running.value == .nothing)
     #expect(await log.rest() == [.cancelled])
-    #expect(await transport.textFrames.isEmpty)
+    #expect(await transcriber.calls.isEmpty)
   }
 
-  @Test("Stopping before transcript.created still ends the session with nothing to insert")
+  @Test("Cancellation before run still completes teardown and snapshots")
+  func cancellationBeforeRun() async {
+    await session.cancel()
+    #expect(await session.run() == .nothing)
+    #expect(await log.rest() == [.cancelled])
+    #expect(await transcriber.calls.isEmpty)
+  }
+
+  // MARK: Readiness and held audio
+
+  @Test("Readiness has a bounded network deadline")
+  func readinessDeadline() async {
+    let running = await start()
+    defer { transcriber.close() }
+    await clock.advance(by: SessionMachine.readinessTimeout)
+    guard case .failed(_, .socket) = await running.value else { Issue.record("Expected readiness failure"); return }
+  }
+
+  @Test("Audio before .ready is held, then sent ahead of later audio")
+  func audioWaitsForReadiness() async throws {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    let firstWords = Data([1, 2])
+    try await session.send(audio: firstWords)
+    #expect(await transcriber.calls.isEmpty)
+
+    await transcriber.emit(.ready)
+    // Held rather than dropped, so connecting does not clip the first word.
+    #expect(await transcriber.calls == [.audio(firstWords)])
+    try await session.send(audio: Data([3]))
+    #expect(await transcriber.calls == [.audio(firstWords), .audio(Data([3]))])
+
+    await session.cancel()
+    _ = await running.value
+  }
+
+  @Test("Stopping before .ready keeps held audio ahead of finish()")
+  func finishBeforeReadiness() async throws {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    try await session.send(audio: Data([1, 2]))
+    let closing = await session.startFinishing()
+    #expect(await log.next() == .finalizing)
+    #expect(await transcriber.calls.isEmpty)
+
+    await transcriber.emit(.ready)
+    await closing.value
+    #expect(await transcriber.calls == [.audio(Data([1, 2])), .finish])
+    await transcriber.emit(.finished)
+    #expect(await running.value == .nothing)
+  }
+
+  @Test("A stop waiting on a .ready that never comes ends at the finishing deadline")
+  func finishWaitingOnReadinessTimesOut() async throws {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    try await session.send(audio: Data([1, 2]))
+    let closing = await session.startFinishing()
+    #expect(await log.next() == .finalizing)
+
+    await clock.advance(by: Settings().finalizeTimeout)
+
+    #expect(
+      await running.value
+        == .failed(text: "", error: .socket("the endpoint never answered the finalize request")))
+    await closing.value
+    #expect(await transcriber.calls.isEmpty)
+  }
+
+  @Test("Stopping before .ready with nothing held still ends with nothing to insert")
   func triggerBeforeTheSessionIsReady() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
+    defer { running.cancel(); transcriber.close() }
 
     await session.finish()
     #expect(await log.next() == .finalizing)
-    #expect(await transport.textFrames == closingFrames)
+    #expect(await transcriber.calls == [.finish])
 
-    await transport.emit(Fixture.done)
+    await transcriber.emit(.finished)
     #expect(await running.value == .nothing)
     #expect(await log.rest() == [.idle])
   }
 
-  @Test("A finalisation the endpoint never answers ends the session rather than hanging")
+  @Test("Held audio over the limit fails visibly")
+  func heldAudioLimit() async {
+    let running = await start()
+    defer { transcriber.close() }
+    await #expect(throws: SessionError.self) {
+      try await session.send(audio: Data(count: SessionMachine.heldAudioLimit + 1))
+    }
+    guard case .failed(_, .socket) = await running.value else { Issue.record("Expected backlog failure"); return }
+  }
+
+  @Test("A failed send of held audio fails the session and prevents finish()")
+  func heldAudioSendFailure() async throws {
+    let running = await start()
+    defer { transcriber.close() }
+    try await session.send(audio: Data([1]))
+    await transcriber.failSends(with: ProviderError.unavailable)
+    await transcriber.emit(.ready)
+    await session.finish()
+    #expect(await running.value == .failed(text: "", error: .provider(.unavailable)))
+    #expect(await transcriber.calls.isEmpty)
+  }
+
+  // MARK: Send ordering
+
+  @Test("Audio handed over while a send is in flight stays behind it")
+  func audioKeepsItsOrderWhileASendIsInFlight() async throws {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    let first = Data([0x0A])
+    let second = Data([0x0B])
+    try await session.send(audio: first)
+    await transcriber.holdNextSend()
+    let ready = Task { await transcriber.emit(.ready) }
+
+    // The flush of held audio is suspended in the transcriber, which is exactly when capture
+    // hands over its next chunk.
+    await transcriber.waitForHeldSend()
+    let handover = await session.startSending(audio: second)
+    await transcriber.releaseSend()
+    try await handover.value
+    await ready.value
+
+    #expect(await transcriber.calls == [.audio(first), .audio(second)])
+    await session.cancel()
+    _ = await running.value
+  }
+
+  @Test("finish() waits for audio still on its way out")
+  func finishWaitsForAudioAlreadyHandedOver() async throws {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await transcriber.holdNextSend()
+    let sending = await session.startSending(audio: Data([0x0A]))
+
+    // The stop arrives while capture's chunk is still in the transcriber.
+    await transcriber.waitForHeldSend()
+    let stop = await session.startFinishing()
+    await transcriber.releaseSend()
+    try await sending.value
+    await stop.value
+
+    #expect(await transcriber.calls == [.audio(Data([0x0A])), .finish])
+    await transcriber.emit(.finished)
+    #expect(await running.value == .nothing)
+  }
+
+  // MARK: Finishing
+
+  @Test("A finish the transcriber never answers ends the session rather than hanging")
   func finalizingWithoutAnAnswerTimesOut() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("said and done", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("said and done")
 
     await session.finish()
     #expect(await log.next() == .finalizing)
-    #expect(await transport.textFrames == closingFrames)
+    #expect(await transcriber.calls == [.finish])
 
-    // The endpoint resolves the finalize into a trailing partial, then never sends
-    // `transcript.done`.
-    await transport.emit(Fixture.partial("then some", isFinal: true, speechFinal: true))
+    // Finishing resolves the tail into one more transcript, then `.finished` never arrives.
+    await transcriber.emit(committed: "said and done then some")
     await clock.advance(by: Settings().finalizeTimeout)
 
     let outcome = await running.value
@@ -169,84 +309,139 @@ struct SessionMachineTests {
     #expect(await log.rest() == [.idle])
   }
 
-  @Test("A socket failure keeps the segments finalised before it")
-  func socketFailureKeepsFinalisedSegments() async {
+  @Test("An empty transcript inserts nothing")
+  func emptyTranscriptInsertsNothing() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("half a sentence", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await transcriber.emit(committed: "")
 
-    await transport.fail(with: STTError.unavailable)
-    #expect(await running.value == .failed(text: "half a sentence", error: .stt(.unavailable)))
+    await session.finish()
+    #expect(await log.next() == .finalizing)
+
+    await transcriber.emit(.finished)
+    #expect(await running.value == .nothing)
     #expect(await log.rest() == [.idle])
   }
 
-  @Test("A server error keeps the segments finalised before it")
-  func serverErrorKeepsFinalisedSegments() async {
+  @Test("The last snapshot carries the last text")
+  func lastSnapshotCarriesTheText() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("half a sentence", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("said and done")
 
-    await transport.emit(Fixture.error(code: "internal_error", message: "upstream failed"))
-    let serverError = STTEvent.ServerError(code: "internal_error", message: "upstream failed")
+    await session.finish()
+    #expect(await log.next() == .finalizing)
+    // What finishing resolves the tail into arrives while the pill shows transcribing, and the
+    // speech in it leaves the finishing deadline alone.
+    await transcriber.emit(.transcript(.init(committed: "said and done", provisional: "then some")))
+    await transcriber.emit(.speech)
     #expect(
-      await running.value
-        == .failed(text: "half a sentence", error: .stt(.server(serverError))))
+      await log.snapshot()
+        == .init(state: .finalizing, transcript: .init(committed: "said and done", provisional: "then some")))
+    await transcriber.emit(committed: "said and done then some")
+    await transcriber.emit(.finished)
+
+    #expect(await running.value == .insert("said and done then some"))
     #expect(await log.rest() == [.idle])
+    #expect(
+      await log.latest == .init(state: .idle, transcript: .init(committed: "said and done then some")))
   }
 
-  @Test("A transcript.done nobody asked for ends the session as a failure")
-  func unsolicitedDoneDoesNotCommit() async {
+  @Test("Each transcript is published as the provider reports it")
+  func transcriptsArePublished() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("thinking out loud", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
 
-    // Text reaches the target app only on an explicit trigger or the hard cap, so a `done` with
-    // neither behind it is the socket ending the transcript, not a commit.
-    await transport.emit(Fixture.done)
+    let provisional = Transcript(provisional: "tan stock")
+    let settled = Transcript(utterance: "tanstack is")
+    await transcriber.emit(.transcript(provisional))
+    #expect(await log.snapshot() == .init(state: .listening, transcript: provisional))
+    await transcriber.emit(.transcript(settled))
+    #expect(await log.snapshot() == .init(state: .listening, transcript: settled))
+
+    await session.cancel()
+    _ = await running.value
+  }
+
+  // MARK: Unrequested endings and failures
+
+  @Test(".finished nobody asked for ends the session as a failure")
+  func unsolicitedFinishedDoesNotCommit() async {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("thinking out loud")
+
+    // Text reaches the target app only on an explicit trigger or the hard cap, so `.finished`
+    // with neither behind it is the provider ending the transcript, not a commit.
+    await transcriber.emit(.finished)
     let outcome = await running.value
     guard case .failed(let text, .socket) = outcome else {
       Issue.record("expected a socket failure, got \(outcome)")
       return
     }
     #expect(text == "thinking out loud")
-    #expect(await transport.textFrames.isEmpty)
+    #expect(await transcriber.calls.isEmpty)
   }
 
-  @Test("A transcript.done before closing begins is not a finalised transcript")
-  func doneBeforeClosingDoesNotCommit() async {
+  @Test(".finished before closing begins is not a finalised transcript")
+  func finishedBeforeClosingDoesNotCommit() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("still draining", speechFinal: true))
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("still draining")
 
-    // Finishing has begun, but the owner is still draining audio the endpoint has not heard.
+    // Finishing has begun, but the owner is still draining audio the provider has not heard.
     await session.beginFinishing()
-    await transport.emit(Fixture.done)
+    await transcriber.emit(.finished)
     guard case .failed(let text, .socket) = await running.value else {
       Issue.record("expected a socket failure")
       return
     }
     #expect(text == "still draining")
-    #expect(await transport.textFrames.isEmpty)
+    #expect(await transcriber.calls.isEmpty)
   }
 
-  @Test("A frame the session cannot decode ends the session rather than truncating in silence")
-  func undecodableFrameEndsTheSession() async {
+  @Test("Events ending during finishing is a failure without .finished")
+  func eventsEndingWhileFinishing() async {
     let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("first sentence", isFinal: true, speechFinal: true))
-
-    await transport.emit("{not json")
-    // Everything from here is past the end of the session. These are the frames that used to
-    // produce `.insert("first sentence")`: the client died on the bad frame while the session
-    // kept looping, so the trigger reported a truncated transcript as a clean success.
-    await transport.emit(Fixture.partial("second sentence", isFinal: true, speechFinal: true))
+    defer { transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("available words")
     await session.finish()
-    await transport.emit(Fixture.done)
+    transcriber.close()
+    guard case .failed(let text, .socket) = await running.value else { Issue.record("Expected incomplete protocol failure"); return }
+    #expect(text == "available words")
+  }
+
+  @Test("A provider failure keeps the text committed before it")
+  func providerFailureKeepsCommittedText() async {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("half a sentence")
+
+    await transcriber.fail(with: ProviderError.failed("upstream failed"))
+    #expect(
+      await running.value == .failed(text: "half a sentence", error: .provider(.failed("upstream failed"))))
+    #expect(await log.rest() == [.idle])
+  }
+
+  @Test("Any other failure ends the session as a connection failure")
+  func otherFailureIsAConnectionFailure() async {
+    let running = await start()
+    defer { running.cancel(); transcriber.close() }
+    await transcriber.emit(.ready)
+    await say("first sentence")
+
+    await transcriber.fail(with: URLError(.networkConnectionLost))
+    // Everything from here is past the end of the session.
+    await say("first sentence second sentence")
+    await session.finish()
+    await transcriber.emit(.finished)
 
     let outcome = await running.value
     guard case .failed(let text, .socket) = outcome else {
@@ -254,157 +449,7 @@ struct SessionMachineTests {
       return
     }
     #expect(text == "first sentence")
-    #expect(await transport.textFrames.isEmpty)
-  }
-
-  @Test("An empty transcript inserts nothing")
-  func emptyTranscriptInsertsNothing() async {
-    let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial(""))
-
-    await session.finish()
-    #expect(await log.next() == .finalizing)
-
-    await transport.emit(Fixture.done)
-    #expect(await running.value == .nothing)
-    // The empty outcome asks the operation to insert nothing.
-    #expect(await log.rest() == [.idle])
-  }
-
-  @Test("Provisional text is shown, then superseded by the run it settles into")
-  func provisionalTextIsSuperseded() async {
-    let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-
-    await transport.emit(Fixture.partial("tan stock"))
-    #expect(await log.snapshot() == .init(state: .listening, committed: "", utterance: "", provisional: "tan stock"))
-    await transport.emit(Fixture.partial("tanstack is", isFinal: true))
-    #expect(
-      await log.snapshot() == .init(state: .listening, committed: "", utterance: "tanstack is", provisional: ""))
-
-    await session.cancel()
-    _ = await running.value
-  }
-
-  @Test("Settled text accumulates across speech_final segments and is what gets inserted")
-  func settledTextAccumulatesAcrossSegments() async {
-    let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-
-    await transport.emit(Fixture.partial("install pnpm"))
-    // The recorded twin: an `is_final` frame, then the same frame with `speech_final` as well.
-    await transport.emit(Fixture.partial("install pnpm", isFinal: true))
-    await transport.emit(Fixture.partial("install pnpm", isFinal: true, speechFinal: true))
-    await transport.emit(Fixture.partial("then add"))
-    await transport.emit(Fixture.partial("then add shadcn", isFinal: true, speechFinal: true))
-
-    var shown: [SessionMachine.Snapshot] = []
-    for _ in 0..<5 { if let next = await log.snapshot() { shown.append(next) } }
-    #expect(
-      shown == [
-        .init(state: .listening, committed: "", utterance: "", provisional: "install pnpm"),
-        .init(state: .listening, committed: "", utterance: "install pnpm", provisional: ""),
-        .init(state: .listening, committed: "install pnpm", utterance: "", provisional: ""),
-        .init(state: .listening, committed: "install pnpm", utterance: "", provisional: "then add"),
-        .init(state: .listening, committed: "install pnpm then add shadcn", utterance: "", provisional: ""),
-      ])
-
-    await session.finish()
-    await transport.emit(Fixture.done)
-    #expect(await running.value == .insert("install pnpm then add shadcn"))
-  }
-
-  @Test("Settled text survives pause and resume cycles")
-  func settledTextSurvivesPauses() async {
-    let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("one", isFinal: true, speechFinal: true))
-
-    await clock.advance(by: 10)
-    #expect(await log.next() == .paused)
-    #expect(await log.latest == .init(state: .paused, committed: "one", utterance: "", provisional: ""))
-
-    await transport.emit(Fixture.partial("tw"))
-    #expect(await log.next() == .listening)
-    #expect(await log.latest == .init(state: .listening, committed: "one", utterance: "", provisional: "tw"))
-    await transport.emit(Fixture.partial("two", isFinal: true, speechFinal: true))
-
-    await clock.advance(by: 10)
-    #expect(await log.next() == .paused)
-    #expect(await log.latest == .init(state: .paused, committed: "one two", utterance: "", provisional: ""))
-
-    await transport.emit(Fixture.partial("three", isFinal: true, speechFinal: true))
-    #expect(await log.next() == .listening)
-    #expect(
-      await log.latest == .init(state: .listening, committed: "one two three", utterance: "", provisional: ""))
-
-    await session.cancel()
-    _ = await running.value
-  }
-
-  @Test("The last snapshot carries the last text")
-  func lastSnapshotCarriesTheText() async {
-    let running = await start()
-    defer { running.cancel(); transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("said and done", speechFinal: true))
-
-    await session.finish()
-    #expect(await log.next() == .finalizing)
-    // What `finalize` resolves the tail into arrives while the pill shows transcribing.
-    await transport.emit(Fixture.partial("then some"))
-    #expect(
-      await log.snapshot()
-        == .init(state: .finalizing, committed: "said and done", utterance: "", provisional: "then some"))
-    await transport.emit(Fixture.partial("then some", isFinal: true, speechFinal: true))
-    await transport.emit(Fixture.done)
-
-    #expect(await running.value == .insert("said and done then some"))
-    #expect(await log.rest() == [.idle])
-    #expect(
-      await log.latest == .init(state: .idle, committed: "said and done then some", utterance: "", provisional: ""))
-  }
-  @Test("Readiness has a bounded network deadline")
-  func readinessDeadline() async {
-    let running = await start()
-    defer { transport.close() }
-    await clock.advance(by: SessionMachine.readinessTimeout)
-    guard case .failed(_, .socket) = await running.value else { Issue.record("Expected readiness failure"); return }
-  }
-
-  @Test("Cancellation before run still completes teardown and snapshots")
-  func cancellationBeforeRun() async {
-    await session.cancel()
-    #expect(await session.run() == .nothing)
-    #expect(await log.rest() == [.cancelled])
-    #expect(await transport.textFrames.isEmpty)
-  }
-
-  @Test("Closure during finalisation is failure without transcript.done")
-  func closureWithoutProtocolCompletion() async {
-    let running = await start()
-    defer { transport.close() }
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("available words", speechFinal: true))
-    await session.finish()
-    transport.close()
-    guard case .failed(let text, .socket) = await running.value else { Issue.record("Expected incomplete protocol failure"); return }
-    #expect(text == "available words")
-  }
-
-  @Test("Pre-handshake backlog overflow fails visibly")
-  func handshakeBacklogLimit() async {
-    let running = await start()
-    defer { transport.close() }
-    await #expect(throws: SessionError.self) {
-      try await session.send(audio: Data(count: STTClient.preHandshakeBytes + 1))
-    }
-    guard case .failed(_, .socket) = await running.value else { Issue.record("Expected backlog failure"); return }
+    #expect(await transcriber.calls.isEmpty)
   }
 }
 
@@ -413,5 +458,15 @@ private extension SessionMachine {
   func finish() async {
     beginFinishing()
     await sendClosing()
+  }
+
+  // Immediate tasks run on this actor until suspension. Returning the task therefore proves the
+  // call was enqueued behind the suspended send, before the test releases it.
+  func startSending(audio: Data) -> Task<Void, any Error> {
+    Task.immediate { try await self.send(audio: audio) }
+  }
+
+  func startFinishing() -> Task<Void, Never> {
+    Task.immediate { await self.finish() }
   }
 }

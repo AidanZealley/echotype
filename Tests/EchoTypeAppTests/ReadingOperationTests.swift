@@ -330,7 +330,7 @@ extension ReadingOperationTests {
         selection: { _ in nil }, cleanup: {}, key: { "fake" }, request: { _ in request }, player: playback.player))
       let failure = await reader.run()
       if let code { #expect((failure as? URLError)?.code == code) }
-      else { #expect(failure as? STTError == .rateLimited) }
+      else { #expect(failure as? ProviderError == .rateLimited) }
       if case .failed = reader.presentation {} else { Issue.record("Missing failure presentation") }
       #expect(playback.started == 0)
     }

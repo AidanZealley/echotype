@@ -1,6 +1,8 @@
 # 0002 Detect speech from what the endpoint actually sends
 
-Status: accepted, 2026-09-22 (EchoTypeCore workstreams 3 and 4).
+Status: accepted, 2026-09-22 (EchoTypeCore workstreams 3 and 4). Since the provider
+adapters change (2026-10-01) this record describes the xAI transcription adapter in
+`Providers/XAI/`, not the session.
 
 ## Context
 
@@ -15,8 +17,9 @@ So the documented detector reads silence as activity and speech as silence.
 
 ## Decision
 
-Speech is a partial with non-empty text, or a `speech_final`. `SessionMachine` ignores
-`start` and `duration` when moving between `listening` and `paused`.
+Speech is a partial with non-empty text, or a `speech_final`. The xAI adapter emits
+`.speech` for such a partial, and `SessionMachine` moves between `listening` and `paused`
+on `.speech` alone. Word `start` and `end` are ignored.
 
 Other live observations the code relies on:
 
