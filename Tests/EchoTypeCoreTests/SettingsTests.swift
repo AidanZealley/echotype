@@ -11,8 +11,7 @@ func settingsRoundTrip() {
     language: "en-GB",
     inputDeviceID: "BuiltInMicrophoneDevice",
     readAloudHotkey: .controlOptionS,
-    voice: "altair",
-    speechSpeed: 1.25,
+    reading: ["xai": .init(voice: "altair", speed: 1.25)],
     sendReplyRequests: false
   )
 
@@ -29,7 +28,7 @@ func settingsRoundTrip() {
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"provider":"xai","keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
+    {"hotkey":{"keyCode":2,"modifiers":6},"provider":"xai","keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"reading":{"xai":{"voice":"altair","speed":1.25}}}
     """#.utf8)
 
   #expect(
@@ -41,8 +40,7 @@ func storedValueDecodes() {
         language: "en-GB",
         inputDeviceID: "BuiltInMicrophoneDevice",
         readAloudHotkey: .controlOptionS,
-        voice: "altair",
-        speechSpeed: 1.25
+        reading: ["xai": .init(voice: "altair", speed: 1.25)]
       )
   )
   #expect(
@@ -56,8 +54,8 @@ func missingFieldsDefault() {
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
   #expect(Settings(decoding: stored).provider == Providers.all[0].id)
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
-  #expect(Settings(decoding: stored).voice == "ara")
-  #expect(Settings(decoding: stored).speechSpeed == 1.0)
+  #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0].voice).voice == "ara")
+  #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0].voice).speed == 1.0)
   #expect(Settings(decoding: stored).sendReplyRequests)
 }
 

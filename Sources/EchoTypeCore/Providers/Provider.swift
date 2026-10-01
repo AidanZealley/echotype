@@ -229,9 +229,10 @@ public struct SpeechRequest: Equatable, Sendable {
 
   /// The request for one reading of already capped text, with the stored voice, the validated
   /// speed and the dictation language.
-  public init(text: String, settings: Settings, credential: String?) {
+  public init(text: String, settings: Settings, voice: VoiceService, credential: String?) {
+    let choice = settings.readingChoice(for: voice)
     self.init(
-      text: text, voice: settings.voice, speed: settings.validatedSpeechSpeed,
+      text: text, voice: choice.voice, speed: choice.speed,
       language: settings.language, credential: credential)
   }
 }

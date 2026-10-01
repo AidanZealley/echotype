@@ -95,20 +95,42 @@ public struct Settings: Equatable, Sendable {
   /// The chord that reads the selection aloud, and stops a reading.
   public var readAloudHotkey: Hotkey
 
-  /// The read-aloud voice id, one of the voice service's `voices`.
-  public var voice: String
+  /// Voice and speed remembered for each provider, keyed by its stable id.
+  public var reading: [String: Reading]
 
-  /// The speaking rate as a multiplier, within `speechSpeedRange`.
-  public var speechSpeed: Double
+  public struct Reading: Equatable, Sendable, Codable {
+    public var voice: String
+    public var speed: Double
 
-  /// Matches the only voice service's `speedRange` until reading choices are stored per provider.
-  public static let speechSpeedRange = 0.7...1.5
-  public static let defaultSpeechSpeed = 1.0
+    public init(voice: String = "", speed: Double = 1) {
+      self.voice = voice
+      self.speed = speed
+    }
 
-  /// Storage and speech requests share this fallback, including for programmatic values.
-  public var validatedSpeechSpeed: Double {
-    Self.speechSpeedRange.contains(speechSpeed) && speechSpeed.isFinite
-      ? speechSpeed : Self.defaultSpeechSpeed
+    private enum CodingKeys: String, CodingKey { case voice, speed }
+
+    public init(from decoder: any Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      voice = (try? container.decode(String.self, forKey: .voice)) ?? ""
+      speed = (try? container.decode(Double.self, forKey: .speed)) ?? 1
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(voice, forKey: .voice)
+      try container.encode(speed.isFinite ? speed : 1, forKey: .speed)
+    }
+
+    /// A retired voice or invalid speed resets only that field.
+    public func validated(for service: VoiceService) -> Reading {
+      Reading(
+        voice: service.voices.contains { $0.id == voice } ? voice : service.voices[0].id,
+        speed: speed.isFinite && service.speedRange.contains(speed) ? speed : 1)
+    }
+  }
+
+  public func readingChoice(for service: VoiceService) -> Reading {
+    (reading[provider.rawValue] ?? Reading()).validated(for: service)
   }
 
   /// Whether a dictation ending in a request like "reply with EchoType" is sent with Return.
@@ -124,8 +146,7 @@ public struct Settings: Equatable, Sendable {
     finalizeTimeout: TimeInterval = 8,
     inputDeviceID: String? = nil,
     readAloudHotkey: Hotkey = .optionS,
-    voice: String = "ara",
-    speechSpeed: Double = Settings.defaultSpeechSpeed,
+    reading: [String: Reading] = [:],
     sendReplyRequests: Bool = true
   ) {
     self.hotkey = hotkey
@@ -137,8 +158,7 @@ public struct Settings: Equatable, Sendable {
     self.finalizeTimeout = finalizeTimeout
     self.inputDeviceID = inputDeviceID
     self.readAloudHotkey = readAloudHotkey
-    self.voice = voice
-    self.speechSpeed = speechSpeed
+    self.reading = reading
     self.sendReplyRequests = sendReplyRequests
   }
 }
@@ -155,7 +175,14 @@ public struct Settings: Equatable, Sendable {
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
     case hotkey, provider, keyterms, language, inputDeviceID
-    case readAloudHotkey, voice, speechSpeed, sendReplyRequests
+    case readAloudHotkey, reading, voice, speechSpeed, sendReplyRequests
+  }
+
+  private struct ReadingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
   }
 
   public init(from decoder: any Decoder) throws {
@@ -174,10 +201,18 @@ extension Settings: Codable {
     readAloudHotkey =
       (try? container.decodeIfPresent(Hotkey.self, forKey: .readAloudHotkey))
       ?? defaults.readAloudHotkey
-    voice = (try? container.decodeIfPresent(String.self, forKey: .voice)) ?? defaults.voice
-    speechSpeed =
-      (try? container.decodeIfPresent(Double.self, forKey: .speechSpeed)) ?? defaults.speechSpeed
-    speechSpeed = validatedSpeechSpeed
+    if container.contains(.reading) {
+      // Decode entries independently so one malformed provider cannot reset another.
+      if let entries = try? container.nestedContainer(keyedBy: ReadingKey.self, forKey: .reading) {
+        for key in entries.allKeys {
+          reading[key.stringValue] = try? entries.decode(Reading.self, forKey: key)
+        }
+      }
+    } else if container.contains(.voice) || container.contains(.speechSpeed) {
+      reading = Providers.migratedReading(
+        voice: try? container.decode(String.self, forKey: .voice),
+        speed: try? container.decode(Double.self, forKey: .speechSpeed))
+    }
     sendReplyRequests =
       (try? container.decodeIfPresent(Bool.self, forKey: .sendReplyRequests))
       ?? defaults.sendReplyRequests
@@ -191,8 +226,13 @@ extension Settings: Codable {
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)
     try container.encode(readAloudHotkey, forKey: .readAloudHotkey)
-    try container.encode(voice, forKey: .voice)
-    try container.encode(validatedSpeechSpeed, forKey: .speechSpeed)
+    var storedReading = reading
+    for provider in Providers.all {
+      if let choice = storedReading[provider.id.rawValue] {
+        storedReading[provider.id.rawValue] = choice.validated(for: provider.voice)
+      }
+    }
+    try container.encode(storedReading, forKey: .reading)
     try container.encode(sendReplyRequests, forKey: .sendReplyRequests)
   }
 
@@ -203,7 +243,7 @@ extension Settings: Codable {
 
   /// The value to store.
   public func encoded() -> Data {
-    // The only persisted double is validated before encoding; the other fields always encode.
+    // Reading speeds are validated before encoding; the other fields always encode.
     try! JSONEncoder().encode(self)
   }
 }

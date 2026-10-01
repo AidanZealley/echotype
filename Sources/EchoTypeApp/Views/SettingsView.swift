@@ -29,8 +29,8 @@ struct SettingsView: View {
         AgentsTab()
           .navigationTitle("EchoType Settings")
       }
-      Tab("API Key", systemImage: "key") {
-        APIKeyTab(store: store, controller: controller)
+      Tab("Provider", systemImage: "network") {
+        ProviderTab(store: store, controller: controller)
           .navigationTitle("EchoType Settings")
       }
       Tab("Updates", systemImage: "arrow.triangle.2.circlepath") {
@@ -169,6 +169,13 @@ private struct GeneralTab: View {
 private struct ReadAloudTab: View {
   @Bindable var store: SettingsStore
 
+  private var provider: Provider { Providers[store.settings.provider] }
+  private var reading: Binding<EchoTypeCore.Settings.Reading> {
+    Binding(
+      get: { store.settings.readingChoice(for: provider.voice) },
+      set: { store.settings.reading[provider.id.rawValue] = $0 })
+  }
+
   var body: some View {
     Form {
       Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
@@ -176,16 +183,15 @@ private struct ReadAloudTab: View {
           Text(verbatim: hotkey.label).tag(hotkey)
         }
       }
-      Picker("Voice", selection: $store.settings.voice) {
-        ForEach(Providers[store.settings.provider].voice.voices) { voice in
+      Picker("Voice", selection: reading.voice) {
+        ForEach(provider.voice.voices) { voice in
           Text(verbatim: voice.name).tag(voice.id)
         }
       }
       LabeledContent("Speed") {
         HStack {
-          // The endpoint's range.
-          Slider(value: $store.settings.speechSpeed, in: EchoTypeCore.Settings.speechSpeedRange, step: 0.1)
-          Text(store.settings.speechSpeed, format: .number.precision(.fractionLength(1)))
+          Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
+          Text(reading.wrappedValue.speed, format: .number.precision(.fractionLength(1)))
             .monospacedDigit()
             .frame(width: 28, alignment: .trailing)
         }
@@ -209,14 +215,55 @@ extension EchoTypeCore.Settings.Hotkey {
   }
 }
 
+private struct ProviderTab: View {
+  @Bindable var store: SettingsStore
+  let controller: DictationController?
+
+  private var provider: Provider { Providers[store.settings.provider] }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Picker("Provider", selection: $store.settings.provider) {
+        ForEach(Providers.all) { provider in
+          Text(verbatim: provider.name).tag(provider.id)
+        }
+      }
+      Text(verbatim: provider.summary)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 8) {
+        // These two services are required by the Provider contract.
+        feature("Live transcription", available: true)
+        feature("Read aloud", available: true)
+        feature("Cleanup", available: provider.cleanup != nil)
+      }
+      ProviderControls(provider: provider, controller: controller)
+        // Each provider gets its own key draft, reveal state and async results.
+        .id(provider.id)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(20)
+    .fixedSize(horizontal: false, vertical: true)
+  }
+
+  private func feature(_ title: String, available: Bool) -> some View {
+    Label {
+      Text(title)
+    } icon: {
+      Image(systemName: available ? "checkmark.circle.fill" : "minus.circle")
+        .foregroundStyle(available ? Color.green : Color.secondary)
+    }
+  }
+}
+
 /// The selected provider's key. A saved key is shown masked, never in an editable field. Save,
 /// Replace and Remove are explicit, and every Keychain call runs off the main actor with the
 /// buttons disabled until it finishes, so two writes cannot race.
 ///
 /// Test runs a five second session through the controller with the saved key and shows what it
 /// heard.
-private struct APIKeyTab: View {
-  let store: SettingsStore
+private struct ProviderControls: View {
+  let provider: Provider
   let controller: DictationController?
   /// What the Keychain holds. Nil when there is no key.
   @State private var savedKey: String?
@@ -233,30 +280,41 @@ private struct APIKeyTab: View {
   @State private var testing = false
   @State private var testOutcome: DictationController.TestOutcome?
 
-  private var provider: Provider { Providers[store.settings.provider] }
-
   private var placeholder: String {
     if case .apiKey(let placeholder) = provider.credential { placeholder } else { "" }
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text(verbatim: "\(provider.name) API key")
-      if !loaded {
-        ProgressView().controlSize(.small)
-      } else if let savedKey, !replacing {
-        saved(savedKey)
-      } else {
-        entry
+      if case .apiKey = provider.credential {
+        Text(verbatim: "\(provider.name) API key")
+        if !loaded {
+          ProgressView().controlSize(.small)
+        } else if let savedKey, !replacing {
+          saved(savedKey)
+        } else {
+          entry
+        }
+      }
+      if let controller {
+        HStack {
+          Spacer()
+          Button(testing ? "Testing…" : "Test") {
+            Task { await test(controller) }
+          }
+          .disabled(testing || writing || !loaded || !controller.isIdle
+            || !provider.credential.isSatisfied(by: savedKey))
+        }
       }
       messages
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(20)
-    .fixedSize(horizontal: false, vertical: true)
-    .task(id: provider.id) {
-      let id = provider.id
-      savedKey = await Task.detached { Keychain.key(for: id) }.value
+    .task {
+      if case .apiKey = provider.credential {
+        let id = provider.id
+        let key = await Task.detached { Keychain.key(for: id) }.value
+        guard !Task.isCancelled else { return }
+        savedKey = key
+      }
       loaded = true
     }
     .confirmationDialog("Remove the API key?", isPresented: $confirmingRemove) {
@@ -284,12 +342,6 @@ private struct APIKeyTab: View {
       }
       HStack {
         Spacer()
-        if let controller {
-          Button(testing ? "Testing…" : "Test") {
-            Task { await test(controller) }
-          }
-          .disabled(testing || writing || !controller.isIdle)
-        }
         Button("Replace") {
           draft = ""
           replacing = true
@@ -309,6 +361,7 @@ private struct APIKeyTab: View {
         .font(.body.monospaced())
         .lineLimit(2...4)
         .onSubmit { Task { await save() } }
+        .disabled(writing || testing)
       HStack {
         Spacer()
         if replacing {
@@ -319,7 +372,7 @@ private struct APIKeyTab: View {
         }
         Button("Save") { Task { await save() } }
           .keyboardShortcut(.defaultAction)
-          .disabled(writing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(writing || testing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
   }

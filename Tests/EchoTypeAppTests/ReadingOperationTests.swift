@@ -70,7 +70,7 @@ private final class FakeSpeechStream: SpeechStream {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return self.storedKey
-      }, voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 5) {
+      }, voice: VoiceService(voices: [Voice(id: "default", name: "Default"), Voice(id: "chosen", name: "Chosen")], speedRange: 0.5...2, maximumCharacters: 5) {
           request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
         }, player: playback.player), onPresentation: onPresentation)
   }
@@ -279,9 +279,9 @@ extension ReadingOperationTests {
 extension ReadingOperationTests {
   @Test func cappedTextAndSettingsReachTheVoiceService() async {
     let fixture = ReadingFixture(FakeSpeechStream(finished: true))
-    let reader = fixture.reader(.text("Hello there"), settings: Settings(language: "en-GB", voice: "altair", speechSpeed: 1.2))
+    let reader = fixture.reader(.text("Hello there"), settings: Settings(provider: "fixture", language: "en-GB", reading: ["fixture": .init(voice: "chosen", speed: 1.2), "other": .init(voice: "other", speed: 0.8)]))
     #expect(await reader.run() == nil)
-    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "altair", speed: 1.2, language: "en-GB", credential: "fake")])
+    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "chosen", speed: 1.2, language: "en-GB", credential: "fake")])
   }
 
   @Test func streamFailureReachesReadingOutcome() async {

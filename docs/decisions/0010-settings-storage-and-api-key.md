@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-30 for compatible speech-speed validation
 and 2026-10-01 for the retired `cleanUp` key, the `provider` key and one Keychain item per
-provider.
+provider, and per-provider reading choices.
 Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 ## Context
@@ -17,18 +17,22 @@ Keychain item the app cannot read without a prompt.
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
   `provider`, `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
-  `readAloudHotkey` (shaped like `hotkey`), `voice`, `speechSpeed` and
+  `readAloudHotkey` (shaped like `hotkey`), `reading` and
   `sendReplyRequests`. The key names and
   the modifier bit positions are the upgrade contract.
 - Each field decodes on its own and falls back to its default, so a missing or unreadable
   field resets only itself and adding a field never resets the hotkey. Data that is not a
   JSON object gives all defaults.
-- Speech speed must be finite and within 0.7 through 1.5. Invalid stored values fall back
-  to 1.0 without discarding other preferences. Valid fractional speeds are preserved.
-  `Settings.validatedSpeechSpeed` supplies the same value to settings encoding and speech
-  requests, including when callers construct or mutate Settings with NaN or infinity.
-  The slider uses the shared range and retains its 0.1 step. Storage keys and modifier bits
-  are unchanged; there is no migration or schema version.
+- `reading` is a JSON object keyed by provider id, with `voice` and `speed` in each entry.
+  A missing choice uses the provider's first voice and speed 1. A voice it no longer offers
+  falls back to its first voice; a non-finite speed or one outside its `speedRange` falls
+  back to 1. Each field and provider entry decodes independently. Reading requests and
+  persistence apply the same validation, preserving valid fractional speeds. The slider
+  uses the provider's range in 0.1 steps.
+- When `reading` is absent, stored `voice` and `speechSpeed` migrate to the `xai` entry.
+  The migration retains the previous finite 0.7 through 1.5 speed validation and fallback
+  to 1. Encoding writes `reading` and stops writing `voice` and `speechSpeed`. A present
+  but malformed `reading` falls back independently without re-importing legacy fields.
 - `provider` is the selected provider's id ([0025](0025-provider-adapters.md)). A missing
   id, or one no registered provider has, gives the first entry of `Providers.all`, today
   `xai`.

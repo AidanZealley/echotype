@@ -1,6 +1,6 @@
 # 0015 Settings in tabs, with a masked saved key
 
-Status: accepted, 2026-09-25. Replaces the key field handling in
+Status: accepted, 2026-09-25, updated 2026-10-01 for the Provider tab. Replaces the key field handling in
 [0013](0013-test-button-and-system-rows.md).
 
 ## Context
@@ -11,10 +11,21 @@ could not be checked, and removing it meant emptying the field.
 
 ## Decision
 
-- The window has three tabs: General (hotkey, input, language, launch at login,
-  permissions), Keyterms and API Key, with no boxes. General uses the columns form style,
-  with labels in one column and controls in the next. The key spans the full width of its
-  tab, with its buttons on the right.
+- The window has General, Keyterms, Read Aloud, Agents, Provider and Updates tabs.
+  General uses the columns form style, with labels in one column and controls in the next.
+  The Provider tab replaces API Key. It lists the registered providers in a picker, then
+  the selected provider's summary, its features, its key row if needed, and Test.
+- Features come from the services. Live transcription and Read aloud are required and
+  show green SF Symbol check marks; Cleanup shows a green check when its service exists
+  and a grey mark otherwise. Colours follow the system theme, with no cards or pills.
+- The key spans the width of the Provider tab, with buttons on the right. Switching
+  provider creates a separate key editor, so a draft, revealed key or async result cannot
+  carry into another provider's editor. Providers that need no key show Test without a
+  key row. Test uses the selected provider and is disabled while the controller is busy.
+- Read Aloud lists that provider's voices by display name and its speed range with a 0.1
+  slider step. Both edits are remembered per provider. Keyterms shows the selected
+  provider's limit minus one for the built-in EchoType term. General has no cleanup
+  toggle; cleanup runs whenever the provider supplies it.
 - A saved key is never shown in an editable field. It shows masked, as its prefix, enough
   bullets to fill the line and its last four characters, with a button at the end of the
   line that reveals it wrapped and selectable.
