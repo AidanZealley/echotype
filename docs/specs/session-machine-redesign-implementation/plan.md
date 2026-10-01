@@ -1,14 +1,14 @@
 # SessionMachine redesign implementation plan
 
-Status: workstreams 1 and 2 accepted; final whole-feature review not started.
+Status: Accepted, 2026-10-01. Both workstreams, G1 and the final whole-feature review passed.
 
 ## Orchestration record
 
 - Target branch: `refactor/macos-lifecycle`, which merges to `main` as one complete rewrite after this workflow
 - Integration branch: `refactor/macos-lifecycle` (the target itself)
 - Starting commit: `256f3bb6cb543292dee7f6e23cf0a72d73b23feb`
-- Review command: `lead subagents`
-- Specification approved at commit: `TBD`
+- Review workflow: bounded independent and focused closure agents through Codex collaboration tools
+- Specification approval: Aidan authorised this workflow; no separate approval commit was recorded.
 - Started: `2026-10-01`
 
 ## Workstream order
@@ -17,7 +17,7 @@ Status: workstreams 1 and 2 accepted; final whole-feature review not started.
 |---:|---|---|---|
 | 1 | [Protect finishing with outcome tests](01-outcome-tests.md) | Approved spec | Accepted |
 | 2 | [Invert finishing ownership](02-finishing-ownership.md) | 1 | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1 and 2 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1 and 2 | Accepted |
 
 Statuses: Not started, Implementing, Review, Remediation, Closure review, Blocked, Accepted. The lead updates its own row on each transition. Only one row is active at a time.
 
@@ -67,13 +67,15 @@ None. G1 results are preserved in the gate table and workstream 2 record.
 
 ## Completion summary
 
-Filled by the final-review lead before its commit.
+Final whole-feature review and fresh focused closure passed without Required findings or a correction pass.
 
-- Delivered outcomes: TBD
-- Verification: TBD
-- External validation: TBD
-- Specification drift: TBD
-- Deferred optional observations: TBD
+- Delivered outcomes: outcome-based operation tests protect the preserved behavior; the operation owns one finishing routine and joins capture/pump/finisher teardown. SessionMachine calls only down, computes deadlines in one reschedule function and uses closingStarted for protocol completion. Obsolete callbacks and task handles are removed. Workstream 1 assertions remain intact.
+- Verification: lead and independent reviewer each passed `XAI_API_KEY= ECHOTYPE_FIXTURE_WAV= swift test --enable-code-coverage`, 79 core and 61 app tests, and `swift build -c release --product EchoTypeApp`. Obsolete-name search had no matches and `git diff --check` passed. Fresh focused closure passed. CI execution remains unverified.
+- External validation: G1 Passed on the signed candidate with the recorded executable hash. Normal dictation, stop mid-sentence without lost final words, Escape during Transcribing and reply-request paste/Return all passed. No new manual gate is pending for this redesign. Earlier lifecycle checks deferred in decision 0024 remain unverified under their approved scope.
+- Specification drift: approved Electron AXManualAccessibility destination compatibility extends the destination non-goal. Approved packet-level changes include the closingFrame test-point rename and SessionClock comment correction; the authorised post-drain cancellation guard is retained. Final review adds no behavior or architecture drift.
+- Deferred optional observations: workstream 1 point-recorder trimming and slow timeout diagnosis; workstream 2 O2, no test solely to pin the internal finisher join. No new Optional finding.
+- Integration: work is already on `refactor/macos-lifecycle`, which is ready to merge to `main` as the complete rewrite. No branch transfer, push or publication was performed.
+- Completion model and harness: GPT-6.1-Sol through Codex in T3 Code.
 
 ## Decision and drift log
 
