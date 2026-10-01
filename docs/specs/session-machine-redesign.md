@@ -47,7 +47,11 @@ The public surface becomes:
 
 ### `transcript.done` without the closing-send task
 
-Today, `done` during finalisation waits on `closingSend` so a failed closing send can't be reported as finalised. The endpoint sends `transcript.done` only after it has received `audio.done`, so once `done` arrives the protocol has completed, whatever the local send call later reports. The rule becomes: `done` after `beginFinishing()` and `sendClosing()` has started counts as finalised; `done` at any other time is `closed`. Confirm this ordering assumption against the live protocol test before relying on it. If it fails, keep one `closingStarted` flag rather than a task.
+Today, `done` during finalisation waits on `closingSend` so a failed closing send can't be reported as finalised. The endpoint sends `transcript.done` only after it has received `audio.done`, so once `done` arrives the protocol has completed, whatever the local send call later reports. The rule becomes one `closingStarted` flag, set when `sendClosing()` begins:
+
+- `done` while `closingStarted` is set counts as `finalised`.
+- `done` at any other time is `closed`.
+- A closing-send failure before `done` fails the session, as it does today.
 
 ### One deadline function
 
@@ -94,4 +98,4 @@ Out of scope: clipboard, destination, reading, MCP, `TranscriptAssembler`, `Revi
 
 ## Process
 
-One branch, one implementer, one independent review and one Mac smoke check. Do not use a multi-workstream workflow or per-step gates.
+Implemented through the workflow in [session-machine-redesign-implementation](session-machine-redesign-implementation/README.md): outcome tests first, then the ownership change, then one whole-feature review and a Mac smoke check.
