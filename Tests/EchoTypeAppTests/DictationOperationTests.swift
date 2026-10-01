@@ -188,7 +188,7 @@ private struct Insertion: Equatable {
 
   func operation(test: Bool = false, cleanup: Bool = false) -> DictationOperation {
     let points = points
-    return DictationOperation(settings: Settings(cleanUp: cleanup, sendReplyRequests: true), isTest: test,
+    return DictationOperation(settings: Settings(sendReplyRequests: true), isTest: test,
       dependencies: .init(
         startCapture: { _ in
           await points.pass(.captureStart)
@@ -219,13 +219,13 @@ private struct Insertion: Equatable {
           self.insertions.append(.init(text: text, sends: sends))
           return self.insertionResult
         },
-        revise: { _ in
-          Reviser(request: { $0 }, finalRequest: { text in
-            await points.pass(.revision)
-            try Task.checkCancellation()
-            return text
-          }, finalClock: self.revisionClock)
-        }, clock: clock, testClock: testClock),
+        cleanup: cleanup ? CleanupService { request in
+          guard request.final else { return request.text }
+          await points.pass(.revision)
+          try Task.checkCancellation()
+          return request.text
+        } : nil,
+        clock: clock, testClock: testClock, revisionClock: revisionClock),
       onPresentation: { phase, _, _ in
         self.presented.append(phase)
         switch phase {
@@ -538,6 +538,18 @@ struct DictationOperationTests {
     await h.revisionClock.advance(Reviser.finalTimeout)
     #expect(await task.value.outcome == .insert("spoken words"))
     #expect(h.insertions == [.init(text: "spoken words", sends: false)])
+  }
+
+  @Test("Only an operation with a cleanup service revises; without one it inserts the committed text", arguments: [false, true])
+  func cleanupService(cleanup: Bool) async {
+    let h = Harness()
+    let operation = h.operation(cleanup: cleanup)
+    let task = await h.start(operation)
+    operation.commit()
+    let result = await task.value
+    #expect(result.outcome == .insert("spoken words"))
+    #expect(result.trace?.revisions.isEmpty == !cleanup)
+    #expect(h.points.count(.revision) == (cleanup ? 1 : 0))
   }
 
   @Test("Escape wins before the clipboard boundary")

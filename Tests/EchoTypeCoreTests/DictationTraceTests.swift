@@ -7,7 +7,6 @@ func dictationTraceMarks() throws {
   let start = Date(timeIntervalSince1970: 0)
   let trace = DictationTrace(
     startedAt: start,
-    cleanUp: true,
     commits: [
       .init(at: start, text: "I-I'm never sure."),
       .init(at: start.addingTimeInterval(2), text: "Why it fails"),
@@ -22,13 +21,13 @@ func dictationTraceMarks() throws {
   ])
   #expect(trace.marks.map(\.commit) == [nil, nil, nil, nil, 1, nil, nil])
   let skipped = ["Hello", "…", "world"].map { DictationTrace.Commit(at: start, text: $0) }
-  #expect(DictationTrace(startedAt: start, cleanUp: false, commits: skipped, streamed: "Hello … world").marks.map(\.commit) == [nil, 2])
+  #expect(DictationTrace(startedAt: start, commits: skipped, streamed: "Hello … world").marks.map(\.commit) == [nil, 2])
   #expect(try JSONDecoder().decode(DictationTrace.self, from: JSONEncoder().encode(trace)) == trace)
 }
 
 @Test("Recovery marks compare final text even when paste was skipped")
 func dictationTraceMarksRecovery() throws {
-  let trace = DictationTrace(startedAt: .now, cleanUp: true, streamed: "Hello world.",
+  let trace = DictationTrace(startedAt: .now, streamed: "Hello world.",
     finalText: "Hello world", insertion: .skipped(.changed), sending: .notRequested,
     outcome: .completed)
   #expect(trace.marks.map(\.kind) == [.kept, .changed(revised: "world")])

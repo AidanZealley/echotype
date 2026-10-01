@@ -263,11 +263,8 @@ import Observation
         insert: { [clipboard] text, destination, sends, cancelled, begin in
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
         },
-        revise: { key in
-          Reviser(request: { try await RevisionRequest.revise($0, apiKey: key, final: false) },
-            finalRequest: { try await RevisionRequest.revise($0, apiKey: key, final: true) })
-        },
-        clock: SystemClock(), testClock: SystemClock()),
+        cleanup: XAI.cleanup,
+        clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()),
       onPresentation: { [weak self] presentation, settled, provisional in
         if presentation == .cancelled { self?.end(); return }
         if case .starting(let readiness) = presentation, !readiness.microphone { self?.showStarting() }

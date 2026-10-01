@@ -104,3 +104,33 @@ public struct Transcript: Equatable, Sendable {
     self.provisional = provisional
   }
 }
+
+// MARK: Cleanup
+
+/// Revises a window of committed dictation. `Reviser` owns the prompt, the windows and the
+/// faithfulness check; the service only makes one request and returns the model's reply.
+public struct CleanupService: Sendable {
+  public var revise: @Sendable (CleanupRequest) async throws -> String
+
+  public init(revise: @escaping @Sendable (CleanupRequest) async throws -> String) {
+    self.revise = revise
+  }
+}
+
+public struct CleanupRequest: Equatable, Sendable {
+  /// The instructions, sent as the system message or the provider's equivalent.
+  public var prompt: String
+  /// The dictated text to revise.
+  public var text: String
+  /// The last revision before insertion. Someone is waiting, so the adapter should give up
+  /// sooner than for a live revision.
+  public var final: Bool
+  public var credential: String?
+
+  public init(prompt: String, text: String, final: Bool, credential: String?) {
+    self.prompt = prompt
+    self.text = text
+    self.final = final
+    self.credential = credential
+  }
+}

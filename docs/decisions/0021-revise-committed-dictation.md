@@ -1,8 +1,9 @@
 # 0021 Revise committed dictation during the session
 
 Status: accepted, 2026-09-27. Live timing and window updated 2026-09-28. Rejected
-revisions advance and the window shrinks to 50 words from 2026-09-29. Supersedes
-the batch pass in [0017](0017-batch-pass-on-commit.md).
+revisions advance and the window shrinks to 50 words from 2026-09-29. Cleanup always on,
+through a provider's cleanup service, from 2026-10-01. Supersedes the batch pass in
+[0017](0017-batch-pass-on-commit.md).
 
 Lifetime and related timing/presentation rules are superseded by
 [0024](0024-dictation-operation-lifetime.md). The original record is retained below.
@@ -16,10 +17,17 @@ self-corrections. It also kept the whole recording in memory and delayed every i
 
 ## Decision
 
-- **Clean up text** is on by default. After each `speech_final`, revise committed text
+- Cleanup is always on. After each `speech_final`, revise committed text
   while the current utterance's settled and provisional runs continue to appear as
   streamed. The pill shows accepted revisions, and its final text is what gets inserted.
-  With cleanup off, insert the streamed transcript. The Test button never revises.
+  When the provider has no cleanup service, insert the streamed transcript. The Test
+  button never revises. (Until 2026-10-01 a **Clean up text** setting, on by default,
+  could turn cleanup off. The [provider adapters specification](../specs/provider-adapters.md)
+  removed it, and its stored `cleanUp` key is now ignored.)
+- `Reviser` owns the prompt, the windows and the faithfulness check, which are product
+  behaviour. Each request goes through the provider's `CleanupService` with the prompt,
+  the window, whether it is final and the credential. The model, temperature, reasoning
+  effort and timeouts are adapter details; for xAI they live in `Providers/XAI/`.
 - Send a recent window: the revised text from whichever starts earlier, its second-to-last
   sentence or the sentence containing its 50th word from the end, plus committed text
   not yet revised. Keep one request in flight and combine commits that arrive while it
@@ -38,8 +46,8 @@ self-corrections. It also kept the whole recording in memory and delayed every i
   while it is part of the recent tail. (Before 2026-09-29 a rejected stretch stayed
   unrevised, so an edit the model kept making was rejected in every later window and
   the final call received the whole dictation.)
-- Replace **Re-transcribe on stop** and its `batchOnCommit` setting with **Clean up text**.
-  Ignore the old stored key and default the new setting on. Remove the batch request and
+- Replace **Re-transcribe on stop** and its `batchOnCommit` setting with cleanup.
+  Ignore the old stored key. Remove the batch request and
   in-memory recording buffer.
 - Use `endpointing=1200` so a pause can commit an utterance and start live cleanup sooner.
 

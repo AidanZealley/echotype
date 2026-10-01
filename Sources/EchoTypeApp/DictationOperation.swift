@@ -59,9 +59,12 @@ import Observation
     var transcription: TranscriptionService
     var captureDestination: @MainActor () -> Destination?
     var insert: @MainActor (String, Destination?, Bool, @escaping @MainActor () -> Bool, @escaping @MainActor () -> Void) async -> Clipboard.InsertionResult
-    var revise: @MainActor (String) -> Reviser
+    /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
+    var cleanup: CleanupService?
     var clock: any SessionClock
     var testClock: any SessionClock
+    /// Times the final revision budget.
+    var revisionClock: any SessionClock
   }
 
   let settings: Settings
@@ -178,8 +181,12 @@ import Observation
     let transcriber = try await startTranscriber(key: key)
     let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
-    if !isTest { trace = DictationTrace(startedAt: .now, cleanUp: settings.cleanUp) }
-    if settings.cleanUp && !isTest { reviser = dependencies.revise(key) }
+    if !isTest {
+      trace = DictationTrace(startedAt: .now)
+      if let cleanup = dependencies.cleanup {
+        reviser = Reviser(cleanup: cleanup, credential: key, finalClock: dependencies.revisionClock)
+      }
+    }
     return await transcribe(session, chunks: chunks)
   }
 

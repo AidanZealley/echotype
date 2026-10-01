@@ -1,6 +1,7 @@
 # 0010 How settings and the API key are stored
 
-Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-30 for compatible speech-speed validation.
+Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-30 for compatible speech-speed validation
+and 2026-10-01 for the retired `cleanUp` key.
 Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 ## Context
@@ -14,7 +15,7 @@ Keychain item the app cannot read without a prompt.
 
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
-  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`), `cleanUp`,
+  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
   `readAloudHotkey` (shaped like `hotkey`), `voice`, `speechSpeed` and
   `sendReplyRequests`. The key names and
   the modifier bit positions are the upgrade contract.
@@ -27,8 +28,8 @@ Keychain item the app cannot read without a prompt.
   requests, including when callers construct or mutate Settings with NaN or infinity.
   The slider uses the shared range and retains its 0.1 step. Storage keys and modifier bits
   are unchanged; there is no migration or schema version.
-- `cleanUp` defaults to `true`. The former `batchOnCommit` key is ignored, so an old
-  batch preference does not govern the new revision behavior (see
+- The retired `batchOnCommit` and `cleanUp` keys are ignored on decode and never written,
+  so an old batch or cleanup preference does not govern revision, which is always on (see
   [0021](0021-revise-committed-dictation.md)).
 - The menu bar's `hotkeysActive` choice is stored under its own `UserDefaults` key and
   defaults to on. Other stored settings are fields the window edits. `silenceTimeout`, `hardCap` and

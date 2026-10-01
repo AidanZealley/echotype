@@ -151,12 +151,6 @@ private struct GeneralTab: View {
       InputRow(store: store)
       LanguageRow(store: store)
       VStack(alignment: .leading) {
-        Toggle("Clean up text", isOn: $store.settings.cleanUp)
-        Text("Joins sentences split by pauses and drops what you take back")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-      VStack(alignment: .leading) {
         Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
         Text("Ending with a request like “reply with EchoType” sends the message")
           .font(.caption)

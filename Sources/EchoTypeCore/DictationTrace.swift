@@ -4,7 +4,6 @@ import Foundation
 public struct DictationTrace: Codable, Equatable, Sendable {
   public var startedAt: Date
   public var endedAt: Date?
-  public var cleanUp: Bool
   /// Each growth of committed text, in order.
   public var commits: [Commit]
   /// The revision requests `Reviser` made, in start order.
@@ -18,14 +17,13 @@ public struct DictationTrace: Codable, Equatable, Sendable {
   public var outcome: Outcome
 
   public init(
-    startedAt: Date, endedAt: Date? = nil, cleanUp: Bool, commits: [Commit] = [],
+    startedAt: Date, endedAt: Date? = nil, commits: [Commit] = [],
     revisions: [Revision] = [], streamed: String = "", finalText: String = "",
     insertion: Insertion = .notAttempted, sending: Sending = .notRequested,
     outcome: Outcome = .nothing
   ) {
     self.startedAt = startedAt
     self.endedAt = endedAt
-    self.cleanUp = cleanUp
     self.commits = commits
     self.revisions = revisions
     self.streamed = streamed
