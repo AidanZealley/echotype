@@ -1,6 +1,6 @@
 # EchoType macOS rewrite whole-feature review
 
-Status: focused closure. All six numbered workstreams are durably Accepted. Whole-feature code review found no Required defect; final Mac gate remains pending.
+Status: Accepted 2026-10-01. Whole-feature review, a post-closure simplification pass and G7 are complete.
 
 ## Reviewer task packet
 
@@ -66,21 +66,44 @@ Every specification case has a tested outcome or explicit approved external-scop
 - Remaining blockers: G7 is still pending. Final acceptance also requires the lead's complete deterministic coverage, release/package verification and explicit CI disposition. Existing approved G1/G2/G4/G5/G6 deferrals, the Foundation buffering limitation and exhausted live allowances remain unchanged.
 - Verdict: focused code-review closure passes with no Required finding. Whole-feature workflow acceptance remains pending mandatory external evidence or an explicit user scope decision.
 
+## Post-closure simplification, 2026-10-01
+
+After focused closure, Aidan asked for an adversarial review focused on over-engineering. A fresh Claude Code (Opus 5.5) session reviewed the branch. It found the core ownership design sound: synchronous reservation, one operation owning its result and cleanup, one serialised clipboard service, AX-identity destinations and one typed receive loop. It also found edge-case machinery protecting against failures that do not occur. Changes, commit `ea861da`:
+
+- MCP admission is stateless. Removed the replay cache, its expiry cleanup task and the far-future expiry rejection. Distributed notifications are not duplicated, so there is nothing to replay.
+- Removed the `MCPInput` background stdin thread and semaphore. Replies are only awaited inside `deliver`, which pumps the run loop itself, so the original blocking `readLine` loop starves nothing. The signed candidate answered piped requests, skipped blank lines and exited on EOF; G7 MCP checks below passed with it.
+- `Clipboard.insert` checks the destination once at the write boundary (after saving) and again before Return, instead of also before saving.
+- Dictation readiness is one `Readiness` value instead of microphone/destination flags repeated across two presentation cases.
+
+One review test for duplicate replay and one trivial message assertion were removed. Decisions 0020 and 0022 record the changes. Not changed: the `SessionMachine` finishing/abort lifecycle, which the review judged the hardest code to read. Its redesign is specified separately in [session-machine-redesign.md](../session-machine-redesign.md) for a later branch.
+
 ## External validation
 
 - Gate and placement: G7, after focused closure before acceptance
-- Status: Pending
-- Candidate and instructions: Record signed release candidate, exact real-editor/hardware checks and needed user action
-- Required evidence: Complete spec Mac checklist, command arbitration, both themes/changed accessibility, window focus, truthful trace/recovery and no stale operation effects
-- Attempts and lasting decisions: none yet. Deterministic prerequisite recorded 2026-09-30: `XAI_API_KEY= ECHOTYPE_FIXTURE_WAV= swift test` passed 80 core and 62 app tests; `swift build -c release` passed. Signing, packaging and G7 Mac checks have not run.
-- Resume condition: Mandatory evidence passes or an explicit scope decision resolves an unavailable check; meaningful gate corrections receive focused review
+- Status: Passed
+- Candidate: signed release `.build/EchoType-final.app` built with `./scripts/build-app.sh release`. Checks ran on candidates from `ea861da` and then the pill correction; final executable SHA-256 `ac141350f5cf1c0b…` at `af38ee8`. Run by Aidan on 2026-10-01, with Claude Code running the MCP commands, screenshots and candidate restarts.
+- Results:
+  - Permissions carried over to the new signed bundle without prompts.
+  - Dictation into T3 Code pasted once and restored the prior clipboard.
+  - Select an input appeared with no focused field, switched to Listening after focusing one, and Escape removed the pill.
+  - Focus change after stop, during Transcribing: paste skipped, text kept in Last Dictation, Copy worked. Aidan confirmed this is the preferred behavior for an accidental alt-tab. Focus changed before stop pastes into the new field, which Aidan also wants. Pasting into the original window after an accidental switch was considered and rejected: it needs app reactivation or an AX-only insertion path that Electron and terminals do not support.
+  - Reply request ("reply with EchoType") pasted and sent Return; the agent replied through EchoType.
+  - Escape while Transcribing inserted nothing.
+  - Selection reading: audio, Space pause/resume, Escape stop and pill removal, clipboard unchanged.
+  - Dictation takeover during reading was clean, then showed Select an input until a field was focused.
+  - MCP modern and legacy modes against the running candidate returned Speaking in about 30 ms each. Readings were confirmed by screenshot (pill Reading, then cleared); the Mac's output was muted at the time.
+  - MCP during dictation returned the busy tool error, and nothing was queued.
+  - Last Dictation is legible in light and dark mode.
+- Correction found: in light mode over dark windows, the glass turns mid-grey and orange "Select an input" text was illegible. Aidan compared variants on real glass in both themes and chose a fixed orange dot (sRGB 0.91, 0.42, 0) beside plain text, with an orange level glow. Dictation's final-minute timer uses the same treatment, and readings no longer show it. Commit `af38ee8`; decisions 0009 and 0024 updated.
+- Not checked: Settings window appearance in both themes, the final-minute timer dot on screen (it needs a four-minute dictation), VoiceOver names, and the hardware/permission items already deferred at G4/G5. Settings changed only its speed slider range on this branch.
+- Lasting decisions: destination identity verification stays; paste follows focus at stop and is skipped after a later change. Warnings use a dot and glow, never coloured text.
 
 ## Completion record
 
 Before acceptance, copy a concise, self-contained summary of these facts into the plan's Completion summary. The orchestrator cannot read this packet.
 
-- Delivered outcomes: TBD
-- Final verification: TBD
-- External validation pending: TBD
-- Specification drift: TBD
-- Deferred optional observations: TBD
+- Delivered outcomes: see plan Completion summary.
+- Final verification: 80 core and 61 app deterministic tests and the release build pass at `af38ee8`; signed G7 candidate checks pass as recorded above.
+- External validation pending: CI execution and required-check configuration (approved deferral); Settings theme check, on-screen final-minute dot and VoiceOver; the earlier G2/G4/G5/G6 deferrals.
+- Specification drift: none in architecture. Presentation drift approved by Aidan: warning dot and glow instead of orange text.
+- Deferred optional observations: O1 fixture limitation; SessionMachine lifecycle redesign specified separately.
