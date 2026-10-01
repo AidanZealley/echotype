@@ -4,7 +4,8 @@ Status: draft; implementation has not started.
 
 ## Orchestration record
 
-- Integration branch: `TBD` (`refactor/session-finishing`)
+- Target branch: `refactor/macos-lifecycle`, which merges to `main` as one complete rewrite after this workflow
+- Integration branch: `TBD` (the target itself, or a working branch from it)
 - Starting commit: `TBD`
 - Review command: `lead subagents`
 - Specification approved at commit: `TBD`
@@ -45,6 +46,7 @@ Workstream 2 is the single production change: removing the callbacks, the one de
 - The full deterministic suite and the release build pass at the reviewed head.
 - Every specification acceptance criterion is met or carries an approved scope decision in the log.
 - CI execution stays unverified unless an Actions run exists. Agents do not publish to create one.
+- When a working branch was used, it fast-forwards onto `refactor/macos-lifecycle`. The completion report tells Aidan how to bring it back with `git merge --ff-only`.
 
 ## External validation gates
 

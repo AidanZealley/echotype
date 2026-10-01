@@ -1,6 +1,6 @@
 # SessionMachine finishing redesign
 
-Status: proposed, 2026-10-01. Not started. Follows the macOS lifecycle rewrite on `refactor/macos-lifecycle`.
+Status: proposed, 2026-10-01. Not started. This is the last part of the macOS lifecycle rewrite. It lands on `refactor/macos-lifecycle`, which then merges to `main` as one complete rewrite.
 
 ## Problem
 

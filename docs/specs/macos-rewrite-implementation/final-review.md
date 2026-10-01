@@ -75,7 +75,7 @@ After focused closure, Aidan asked for an adversarial review focused on over-eng
 - `Clipboard.insert` checks the destination once at the write boundary (after saving) and again before Return, instead of also before saving.
 - Dictation readiness is one `Readiness` value instead of microphone/destination flags repeated across two presentation cases.
 
-One review test for duplicate replay and one trivial message assertion were removed. Decisions 0020 and 0022 record the changes. Not changed: the `SessionMachine` finishing/abort lifecycle, which the review judged the hardest code to read. Its redesign is specified separately in [session-machine-redesign.md](../session-machine-redesign.md) for a later branch.
+One review test for duplicate replay and one trivial message assertion were removed. Decisions 0020 and 0022 record the changes. Not changed: the `SessionMachine` finishing/abort lifecycle, which the review judged the hardest code to read. Its redesign is specified separately in [session-machine-redesign.md](../session-machine-redesign.md) before `refactor/macos-lifecycle` merges to `main`.
 
 ## External validation
 
