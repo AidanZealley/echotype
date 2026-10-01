@@ -11,24 +11,23 @@ private final class AdmissionGate: Sendable {
   func open() { release.finish() }
 }
 
-private final class AdmissionTransport: WebSocketTransport, Sendable {
-  let incoming: AsyncThrowingStream<String, any Error>
-  let publisher: AsyncThrowingStream<String, any Error>.Continuation
+private final class AdmissionTranscriber: LiveTranscriber {
+  let incoming: AsyncThrowingStream<TranscriptionEvent, any Error>
+  let publisher: AsyncThrowingStream<TranscriptionEvent, any Error>.Continuation
   let opened = AdmissionGate()
   init() { (incoming, publisher) = AsyncThrowingStream.makeStream() }
-  func send(binary: Data) async throws {}
-  func send(text: String) async throws {
-    if text.contains("audio.done") { publisher.yield(#"{"type":"transcript.done"}"#) }
-  }
-  func messages() -> AsyncThrowingStream<String, any Error> { opened.open(); return incoming }
+  var events: AsyncThrowingStream<TranscriptionEvent, any Error> { opened.open(); return incoming }
+  func send(audio: Data) async throws {}
+  func finish() async throws { publisher.yield(.finished) }
   func close() { publisher.finish() }
+  func waitForClose() async {}
 }
 
 @MainActor private final class AdmissionFixture {
   let captureEntered = AdmissionGate(), captureRelease = AdmissionGate()
   let revisionEntered = AdmissionGate(), revisionRelease = AdmissionGate()
   let insertionEntered = AdmissionGate(), insertionRelease = AdmissionGate()
-  let transport = AdmissionTransport()
+  let transcriber = AdmissionTranscriber()
   let audio: AsyncThrowingStream<Data, any Error>
   let chunks: AsyncThrowingStream<Data, any Error>.Continuation
   let wordsReceived = AdmissionGate()
@@ -60,7 +59,8 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
           return self.audio
         },
         stopCapture: { self.chunks.finish() }, releaseCapture: {}, key: { "fake" },
-        transport: { _, _ in self.transport }, captureDestination: { nil },
+        transcription: TranscriptionService(keytermLimit: 100) { _ in self.transcriber },
+        captureDestination: { nil },
         insert: { _, _, _, _, begin in
           self.insertions += 1
           begin(); self.insertionEntered.open(); await self.insertionRelease.wait()
@@ -77,7 +77,7 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
   func release() {
     captureRelease.open(); testCaptureRelease.open()
     revisionRelease.open(); insertionRelease.open(); readingRelease.open()
-    chunks.finish(); transport.close()
+    chunks.finish(); transcriber.close()
     operation?.cancel()
     _ = controller.escapePressed()
   }
@@ -117,9 +117,9 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
     let operation = try #require(fixture.operation)
     #expect(fixture.admit() == "busy" && !operation.cancelled)
     fixture.captureRelease.open()
-    await fixture.transport.opened.wait()
-    fixture.transport.publisher.yield(#"{"type":"transcript.created"}"#)
-    fixture.transport.publisher.yield(#"{"type":"transcript.partial","text":"Hello","is_final":true,"speech_final":true}"#)
+    await fixture.transcriber.opened.wait()
+    fixture.transcriber.publisher.yield(.ready)
+    fixture.transcriber.publisher.yield(.transcript(Transcript(committed: "Hello")))
     // Admission is busy before capture readiness and throughout the same operation's finish.
     #expect(fixture.admit() == "busy")
     await fixture.wordsReceived.wait()
@@ -145,7 +145,7 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
     #expect(operation.isTest)
     #expect(fixture.admit() == "busy" && !operation.cancelled)
     // Finish the fake Test through capture failure, without real capture or waiting five seconds.
-    operation.captureFailed(STTError.unavailable)
+    operation.captureFailed(ProviderError.unavailable)
     fixture.testCaptureRelease.open()
     _ = await task.value
     #expect(fixture.readers.isEmpty && fixture.controller.isIdle && fixture.controller.lastTrace == nil)
@@ -160,9 +160,9 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
     controller.hotkeyPressed()
     await fixture.captureEntered.wait()
     fixture.captureRelease.open()
-    await fixture.transport.opened.wait()
-    fixture.transport.publisher.yield(#"{"type":"transcript.created"}"#)
-    fixture.transport.publisher.yield(#"{"type":"transcript.partial","text":"Hello","is_final":true,"speech_final":true}"#)
+    await fixture.transcriber.opened.wait()
+    fixture.transcriber.publisher.yield(.ready)
+    fixture.transcriber.publisher.yield(.transcript(Transcript(committed: "Hello")))
     await fixture.wordsReceived.wait()
     controller.hotkeyPressed()
     await fixture.revisionEntered.wait()
@@ -182,7 +182,7 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
     #expect(!controller.escapePressed() && !controller.spacePressed(repeated: false))
     #expect(!controller.speak("Ignored") && !operation.cancelled)
     #expect(await controller.test() == nil)
-    operation.captureFailed(STTError.unavailable)
+    operation.captureFailed(ProviderError.unavailable)
     fixture.testCaptureRelease.open()
     _ = await task.value
     #expect(controller.isIdle && fixture.readers.isEmpty && fixture.insertions == 1)

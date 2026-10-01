@@ -258,7 +258,7 @@ import Observation
         stopCapture: { audio.stop() },
         releaseCapture: { await audio.waitForCleanup() },
         key: { await Task.detached { Keychain.apiKey() }.value },
-        transport: { URLSessionWebSocketTransport(url: STTConnection.streamingURL(settings: $0), apiKey: $1) },
+        transcription: XAI.transcription,
         captureDestination: { DestinationFocus().capture() },
         insert: { [clipboard] text, destination, sends, cancelled, begin in
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
@@ -421,25 +421,24 @@ import Observation
       "No microphone found"
     case AudioCapture.Failure.captureFailed(let underlying):
       "Microphone failed: \(underlying.localizedDescription)"
-    // A wrong key is a 400 from api.x.ai, and 401 means no key reached it at all.
-    // Reading throws `STTError` itself, where dictation wraps it in `SessionError`.
-    case SessionError.stt(.badRequest), SessionError.stt(.unauthorized),
-      STTError.badRequest, STTError.unauthorized:
-      "xAI rejected the API key"
-    case SessionError.stt(.rateLimited), STTError.rateLimited:
-      "xAI rate limit reached"
-    case SessionError.stt(.unavailable), STTError.unavailable:
-      "xAI is unavailable"
-    case SessionError.stt(.server(let serverError)):
-      "xAI error: \(serverError.message)"
+    // Reading throws `ProviderError` itself, where dictation wraps it in `SessionError`.
+    case SessionError.provider(let error), let error as ProviderError:
+      describe(error)
     case SessionError.socket(let description):
       "Connection failed: \(description)"
-    case let error as STTError:
-      "xAI error: \(error)"
     case let error as URLError:
       "Connection failed: \(error.localizedDescription)"
     default:
       "Dictation failed: \(error)"
+    }
+  }
+
+  private func describe(_ error: ProviderError) -> String {
+    switch error {
+    case .rejectedCredential: "xAI rejected the API key"
+    case .rateLimited: "xAI rate limit reached"
+    case .unavailable: "xAI is unavailable"
+    case .failed(let description): "xAI error: \(description)"
     }
   }
 }

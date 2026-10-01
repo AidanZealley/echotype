@@ -36,7 +36,7 @@ public enum RevisionRequest {
     ]))
     let (data, response) = try await session.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard (200..<300).contains(status) else { throw STTError(httpStatus: status) }
+    guard (200..<300).contains(status) else { throw XAI.error(httpStatus: status) }
     let choices = try JSONDecoder().decode(Response.self, from: data).choices
     guard let first = choices.first else {
       throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "No revision choice"))

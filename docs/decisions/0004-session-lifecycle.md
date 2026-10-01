@@ -5,6 +5,11 @@ Status: accepted, 2026-09-22 (EchoTypeCore), extended 2026-09-23 (dictation) and
 
 Lifetime and related timing/presentation rules are superseded by
 [0024](0024-dictation-operation-lifetime.md). The original record is retained below.
+Since the provider adapters change (2026-10-01), `SessionMachine` drives a neutral
+`LiveTranscriber` instead of `STTClient`: it holds audio until `.ready`, orders every send
+and the one `finish()`, and closes the transcriber. The xAI adapter keeps only the
+protocol. Read `transcript.created`, `transcript.done` and `finalize`/`audio.done` below as
+the xAI adapter's `.ready`, `.finished` and `finish()`.
 
 ## Context
 

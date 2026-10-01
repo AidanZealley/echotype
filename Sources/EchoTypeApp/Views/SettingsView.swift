@@ -434,7 +434,7 @@ private struct KeytermsTab: View {
       HStack {
         Text("Separate with commas")
         Spacer()
-        Text(verbatim: "\(store.settings.keyterms.count) of \(STTConnection.maximumSavedKeyterms) keyterms used")
+        Text(verbatim: "\(store.settings.keyterms.count) of \(XAI.transcription.keytermLimit - 1) keyterms used")
           .monospacedDigit()
       }
       .foregroundStyle(.secondary)

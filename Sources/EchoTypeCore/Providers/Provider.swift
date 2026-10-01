@@ -1,0 +1,106 @@
+import Foundation
+
+// The neutral contracts every provider's adapters implement. Code outside `Providers/<Name>/`
+// names no provider; it holds service values and talks to them only through these types.
+
+/// A failure a provider reports, in the form the app words for the user.
+public enum ProviderError: Error, Equatable, Sendable {
+  case rejectedCredential
+  case rateLimited
+  case unavailable
+  /// Anything else the provider reported, with its own description.
+  case failed(String)
+}
+
+// MARK: Transcription
+
+/// Live transcription. `start` opens one session; nothing is opened until it is called, since an
+/// idle open session may be billed.
+public struct TranscriptionService: Sendable {
+  /// The most keyterms a session accepts, including the built-in one.
+  public var keytermLimit: Int
+  public var start: @Sendable (TranscriptionRequest) async throws -> any LiveTranscriber
+
+  public init(
+    keytermLimit: Int,
+    start: @escaping @Sendable (TranscriptionRequest) async throws -> any LiveTranscriber
+  ) {
+    self.keytermLimit = keytermLimit
+    self.start = start
+  }
+}
+
+public struct TranscriptionRequest: Equatable, Sendable {
+  /// BCP-47 language tag.
+  public var language: String
+  /// `EchoType` first, then the saved terms, cut to the service's `keytermLimit`.
+  public var keyterms: [String]
+  public var credential: String?
+
+  public init(language: String, keyterms: [String], credential: String?) {
+    self.language = language
+    self.keyterms = keyterms
+    self.credential = credential
+  }
+
+  /// The request for one dictation. A saved `EchoType` in any case is dropped, since the
+  /// built-in term already leads the list.
+  public init(settings: Settings, keytermLimit: Int, credential: String?) {
+    let builtIn = "EchoType"
+    let saved = settings.keyterms.filter { $0.caseInsensitiveCompare(builtIn) != .orderedSame }
+    self.init(
+      language: settings.language,
+      keyterms: Array(([builtIn] + saved).prefix(keytermLimit)),
+      credential: credential)
+  }
+}
+
+/// One live transcription session, driven by `SessionMachine`.
+///
+/// The session guarantees an adapter:
+/// - Audio is 16 kHz mono little-endian Int16 PCM, in the chunks capture produces.
+/// - No `send` happens before `.ready`; the session holds earlier audio.
+/// - Each `send` is awaited before the next starts. `finish()` is called at most once, after the
+///   last `send` has returned, and no `send` follows it.
+/// - `finish()` may come before `.ready` when no audio was sent; the adapter must accept it.
+/// - `close()` may be called at any time and more than once. `waitForClose()` joins adapter work
+///   after it.
+///
+/// An adapter guarantees the session:
+/// - `.ready` arrives once, before any transcript.
+/// - Each `.transcript` carries the complete current transcript, not a change.
+/// - `.speech` arrives whenever the provider shows evidence that someone is talking.
+/// - `.finished` arrives after `finish()` once the tail is resolved, and then `events` ends. A
+///   final `.transcript` carrying the resolved tail may come just before it.
+/// - Failures throw `ProviderError`. Any other thrown error is treated as a connection failure.
+public protocol LiveTranscriber: Sendable {
+  /// Read by exactly one consumer, the session.
+  var events: AsyncThrowingStream<TranscriptionEvent, any Error> { get }
+  func send(audio: Data) async throws
+  func finish() async throws
+  func close()
+  func waitForClose() async
+}
+
+public enum TranscriptionEvent: Equatable, Sendable {
+  case ready
+  case transcript(Transcript)
+  case speech
+  case finished
+}
+
+/// The complete transcript at one moment of a session.
+public struct Transcript: Equatable, Sendable {
+  /// The only text that may be inserted. It only grows at its end.
+  public var committed: String
+  /// Settled text of the current utterance, shown solid. The provider may replace it.
+  public var utterance: String
+  /// Text the provider may still rewrite, shown dimmed and never inserted.
+  public var provisional: String
+
+  public init(committed: String = "", utterance: String = "", provisional: String = "") {
+    self.committed = committed
+    self.utterance = utterance
+    self.provisional = provisional
+  }
+}

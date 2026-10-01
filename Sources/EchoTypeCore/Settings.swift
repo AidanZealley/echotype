@@ -65,8 +65,8 @@ public struct Settings: Equatable, Sendable {
   /// Domain terms sent to the transcription API to improve accuracy on jargon.
   ///
   /// The endpoint accepts up to 100, and they are the highest-value accuracy lever available:
-  /// without them the model hears "shad CN" and "Zoo stand". `STTConnection.keyterms(settings:)`
-  /// enforces the caps.
+  /// without them the model hears "shad CN" and "Zoo stand". `TranscriptionRequest` and the
+  /// provider's adapter enforce the caps.
   public var keyterms: [String]
 
   /// BCP-47 language tag passed to the transcription API.

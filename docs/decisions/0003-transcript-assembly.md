@@ -1,7 +1,9 @@
 # 0003 Transcript assembly rules
 
 Status: accepted, 2026-09-22 (EchoTypeCore workstream 2), extended 2026-09-24 (overlay)
-and 2026-09-27 (live revision).
+and 2026-09-27 (live revision). Since the provider adapters change (2026-10-01) the
+assembly rules describe the xAI transcription adapter in `Providers/XAI/`. The neutral
+`Transcript` and the snapshot rules apply to every provider.
 
 ## Context
 
@@ -16,12 +18,11 @@ from the current utterance, whose settled runs can still be replaced by `speech_
 
 - Each `speech_final` segment is trimmed and segments are joined with a single space,
   with nothing added at either end.
-- `SessionMachine` owns the session's one `TranscriptAssembler`. The machine already
-  decodes every frame to drive pausing, so a second assembler in `STTClient` would hold
-  the same transcript twice. `STTClient` keeps only the socket protocol: holding audio
-  until `transcript.created`, send ordering and the closing messages.
-- The machine publishes `snapshots`, each holding the state, `committed`, `utterance` and
-  `provisional`.
+- The xAI transcriber owns the session's one `XAI.TranscriptAssembler`, applies every
+  decoded frame to it and emits the complete result as a neutral `.transcript(Transcript)`.
+  `SessionMachine` keeps the latest `Transcript` it received and assembles nothing itself.
+- The machine publishes `snapshots`, each holding the state and a `Transcript` of
+  `committed`, `utterance` and `provisional` text.
   A snapshot is published on every state transition and every transcript change,
   never twice in a row with the same value, and the stream finishes when `run()` does.
 - The recorded frames show how `is_final` runs compose. Within an utterance each partial

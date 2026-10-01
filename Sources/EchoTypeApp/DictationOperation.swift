@@ -56,7 +56,7 @@ import Observation
     var stopCapture: @MainActor () -> Void
     var releaseCapture: @MainActor () async -> Void
     var key: @Sendable () async -> String?
-    var transport: @MainActor (Settings, String) -> any WebSocketTransport
+    var transcription: TranscriptionService
     var captureDestination: @MainActor () -> Destination?
     var insert: @MainActor (String, Destination?, Bool, @escaping @MainActor () -> Bool, @escaping @MainActor () -> Void) async -> Clipboard.InsertionResult
     var revise: @MainActor (String) -> Reviser
@@ -175,12 +175,28 @@ import Observation
       throw OperationError.noAPIKey
     }
     try checkStartup()
-    let transport = dependencies.transport(settings, key)
-    let session = SessionMachine(transport: transport, settings: settings, clock: dependencies.clock)
+    let transcriber = try await startTranscriber(key: key)
+    let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
     if !isTest { trace = DictationTrace(startedAt: .now, cleanUp: settings.cleanUp) }
     if settings.cleanUp && !isTest { reviser = dependencies.revise(key) }
     return await transcribe(session, chunks: chunks)
+  }
+
+  /// Starting may suspend, so Escape or a capture failure during it must still close what it
+  /// opened.
+  private func startTranscriber(key: String) async throws -> any LiveTranscriber {
+    let service = dependencies.transcription
+    let transcriber = try await service.start(
+      TranscriptionRequest(settings: settings, keytermLimit: service.keytermLimit, credential: key))
+    do {
+      try checkStartup()
+    } catch {
+      transcriber.close()
+      await transcriber.waitForClose()
+      throw error
+    }
+    return transcriber
   }
 
   private func joinControls() async {
@@ -272,12 +288,14 @@ import Observation
           guard case .capturing(let snapshot, _) = presentation else { continue }
           let shown = await reviser.shown
           guard case .capturing(let current, _) = presentation, current == snapshot else { continue }
-          publish(presentation, settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
+          let transcript = snapshot.transcript
+          publish(presentation, settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
         }
       }
     }
     var committedLength = 0
     for await snapshot in session.snapshots {
+      let transcript = snapshot.transcript
       if pump == nil {
         pump = Task {
           do {
@@ -292,20 +310,20 @@ import Observation
           }
         }
       }
-      if snapshot.committed.count > committedLength {
-        trace?.commits.append(.init(at: .now, text: snapshot.committed.dropFirst(committedLength).trimmingCharacters(in: .whitespaces)))
+      if transcript.committed.count > committedLength {
+        trace?.commits.append(.init(at: .now, text: transcript.committed.dropFirst(committedLength).trimmingCharacters(in: .whitespaces)))
       }
-      committedLength = snapshot.committed.count
-      trace?.streamed = snapshot.committed
+      committedLength = transcript.committed.count
+      trace?.streamed = transcript.committed
       if snapshot.state == .cancelled { publish(.cancelled) }
       // A `finalizing` snapshot this operation didn't request is the hard cap.
       if snapshot.state == .finalizing { finish() }
-      let shown = await reviser?.submit(committed: snapshot.committed) ?? snapshot.committed
+      let shown = await reviser?.submit(committed: transcript.committed) ?? transcript.committed
       if !cancelled && !finishing && (snapshot.state == .listening || snapshot.state == .paused) {
-        publish(.capturing(snapshot, presentation.readiness ?? .init()), settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
-        if !isTest && settings.sendReplyRequests && ReplyRequest.matches(snapshot.committed) { commit() }
+        publish(.capturing(snapshot, presentation.readiness ?? .init()), settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
+        if !isTest && settings.sendReplyRequests && ReplyRequest.matches(transcript.committed) { commit() }
       } else if !cancelled && finishing {
-        publish(.finishing, settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
+        publish(.finishing, settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
       }
     }
     let result = await running.value

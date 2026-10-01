@@ -72,7 +72,7 @@ final class SpeechRequest: NSObject, ReadingRequest, URLSessionDataDelegate, Sen
   ) {
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     guard (200..<300).contains(status) else {
-      completionHandler(.cancel); end(STTError(httpStatus: status)); return
+      completionHandler(.cancel); end(XAI.error(httpStatus: status)); return
     }
     completionHandler(.allow)
   }
