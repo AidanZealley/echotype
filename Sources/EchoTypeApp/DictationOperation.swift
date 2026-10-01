@@ -4,21 +4,39 @@ import Observation
 
 /// Owns capture, transcription, revision and insertion for one admitted command.
 @MainActor @Observable final class DictationOperation {
+  /// Advisory hints shown before finishing. Only finishing captures the insertion destination.
+  struct Readiness: Equatable {
+    var microphone = false
+    var destination = false
+  }
+
   enum Presentation: Equatable {
-    case starting(microphoneReady: Bool, destinationReady: Bool)
-    case capturing(SessionMachine.Snapshot, microphoneReady: Bool, destinationReady: Bool)
+    case starting(Readiness)
+    case capturing(SessionMachine.Snapshot, Readiness)
     case finishing
     case inserting
     case cancelled
 
+    /// Nil once finishing, inserting or cancelled.
+    var readiness: Readiness? {
+      switch self {
+      case .starting(let readiness), .capturing(_, let readiness): readiness
+      case .finishing, .inserting, .cancelled: nil
+      }
+    }
+
+    fileprivate func with(_ readiness: Readiness) -> Presentation {
+      if case .capturing(let snapshot, _) = self { return .capturing(snapshot, readiness) }
+      return .starting(readiness)
+    }
+
     var pillPhase: Pill.Phase? {
       switch self {
-      case .starting(let microphoneReady, let destinationReady):
-        return microphoneReady ? (destinationReady ? .listening : .selectInput) : .starting
-      case .capturing(let snapshot, let microphoneReady, let destinationReady):
-        guard microphoneReady else { return .starting }
-        guard destinationReady else { return .selectInput }
-        return snapshot.state == .paused ? .paused : .listening
+      case .starting(let readiness), .capturing(_, let readiness):
+        guard readiness.microphone else { return .starting }
+        guard readiness.destination else { return .selectInput }
+        if case .capturing(let snapshot, _) = self, snapshot.state == .paused { return .paused }
+        return .listening
       case .finishing: return .transcribing
       case .inserting: return .inserting
       case .cancelled: return nil
@@ -50,7 +68,7 @@ import Observation
   let isTest: Bool
   private let dependencies: Dependencies
   private let onPresentation: @MainActor (Presentation, String, String) -> Void
-  private(set) var presentation: Presentation = .starting(microphoneReady: false, destinationReady: false)
+  private(set) var presentation: Presentation = .starting(.init())
   var cancelled: Bool { presentation == .cancelled }
   private var settled = ""
   private var provisional = ""
@@ -66,18 +84,8 @@ import Observation
   private var lastDestinationProbe: TimeInterval?
   /// Capture buffers report levels even during silence; reuse them instead of owning a timer.
   private static let destinationProbeInterval: TimeInterval = 0.5
-  private var finishing: Bool {
-    switch presentation {
-    case .finishing, .inserting, .cancelled: true
-    case .starting, .capturing: false
-    }
-  }
-  private var isMicrophoneReady: Bool {
-    switch presentation {
-    case .starting(let ready, _), .capturing(_, let ready, _): ready
-    default: false
-    }
-  }
+  /// Finishing, inserting or cancelled.
+  private var finishing: Bool { presentation.readiness == nil }
 
   init(settings: Settings, isTest: Bool = false, dependencies: Dependencies,
     onPresentation: @escaping @MainActor (Presentation, String, String) -> Void = { _, _, _ in }
@@ -89,37 +97,22 @@ import Observation
   }
 
   var canCommit: Bool {
-    if case .capturing = presentation { return !cancelled }
-    return false
+    if case .capturing = presentation { true } else { false }
   }
 
   var canCancel: Bool { !isTest && presentation != .inserting && !cancelled }
 
-  private var isDestinationReady: Bool {
-    switch presentation {
-    case .starting(_, let ready), .capturing(_, _, let ready): ready
-    default: false
-    }
-  }
-
   func microphoneReady() {
-    guard hasRun, !finishing else { return }
-    var destinationReady = isDestinationReady
+    guard hasRun, var readiness = presentation.readiness else { return }
+    readiness.microphone = true
     let now = dependencies.clock.now
     if !isTest && lastDestinationProbe.map({ now - $0 >= Self.destinationProbeInterval }) != false {
       lastDestinationProbe = now
       // Advisory only. Never retain this token for insertion.
-      destinationReady = dependencies.captureDestination() != nil
+      readiness.destination = dependencies.captureDestination() != nil
     }
-    switch presentation {
-    case .starting:
-      let next = Presentation.starting(microphoneReady: true, destinationReady: destinationReady)
-      if next != presentation { publish(next) }
-    case .capturing(let snapshot, _, _):
-      let next = Presentation.capturing(snapshot, microphoneReady: true, destinationReady: destinationReady)
-      if next != presentation { publish(next) }
-    default: break
-    }
+    let next = presentation.with(readiness)
+    if next != presentation { publish(next) }
   }
 
   /// Synchronous admission signals. Resources and suspended children belong to this instance.
@@ -172,7 +165,7 @@ import Observation
     try checkStartup()
     let destinationReady = !isTest && dependencies.captureDestination() != nil
     if !isTest { lastDestinationProbe = dependencies.clock.now }
-    publish(.starting(microphoneReady: false, destinationReady: destinationReady))
+    publish(.starting(.init(destination: destinationReady)))
     let chunks = try await dependencies.startCapture(settings.inputDeviceID)
     try checkStartup()
     guard let key = await dependencies.key() else {
@@ -265,10 +258,10 @@ import Observation
     if let reviser {
       revisionUpdates = Task {
         for await _ in reviser.updates {
-          guard !cancelled, !finishing, case .capturing(let snapshot, _, _) = presentation else { continue }
+          guard case .capturing(let snapshot, _) = presentation else { continue }
           let shown = await reviser.shown
-          guard case .capturing(let current, let ready, let destinationReady) = presentation, current == snapshot else { continue }
-          publish(.capturing(snapshot, microphoneReady: ready, destinationReady: destinationReady), settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
+          guard case .capturing(let current, _) = presentation, current == snapshot else { continue }
+          publish(presentation, settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
         }
       }
     }
@@ -296,7 +289,7 @@ import Observation
       if snapshot.state == .cancelled { publish(.cancelled) }
       let shown = await reviser?.submit(committed: snapshot.committed) ?? snapshot.committed
       if !cancelled && !finishing && (snapshot.state == .listening || snapshot.state == .paused) {
-        publish(.capturing(snapshot, microphoneReady: isMicrophoneReady, destinationReady: isDestinationReady), settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
+        publish(.capturing(snapshot, presentation.readiness ?? .init()), settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)
         if !isTest && settings.sendReplyRequests && ReplyRequest.matches(snapshot.committed) { commit() }
       } else if !cancelled && finishing {
         publish(.finishing, settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)

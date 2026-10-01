@@ -156,7 +156,7 @@ private final class OperationTransport: WebSocketTransport, Sendable {
         self.presentations += 1
         self.presented.append(phase)
         if phase == .finishing { self.finished.open() }
-        if case .capturing(let snapshot, _, _) = phase {
+        if case .capturing(let snapshot, _) = phase {
           self.running.open()
           if snapshot.state == .paused { self.paused.open() }
           if !snapshot.committed.isEmpty { self.wordsReceived.open() }

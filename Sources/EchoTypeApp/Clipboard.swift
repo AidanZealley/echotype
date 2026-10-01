@@ -93,14 +93,9 @@ import EchoTypeCore
       await previous?.value
       guard !cancelled() else { return .init(insertion: .cancelled, sending: .notRequested) }
       guard !text.isEmpty else { return .init(insertion: .notAttempted, sending: .notRequested) }
-      let check = verify(destination)
-      guard check == .matching else {
-        let loss: DictationTrace.DestinationLoss = check == .changed ? .changed : .unavailable
-        return .init(insertion: .skipped(loss), sending: sends ? .skipped(loss) : .notRequested)
-      }
       let snapshotCount = access.count()
       let saved = access.save()
-      // Saving all data may invoke pasteboard providers. Recheck at the actual write boundary.
+      // Saving all data may invoke pasteboard providers, so check at the actual write boundary.
       guard !cancelled() else { return .init(insertion: .cancelled, sending: .notRequested) }
       let boundary = verify(destination)
       guard boundary == .matching else {

@@ -83,7 +83,7 @@ import Testing
     let result = await Clipboard(access: board.access).insert("text", destination: nil, sends: false,
       verify: { _ in
         verifications += 1
-        if verifications == 2 {
+        if verifications == 1 {
           board.text = "external"
           board.count += 1
         }

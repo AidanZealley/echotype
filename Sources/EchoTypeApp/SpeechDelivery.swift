@@ -44,43 +44,17 @@ enum SpeechDelivery {
   }
 }
 
-/// Admission and replay protection execute in the same main-actor callback as reservation.
-@MainActor final class SpeechAdmission {
-  private var replies: [UUID: (expiry: TimeInterval, outcome: SpeechDelivery.Outcome)] = [:]
-  private var expiryCleanup: Task<Void, Never>?
-
-  deinit { expiryCleanup?.cancel() }
-
-  private func scheduleCleanup(now: TimeInterval) {
-    expiryCleanup?.cancel()
-    guard let expiry = replies.values.map(\.expiry).max() else { expiryCleanup = nil; return }
-    expiryCleanup = Task { [weak self] in
-      try? await Task.sleep(for: .seconds(max(0, expiry - now)), clock: .suspending)
-      guard !Task.isCancelled else { return }
-      self?.replies.removeAll()
-      self?.expiryCleanup = nil
-    }
-  }
-
-  func receive(_ request: SpeechDelivery.Incoming, pid: Int32, now: TimeInterval,
+/// Admission runs in the same main-actor callback as reservation, so an expired request can
+/// never start playback. Requests for another app instance get no reply.
+@MainActor enum SpeechAdmission {
+  static func receive(_ request: SpeechDelivery.Incoming, pid: Int32, now: TimeInterval,
     admit: (String) -> Bool
   ) -> [String: Any]? {
-    replies = replies.filter { $0.value.expiry > now }
-    guard let id = request.id, request.target == pid
-    else { return nil }
+    guard let id = request.id, request.target == pid else { return nil }
     let outcome: SpeechDelivery.Outcome
-    if let expiry = request.expiry, expiry.isFinite {
-      if expiry <= now { outcome = .expired }
-      else if expiry > now + SpeechDelivery.waitSeconds { outcome = .invalid }
-      else if let text = request.text {
-        if let previous = replies[id] { outcome = previous.outcome }
-        else {
-          outcome = admit(text) ? .accepted : .busy
-          replies[id] = (expiry, outcome)
-        }
-      } else { outcome = .invalid }
+    if let expiry = request.expiry, expiry.isFinite, let text = request.text {
+      outcome = expiry <= now ? .expired : admit(text) ? .accepted : .busy
     } else { outcome = .invalid }
-    scheduleCleanup(now: now)
     return ["id": id.uuidString, "target": pid, "outcome": outcome.rawValue]
   }
 }
