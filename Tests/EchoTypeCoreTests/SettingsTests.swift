@@ -9,7 +9,6 @@ func settingsRoundTrip() {
     keyterms: ["shadcn", "TanStack Start"],
     language: "en-GB",
     inputDeviceID: "BuiltInMicrophoneDevice",
-    cleanUp: false,
     readAloudHotkey: .controlOptionS,
     voice: "altair",
     speechSpeed: 1.25,
@@ -28,7 +27,7 @@ func settingsRoundTrip() {
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","cleanUp":false,"readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
+    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
     """#.utf8)
 
   #expect(
@@ -38,7 +37,6 @@ func storedValueDecodes() {
         keyterms: ["shadcn", "TanStack Start"],
         language: "en-GB",
         inputDeviceID: "BuiltInMicrophoneDevice",
-        cleanUp: false,
         readAloudHotkey: .controlOptionS,
         voice: "altair",
         speechSpeed: 1.25
@@ -53,7 +51,6 @@ func missingFieldsDefault() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6}}"#.utf8)
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
-  #expect(Settings(decoding: stored).cleanUp)
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
   #expect(Settings(decoding: stored).voice == "ara")
   #expect(Settings(decoding: stored).speechSpeed == 1.0)
@@ -67,17 +64,20 @@ func malformedSendReplyRequests() {
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
 }
 
-@Test("An old batch preference is ignored while other fields survive")
-func payloadBeforeReadAloudDecodes() {
+@Test("Retired batch and cleanup preferences are ignored while other fields survive")
+func retiredKeysIgnored() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn"],"language":"en-GB","batchOnCommit":false}
+    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn"],"language":"en-GB","batchOnCommit":false,"cleanUp":false,"sendReplyRequests":false}
     """#.utf8)
+  let settings = Settings(decoding: stored)
 
   #expect(
-    Settings(decoding: stored)
+    settings
       == Settings(
-        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB"))
+        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB",
+        sendReplyRequests: false))
+  #expect(!String(decoding: settings.encoded(), as: UTF8.self).contains("cleanUp"))
 }
 
 @Test("Unreadable data decodes to the defaults")

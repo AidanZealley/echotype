@@ -19,7 +19,7 @@ struct ReviserTests {
   func revisionKeepsReplyRequest() async {
     let streamed = "Check the build. Reply with EchoType."
     let calls = RevisionCalls(replies: ["Check the build."])
-    let reviser = Reviser(request: { try await calls.answer($0) })
+    let reviser = reviser({ try await calls.answer($0) })
     let text = await reviser.finish(committed: streamed)
     #expect(text == streamed)
     #expect(ReplyRequest.matches(text))
@@ -31,7 +31,7 @@ struct ReviserTests {
     let recentSentence = words.joined(separator: " ") + "."
     let first = "Old. " + recentSentence + " Wait. No."
     let calls = RevisionCalls()
-    let reviser = Reviser(request: { await calls.record($0); return $0 })
+    let reviser = reviser({ await calls.record($0); return $0 })
     var updates = reviser.updates.makeAsyncIterator()
     _ = await reviser.submit(committed: first)
     _ = await updates.next()
@@ -47,7 +47,7 @@ struct ReviserTests {
     let longSentence = (1...60).map { "word\($0)" }.joined(separator: " ") + "."
     let first = "First. " + longSentence + " Third."
     let calls = RevisionCalls()
-    let reviser = Reviser(request: { await calls.record($0); return $0 })
+    let reviser = reviser({ await calls.record($0); return $0 })
     var updates = reviser.updates.makeAsyncIterator()
     _ = await reviser.submit(committed: first)
     _ = await updates.next()
@@ -61,7 +61,7 @@ struct ReviserTests {
   func revisionSingleFlight() async {
     let calls = RevisionGate()
     defer { calls.close() }
-    let reviser = Reviser(request: { try await calls.request($0) })
+    let reviser = reviser({ try await calls.request($0) })
     _ = await reviser.submit(committed: "One.")
     #expect(await calls.next() == "One.")
     _ = await reviser.submit(committed: "One. Two.")
@@ -81,7 +81,7 @@ struct ReviserTests {
   func revisionFallback() async {
     let calls = RevisionGate()
     defer { calls.close() }
-    let reviser = Reviser(request: { try await calls.request($0) })
+    let reviser = reviser({ try await calls.request($0) })
     var updates = reviser.updates.makeAsyncIterator()
     _ = await reviser.submit(committed: "Let's meet at 3, no, 4pm.")
     #expect(await calls.next() == "Let's meet at 3, no, 4pm.")
@@ -102,7 +102,7 @@ struct ReviserTests {
     let first = "Old. " + recentSentence + " Wait. No."
     let calls = RevisionGate()
     defer { calls.close() }
-    let reviser = Reviser(request: { try await calls.request($0) })
+    let reviser = reviser({ try await calls.request($0) })
     _ = await reviser.submit(committed: first)
     #expect(await calls.next() == first)
     _ = await reviser.submit(committed: first + " Use the second one.")
@@ -117,9 +117,8 @@ struct ReviserTests {
     let calls = RevisionGate()
     defer { calls.close() }
     let reviser = Reviser(
-      request: { try await calls.request($0) },
-      finalRequest: { _ in "Let's meet at 4pm." }
-    )
+      cleanup: .init { $0.final ? "Let's meet at 4pm." : try await calls.request($0.text) },
+      credential: nil)
     _ = await reviser.submit(committed: "Let's meet at 3, no, 4pm.")
     #expect(await calls.next() == "Let's meet at 3, no, 4pm.")
     #expect(await reviser.finish(committed: "Let's meet at 3, no, 4pm.") == "Let's meet at 4pm.")
@@ -127,7 +126,7 @@ struct ReviserTests {
 
   @Test("A failed final request inserts the available streamed text")
   func revisionFinalFallback() async {
-    let reviser = Reviser(request: { _ in throw RevisionError.failed })
+    let reviser = reviser({ _ in throw RevisionError.failed })
     #expect(await reviser.finish(committed: "Keep this.") == "Keep this.")
     #expect(await reviser.attempts.map(\.result) == [.failed("failed")])
   }
@@ -135,7 +134,7 @@ struct ReviserTests {
   @Test("Captured attempts record each request's result in start order")
   func revisionAttempts() async {
     let calls = RevisionCalls(replies: ["One", "One now two."])
-    let reviser = Reviser(request: { try await calls.answer($0) })
+    let reviser = reviser({ try await calls.answer($0) })
     var updates = reviser.updates.makeAsyncIterator()
     _ = await reviser.submit(committed: "One.")
     _ = await updates.next()
@@ -148,6 +147,30 @@ struct ReviserTests {
     #expect(attempts.map(\.isFinal) == [false, true])
     #expect(attempts.allSatisfy { $0.duration >= 0 })
   }
+
+  @Test("Each request carries the shared prompt, the credential and whether it is final")
+  func revisionRequests() async {
+    let requests = CleanupRequests()
+    let reviser = Reviser(cleanup: .init { await requests.record($0); return $0.text }, credential: "key")
+    var updates = reviser.updates.makeAsyncIterator()
+    _ = await reviser.submit(committed: "One.")
+    _ = await updates.next()
+    _ = await reviser.finish(committed: "One. Two.")
+    #expect(await requests.all == [
+      CleanupRequest(prompt: Reviser.prompt, text: "One.", final: false, credential: "key"),
+      CleanupRequest(prompt: Reviser.prompt, text: "One. Two.", final: true, credential: "key"),
+    ])
+  }
+}
+
+/// A reviser whose cleanup service answers each window with `request`.
+private func reviser(_ request: @escaping @Sendable (String) async throws -> String) -> Reviser {
+  Reviser(cleanup: .init { try await request($0.text) }, credential: nil)
+}
+
+private actor CleanupRequests {
+  private(set) var all: [CleanupRequest] = []
+  func record(_ request: CleanupRequest) { all.append(request) }
 }
 
 private enum RevisionError: Error { case failed }

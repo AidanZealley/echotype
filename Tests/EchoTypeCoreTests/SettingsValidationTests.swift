@@ -6,11 +6,11 @@ import Testing
   @Test(arguments: ["null", "\"fast\"", "0.69", "1.51", "-1", "1e999"])
   func invalidStoredSpeedPreservesOtherPreferences(speed: String) {
     let stored = Data("""
-      {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["EchoType"],"language":"en-GB","inputDeviceID":"mic","cleanUp":false,"readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":\(speed),"sendReplyRequests":false}
+      {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["EchoType"],"language":"en-GB","inputDeviceID":"mic","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":\(speed),"sendReplyRequests":false}
       """.utf8)
     #expect(Settings(decoding: stored) == Settings(
       hotkey: .controlOptionD, keyterms: ["EchoType"], language: "en-GB",
-      inputDeviceID: "mic", cleanUp: false, readAloudHotkey: .controlOptionS,
+      inputDeviceID: "mic", readAloudHotkey: .controlOptionS,
       voice: "altair", sendReplyRequests: false))
   }
 

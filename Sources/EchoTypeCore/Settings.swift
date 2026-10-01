@@ -89,9 +89,6 @@ public struct Settings: Equatable, Sendable {
   /// AirPods does the obvious thing.
   public var inputDeviceID: String?
 
-  /// Whether committed dictation is revised as it arrives.
-  public var cleanUp: Bool
-
   /// The chord that reads the selection aloud, and stops a reading.
   public var readAloudHotkey: Hotkey
 
@@ -121,7 +118,6 @@ public struct Settings: Equatable, Sendable {
     hardCap: TimeInterval = 300,
     finalizeTimeout: TimeInterval = 8,
     inputDeviceID: String? = nil,
-    cleanUp: Bool = true,
     readAloudHotkey: Hotkey = .optionS,
     voice: String = "ara",
     speechSpeed: Double = Settings.defaultSpeechSpeed,
@@ -134,7 +130,6 @@ public struct Settings: Equatable, Sendable {
     self.hardCap = hardCap
     self.finalizeTimeout = finalizeTimeout
     self.inputDeviceID = inputDeviceID
-    self.cleanUp = cleanUp
     self.readAloudHotkey = readAloudHotkey
     self.voice = voice
     self.speechSpeed = speechSpeed
@@ -149,10 +144,11 @@ public struct Settings: Equatable, Sendable {
 ///
 /// The key names and the hotkey's shape are the upgrade contract: renaming one would reset
 /// that setting on every existing install. Each field decodes on its own and falls back to its
-/// default, so adding a field later, or one unreadable field, never resets the others.
+/// default, so adding a field later, or one unreadable field, never resets the others. Retired
+/// keys, `batchOnCommit` and `cleanUp`, are ignored.
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
-    case hotkey, keyterms, language, inputDeviceID, cleanUp
+    case hotkey, keyterms, language, inputDeviceID
     case readAloudHotkey, voice, speechSpeed, sendReplyRequests
   }
 
@@ -166,8 +162,6 @@ extension Settings: Codable {
     language =
       (try? container.decodeIfPresent(String.self, forKey: .language)) ?? defaults.language
     inputDeviceID = try? container.decodeIfPresent(String.self, forKey: .inputDeviceID)
-    cleanUp =
-      (try? container.decodeIfPresent(Bool.self, forKey: .cleanUp)) ?? defaults.cleanUp
     readAloudHotkey =
       (try? container.decodeIfPresent(Hotkey.self, forKey: .readAloudHotkey))
       ?? defaults.readAloudHotkey
@@ -186,7 +180,6 @@ extension Settings: Codable {
     try container.encode(keyterms, forKey: .keyterms)
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)
-    try container.encode(cleanUp, forKey: .cleanUp)
     try container.encode(readAloudHotkey, forKey: .readAloudHotkey)
     try container.encode(voice, forKey: .voice)
     try container.encode(validatedSpeechSpeed, forKey: .speechSpeed)

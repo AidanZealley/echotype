@@ -23,7 +23,8 @@ func liveRevisionPromptCases() async throws {
       "The settings window opens with the General tab selected. The microphone is ready."),
   ]
   for (input, expected) in cases {
-    let output = try await RevisionRequest.revise(input, apiKey: key, final: false)
+    let output = try await XAI.cleanup.revise(
+      CleanupRequest(prompt: Reviser.prompt, text: input, final: false, credential: key))
     #expect(output == expected, "Input: \(input); output: \(output)")
     #expect(Reviser.isFaithful(output, to: input))
   }

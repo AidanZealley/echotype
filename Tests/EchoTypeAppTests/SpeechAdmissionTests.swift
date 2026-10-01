@@ -50,7 +50,7 @@ private final class AdmissionTranscriber: LiveTranscriber {
       self.readers.append(reader); return reader
     }, focusedScreen: { nil }, showPanel: { _, _ in }, hidePanel: {},
     makeDictation: { test in
-      let operation = DictationOperation(settings: Settings(cleanUp: true), isTest: test, dependencies: .init(
+      let operation = DictationOperation(settings: Settings(), isTest: test, dependencies: .init(
         startCapture: { _ in
           self.captureEntered.open()
           if test {
@@ -65,9 +65,10 @@ private final class AdmissionTranscriber: LiveTranscriber {
           self.insertions += 1
           begin(); self.insertionEntered.open(); await self.insertionRelease.wait()
           return .init(insertion: .attempted, sending: .notRequested)
-        }, revise: { _ in Reviser(request: { $0 }, finalRequest: { text in
-          self.revisionEntered.open(); await self.revisionRelease.wait(); return text
-        }) }, clock: SystemClock(), testClock: SystemClock()), onPresentation: { _, settled, _ in
+        }, cleanup: CleanupService { request in
+          guard request.final else { return request.text }
+          self.revisionEntered.open(); await self.revisionRelease.wait(); return request.text
+        }, clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()), onPresentation: { _, settled, _ in
           if settled == "Hello" { self.wordsReceived.open() }
         })
       self.operation = operation

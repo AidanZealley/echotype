@@ -180,7 +180,7 @@ extension DictationTrace {
       duration.formatted(.units(allowed: [.minutes, .seconds], width: .narrow)),
       "\(marks.count) words",
       "\(commits.count) commits",
-      cleanUp ? requestCounts : "cleanup off",
+      requestCounts,
     ]
     switch outcome {
     case .completed: break
