@@ -1,6 +1,6 @@
 # Provider adapters implementation plan
 
-Status: in progress. Workflow approval: approved by Aidan on 2026-10-01.
+Status: complete. Workflow approval: approved by Aidan on 2026-10-01.
 
 ## Orchestration record
 
@@ -23,7 +23,7 @@ Workstream states: Not started, Implementing, Review, Remediation, Closure revie
 | 3 | [Read-aloud adapter](03-read-aloud.md) | 2 | Accepted |
 | 4 | [Provider registry and credentials](04-registry-credentials.md) | 3 | Accepted |
 | 5 | [Provider settings and window](05-settings-window.md) | 4 | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1 to 5 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1 to 5 | Accepted |
 
 ## Why these boundaries
 
@@ -63,7 +63,7 @@ These are frozen. A defect in one is raised as an escalation naming the owning w
 |---|---|---|---|---|
 | G1 Dictation | 1, after closure before acceptance | Passed | `.build/EchoType-workflow.app` from workstream 1's uncommitted state on `f55bfad` | Aidan reports that a signed candidate with xAI passes: normal dictation, stopping mid-sentence keeps the final words, Escape during Transcribing inserts nothing, and the Settings Test button shows what it heard |
 | G2 Read aloud | 3, after closure before acceptance | Passed | `.build/EchoType-workflow.app` from workstream 3's uncommitted state on `a889284` | Aidan reports that a signed candidate passes: reading a selection with each voice, Space to pause and resume, stopping with the hotkey, and an agent's MCP `speak` call |
-| G3 Whole feature | Final, after focused closure before acceptance | Pending | TBD | Aidan reports that a signed candidate passes the specification's Mac checks: the upgrade keeps the existing key, voice and speed; dictation shows cleanup requests in Last Dictation; read aloud, MCP `speak` and Test work; a wrong key shows "xAI rejected the API key", with the real key restored afterwards; the Provider tab is checked in both themes |
+| G3 Whole feature | Final, after focused closure before acceptance | Passed | `.build/EchoType-workflow.app`, `7183e7a` plus final R1/R2 corrections; evidence in final-review.md | Aidan reports that a signed candidate passes the specification's Mac checks: the upgrade keeps the existing key, voice and speed; dictation shows cleanup requests in Last Dictation; read aloud, MCP `speak` and Test work; a wrong key shows "xAI rejected the API key", with the real key restored afterwards; the Provider tab is checked in both themes |
 
 Gate states are Pending, Testing, Troubleshooting or Passed, separate from workstream states.
 
@@ -92,4 +92,10 @@ None open.
 
 ## Completion summary
 
-Written by the final-review lead.
+Feature complete. Rows 1 to 5 and Final are Accepted. Fresh whole-feature review and focused closure passed after provider-neutral microphone copy and a stale read-aloud decision-record reference were corrected. Aidan confirmed every G3 check passing on 2026-10-01.
+
+- Delivered behaviour: selected-provider service wiring, always-on optional cleanup, neutral transcription and speech contracts, account-specific Keychain operations, per-provider voice/speed migration, and the Provider settings tab.
+- Verification: complete deterministic suite passed, reporting 93 core and 66 app tests with two opt-in live tests skipped; release build passed. Focused plist lint, diff checks and provider-name searches passed. Signed debug candidate build and strict signature verification passed. CI was not run; nothing was pushed.
+- External checks: G1, G2 and G3 passed. G3 confirmed retained key, voice and speed, dictation with replacements and cleanup in Last Dictation, selected reading and heard MCP speech, Test transcription, the expected wrong-key rejection and restored-key recovery, and the Provider tab in both themes. No external check remains pending. Lasting G3 evidence is in final-review.md.
+- Specification drift: none beyond declaration clarifications already recorded above.
+- Deferred optional observations: O1, credential-status refresh during a future provider switch. Only xAI is registered today; revisit when adding the second provider.

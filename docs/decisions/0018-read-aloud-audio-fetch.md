@@ -35,9 +35,10 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
   explicitly, rather than omitting them, so a change to the endpoint's defaults can't
   change reading, and the tests can pin both.
 - The xAI voice adapter, `XAI.voice` in `Providers/XAI/`, builds the request, streams the
-  response and maps a non-2xx status with `XAI.error(httpStatus:)`. Speed uses the shared
-  Settings validation policy before it reaches the request. Nonfinite or out-of-range values
-  fall back to 1.0; valid fractional values survive unchanged.
+  response and maps a non-2xx status with `XAI.error(httpStatus:)`. Settings validates the
+  selected provider's stored reading speed against its `VoiceService.speedRange` before
+  building the request. Nonfinite or out-of-range values fall back to 1.0; valid fractional
+  values survive unchanged.
   See [0010](0010-settings-storage-and-api-key.md).
 - Read Aloud has its own Opt+S or Ctrl+Opt+S hotkey, Ara or Altair voice, and speed
   from 0.7 to 1.5. It uses the General tab's language. The reading hotkey or
@@ -149,5 +150,7 @@ takes the next body piece only after yielding the last 100 ms chunk of the previ
 the copied-buffer bound and backpressure described above are unchanged: while playback is
 paused the reader stops pulling, the stream stops taking pieces and the body's callback
 waits for capacity. A stream promises chunks of at most 100 ms with one sample rate.
-`Settings.speechSpeedRange` duplicates the xAI range until reading choices are stored per
-provider.
+`Settings.reading` stores voice and speed choices per provider. `SpeechRequest` resolves the
+selected provider's choice with `Settings.readingChoice(for:)`, which validates it against
+the selected `VoiceService`. A missing or retired voice falls back to the service's first
+voice; a nonfinite speed or one outside `VoiceService.speedRange` falls back to 1.
