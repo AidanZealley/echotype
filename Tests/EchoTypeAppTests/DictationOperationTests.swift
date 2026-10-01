@@ -20,7 +20,7 @@ private final class Gate: Sendable {
 
 /// Places the fakes pass through, and presentation the operation publishes.
 enum Point: Hashable, Sendable {
-  case captureStart, key, socket, binarySend, closingSend, audioDone, captureStop, captureRelease
+  case captureStart, key, socket, binarySend, closingFrame, audioDone, captureStop, captureRelease
   case destination, revision
   /// Insertion before and after the clipboard boundary.
   case insertion, clipboard
@@ -129,7 +129,7 @@ private final class Transport: WebSocketTransport, Sendable {
     state.withLock { $0.frames.append("audio \(binary.first ?? 0)") }
   }
   func send(text: String) async throws {
-    try await pass(.closingSend)
+    try await pass(.closingFrame)
     let answers = state.withLock { state in
       state.frames.append(text)
       return text == audioDone && state.answersAudioDone
@@ -146,7 +146,7 @@ private final class Transport: WebSocketTransport, Sendable {
   /// Closing releases suspended sends, as a real socket does.
   func close() {
     points.release(.binarySend)
-    points.release(.closingSend)
+    points.release(.closingFrame)
     publisher.finish()
   }
 }
@@ -410,7 +410,7 @@ struct DictationOperationTests {
   }
 
   @Test("A stalled send or capture drain ends at the finishing deadline and releases capture",
-    arguments: [Point.binarySend, .closingSend, .captureStop])
+    arguments: [Point.binarySend, .closingFrame, .captureStop])
   func stalledFinishing(at point: Point) async {
     let h = Harness()
     let operation = h.operation()
@@ -427,7 +427,7 @@ struct DictationOperationTests {
     #expect(h.points.count(.captureRelease) == 1)
   }
 
-  @Test("A send failure preserves committed words and never sends Return", arguments: [Point.binarySend, .closingSend])
+  @Test("A send failure preserves committed words and never sends Return", arguments: [Point.binarySend, .closingFrame])
   func sendFailure(at point: Point) async {
     let h = Harness()
     h.transport.fail(at: point)
@@ -476,11 +476,11 @@ struct DictationOperationTests {
     let atStop = available ? destination(target: 4) : nil
     let late = destination(target: 5)
     h.focusedDestination = atStop
-    h.points.hold(.closingSend)
+    h.points.hold(.closingFrame)
     operation.commit()
-    await h.points.reached(.closingSend)
+    await h.points.reached(.closingFrame)
     h.focusedDestination = late
-    h.points.release(.closingSend)
+    h.points.release(.closingFrame)
     _ = await task.value
     #expect(DestinationFocus(lookup: { atStop }).verify(h.insertedDestination) == (available ? .matching : .unavailable))
     #expect(DestinationFocus(lookup: { late }).verify(h.insertedDestination) == (available ? .changed : .unavailable))
@@ -488,7 +488,7 @@ struct DictationOperationTests {
 
   // MARK: Revision and insertion
 
-  @Test("Escape cancels through drain, closing and final revision", arguments: [Point.captureStop, .closingSend, .revision])
+  @Test("Escape cancels through drain, closing and final revision", arguments: [Point.captureStop, .closingFrame, .revision])
   func escapeWhileFinishing(at point: Point) async {
     let h = Harness()
     h.points.hold(point)

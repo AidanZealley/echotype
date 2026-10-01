@@ -75,6 +75,8 @@ import Observation
   private var session: SessionMachine?
   private var reviser: Reviser?
   private var pump: Task<Void, Never>?
+  /// The one finishing routine. See `finish()`.
+  private var finisher: Task<Void, Never>?
   private var controls: [Task<Void, Never>] = []
   private var finalRevision: Task<String, Never>?
   private var destination: Destination?
@@ -118,8 +120,9 @@ import Observation
   /// Synchronous admission signals. Resources and suspended children belong to this instance.
   func commit() {
     guard canCommit else { return }
+    // The stop is acknowledged at once; `finish()` captures the destination and publishes again.
     publish(.finishing)
-    controls.append(Task { await session?.trigger() })
+    finish()
   }
 
   func captureFailed(_ error: any Error) {
@@ -137,7 +140,6 @@ import Observation
     publish(.cancelled)
     dependencies.stopCapture()
     pump?.cancel()
-    for control in controls { control.cancel() }
     finalRevision?.cancel()
     controls.append(Task {
       await session?.cancel()
@@ -174,9 +176,7 @@ import Observation
     }
     try checkStartup()
     let transport = dependencies.transport(settings, key)
-    let session = SessionMachine(transport: transport, settings: settings, clock: dependencies.clock,
-      onFinishing: { [weak self] in await self?.enterFinishing() },
-      onAbort: { [weak self] in await self?.abortCapture() })
+    let session = SessionMachine(transport: transport, settings: settings, clock: dependencies.clock)
     self.session = session
     if !isTest { trace = DictationTrace(startedAt: .now, cleanUp: settings.cleanUp) }
     if settings.cleanUp && !isTest { reviser = dependencies.revise(key) }
@@ -191,10 +191,15 @@ import Observation
     }
   }
 
+  /// Runs once the session has ended for any reason. Ending the session is what releases a
+  /// stalled drain or send: capture stops, and the pump and finishing routine are cancelled
+  /// and joined.
   private func releaseCapture() async {
     dependencies.stopCapture()
     pump?.cancel()
+    finisher?.cancel()
     await pump?.value
+    await finisher?.value
     await joinControls()
     await dependencies.releaseCapture()
     dependencies.testClock.cancel()
@@ -238,18 +243,24 @@ import Observation
     if let startupCaptureFailure { throw startupCaptureFailure }
   }
 
-  private func abortCapture() {
-    dependencies.stopCapture()
-    pump?.cancel()
-  }
-
-  private func enterFinishing() async {
-    if !cancelled {
-      if !isTest { destination = dependencies.captureDestination() }
-      publish(.finishing)
+  /// Ends capture and closes the protocol behind it. Started at most once, by the stop hotkey,
+  /// reply-request detection, or the `finalizing` snapshot of the session's hard cap.
+  private func finish() {
+    guard finisher == nil, !cancelled, let session else { return }
+    finisher = Task {
+      // The finishing deadline covers everything after this, so a stalled drain or send ends.
+      await session.beginFinishing()
+      if !cancelled {
+        if !isTest { destination = dependencies.captureDestination() }
+        publish(.finishing)
+      }
+      // Drain the remaining chunks, including the partial one capture flushes on stop, so the
+      // closing frames follow every word.
+      dependencies.stopCapture()
+      await pump?.value
+      guard !cancelled else { return }
+      await session.sendClosing()
     }
-    dependencies.stopCapture()
-    await pump?.value
   }
 
   private func transcribe(_ session: SessionMachine, chunks: AsyncThrowingStream<Data, any Error>) async -> SessionMachine.Outcome {
@@ -287,6 +298,8 @@ import Observation
       committedLength = snapshot.committed.count
       trace?.streamed = snapshot.committed
       if snapshot.state == .cancelled { publish(.cancelled) }
+      // A `finalizing` snapshot this operation didn't request is the hard cap.
+      if snapshot.state == .finalizing { finish() }
       let shown = await reviser?.submit(committed: snapshot.committed) ?? snapshot.committed
       if !cancelled && !finishing && (snapshot.state == .listening || snapshot.state == .paused) {
         publish(.capturing(snapshot, presentation.readiness ?? .init()), settled: [shown, snapshot.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: snapshot.provisional)

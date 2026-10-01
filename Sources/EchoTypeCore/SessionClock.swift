@@ -3,9 +3,9 @@ import Foundation
 /// The session's only source of time, injected so that tests move time forward explicitly
 /// instead of waiting.
 ///
-/// A session needs one wake-up at a time: the silence timeout while listening, and the hard cap
-/// once it is paused or once silence has already fired. Scheduling replaces whatever was
-/// pending, so there is no timer identity to track on either side of the seam.
+/// A session needs one wake-up at a time for readiness, silence, the hard cap or finishing,
+/// depending on its state. Scheduling replaces whatever was pending, so there is no timer
+/// identity to track on either side of the seam.
 public protocol SessionClock: Sendable {
   /// Seconds on a monotonic timeline. Only differences are meaningful.
   var now: TimeInterval { get }

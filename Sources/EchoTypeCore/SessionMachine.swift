@@ -22,9 +22,11 @@ public enum SessionError: Error, Equatable, Sendable {
 /// decides when to pause, cancel, finalise or give up. Nothing is ever committed by a timer
 /// except the hard cap: quiet only changes what the overlay renders.
 ///
-/// Usage is `run()` in its own task, `send(audio:)` while it lasts, and `trigger()` or
-/// `cancel()` to end it. `run()` returns the session's one outcome, and `snapshots` carries
-/// what an overlay renders.
+/// Usage is `run()` in its own task and `send(audio:)` while it lasts. The owner ends it with
+/// `beginFinishing()`, then `sendClosing()` once its own audio has drained, or with `cancel()`
+/// or `fail(_:)`. The machine never calls back into its owner: when the hard cap fires it begins
+/// finishing itself, and the `finalizing` snapshot is the owner's cue to drain and close.
+/// `run()` returns the session's one outcome, and `snapshots` carries what an overlay renders.
 ///
 /// The machine holds the session's one transcript: the text it inserts and the text it shows
 /// come from the same assembler. Anything else that wants live text reads `snapshots` rather
@@ -75,20 +77,14 @@ public actor SessionMachine {
   private enum Ending {
     case finalised
     case cancelled
-    /// The transcript ended without a trigger: the socket closed, or sent `transcript.done`
-    /// unasked.
+    /// The transcript ended without completing the protocol: the socket closed, or sent
+    /// `transcript.done` before closing began.
     case closed
-    /// `finalize` and `audio.done` went out and `transcript.done` never came back.
+    /// The finishing deadline passed before `transcript.done` came back.
     case timedOut
     case failed(any Error)
   }
 
-  private let onAbort: @Sendable () async -> Void
-  private var abortTask: Task<Void, Never>?
-  private let onFinishing: @Sendable () async -> Void
-  private var closingSend: Task<Void, any Error>?
-  private var finishingTask: Task<Void, Never>?
-  private var finishingEffect: Task<Void, Never>?
   private let transport: any WebSocketTransport
   private let settings: Settings
   private let clock: any SessionClock
@@ -105,18 +101,17 @@ public actor SessionMachine {
 
   private var startedAt: TimeInterval = 0
   private var lastSpeechAt: TimeInterval = 0
+  /// Recorded by `beginFinishing()`. It covers drain, the closing sends and `transcript.done`.
+  private var finishingDeadline: TimeInterval = 0
   public static let readinessTimeout: TimeInterval = 5
   private var ready = false
   private var heardSpeech = false
-  private var hasRun = false
+  /// Set once `sendClosing()` begins. The endpoint answers `audio.done` with `transcript.done`,
+  /// so a `done` after this point completes the protocol whatever the send later reports.
+  private var closingStarted = false
   private var ending: Ending?
 
-  public init(transport: any WebSocketTransport, settings: Settings, clock: any SessionClock,
-    onFinishing: @escaping @Sendable () async -> Void = {},
-    onAbort: @escaping @Sendable () async -> Void = {}
-  ) {
-    self.onAbort = onAbort
-    self.onFinishing = onFinishing
+  public init(transport: any WebSocketTransport, settings: Settings, clock: any SessionClock) {
     self.transport = transport
     self.settings = settings
     self.clock = clock
@@ -126,14 +121,13 @@ public actor SessionMachine {
 
   /// Runs the client's single typed receive loop and applies transcript/lifecycle decisions.
   public func run() async -> Outcome {
-    guard !hasRun else { return .nothing }
-    hasRun = true
-    // A synchronous cancellation signal can reach this actor before its owner's run task.
-    // It still needs normal teardown and a finished snapshot stream.
-    if let ending { return await conclude(ending) }
-    begin()
-    let ending = await readUntilEnd()
-    return await conclude(ending)
+    // Escape can reach this actor before its owner's run task does. The session still needs
+    // normal teardown and a finished snapshot stream.
+    if ending == nil {
+      begin()
+      await readUntilEnd()
+    }
+    return await conclude(ending ?? .closed)
   }
 
   /// Hands one chunk of audio to the endpoint. Audio streams while paused too, since pausing is
@@ -144,33 +138,27 @@ public actor SessionMachine {
     catch { fail(error); throw error }
   }
 
-  /// Finalizes the session after Opt+D ends capture and the remaining audio is sent.
-  public func trigger() async {
-    guard ending == nil else { return }
-    await beginFinalizing()
+  /// Moves to `finalizing` and arms the finishing deadline. Idempotent across stop, reply
+  /// request and hard cap. The owner then drains its audio and calls `sendClosing()`.
+  public func beginFinishing() {
+    guard isActive else { return }
+    finishingDeadline = clock.now + settings.finalizeTimeout
+    transition(to: .finalizing)
   }
 
-  /// Operation-bound effect before capture drain. Idempotent across stop, reply and hard cap.
-  public func enterFinishing() async {
-    guard ending == nil else { return }
-    if state != .finalizing {
-      transition(to: .finalizing)
-      clock.schedule(at: clock.now + settings.finalizeTimeout) { [weak self] in
-        await self?.finalizingDeadlineReached()
-      }
-    }
-    await finishEffect()
-  }
-
-  private func finishEffect() async {
-    if finishingEffect == nil { finishingEffect = Task { await onFinishing() } }
-    await finishingEffect?.value
+  /// Sends `finalize` and `audio.done` behind the audio already handed over, waiting for
+  /// readiness first if audio is still held. A failure before `transcript.done` fails the
+  /// session.
+  public func sendClosing() async {
+    guard ending == nil, state == .finalizing, !closingStarted else { return }
+    closingStarted = true
+    do { try await client.finish() }
+    catch { fail(error) }
   }
 
   public func fail(_ error: any Error) {
     guard ending == nil else { return }
     decide(.failed(error))
-    abortWork()
     transport.close()
   }
 
@@ -179,15 +167,13 @@ public actor SessionMachine {
     guard ending == nil else { return }
     decide(.cancelled)
     transition(to: .cancelled)
-    abortWork()
-    clock.cancel()
     transport.close()
   }
 
   /// Whether the session still accepts input: it is streaming, and nothing has ended it yet.
   ///
-  /// `ending` is set the moment the outcome is decided, so a late `trigger()` or `cancel()`
-  /// cannot land behind a session that is already on its way out.
+  /// `ending` is set the moment the outcome is decided, so a late `beginFinishing()` or
+  /// `cancel()` cannot land behind a session that is already on its way out.
   private var isActive: Bool {
     ending == nil && (state == .listening || state == .paused)
   }
@@ -204,34 +190,22 @@ public actor SessionMachine {
     startedAt = clock.now
     lastSpeechAt = startedAt
     transition(to: .listening)
-    clock.schedule(at: clock.now + Self.readinessTimeout) { [weak self] in
-      await self?.readinessExpired()
-    }
   }
 
-  private func readinessExpired() {
-    guard ending == nil, !ready, state != .finalizing else { return }
-    fail(SessionError.socket("The transcription connection did not become ready"))
-  }
-
-  private func readUntilEnd() async -> Ending {
+  private func readUntilEnd() async {
     do {
       try await client.run { [weak self] event in
         guard let self else { return false }
-        return try await self.handle(event)
+        return await self.handle(event)
       }
       decide(.closed)
     } catch {
       decide(.failed(error))
     }
-    return ending ?? .closed
   }
 
-  private func handle(_ event: STTEvent) async throws -> Bool {
+  private func handle(_ event: STTEvent) -> Bool {
     guard ending == nil else { return false }
-    if case .done = event, state == .finalizing, let closingSend {
-      try await closingSend.value
-    }
     observe(event)
     return ending == nil
   }
@@ -244,17 +218,17 @@ public actor SessionMachine {
     case .partial(let partial):
       // Speech only moves the silence and pause bookkeeping while the session is streaming.
       // Once finalising, the trailing partial `finalize` resolves into must leave the
-      // finalize deadline alone.
+      // finishing deadline alone.
       guard isActive, isSpeech(partial) else { return }
       heardSpeech = true
       lastSpeechAt = clock.now
-      if state == .paused { transition(to: .listening) }
-      reschedule()
+      if state == .paused { transition(to: .listening) } else { reschedule() }
     case .done:
-      // Text reaches the target app only on an explicit trigger or the hard cap, so a `done`
-      // arriving without one is the socket ending the transcript on its own. The accumulated
-      // text surfaces as a failure rather than as an insertion nobody asked for.
-      decide(state == .finalizing && closingSend != nil ? .finalised : .closed)
+      // Text reaches the target app only once closing has begun, after an explicit stop or the
+      // hard cap, so a `done` arriving before that is the socket ending the transcript on its
+      // own. The accumulated text surfaces as a failure rather than as an insertion nobody
+      // asked for.
+      decide(closingStarted ? .finalised : .closed)
     case .error:
       break // STTClient throws server errors before invoking the observer.
     case .created:
@@ -274,15 +248,18 @@ public actor SessionMachine {
       || !partial.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
-  /// Sets the one pending wake-up: the sooner of the silence timeout and the hard cap while
-  /// listening, and the hard cap alone once paused, since silence has already been answered.
+  private var hardCap: TimeInterval { startedAt + settings.hardCap }
+
+  /// Sets the session's one pending wake-up from its state. This is the only place a deadline
+  /// is scheduled; every state change and every input to a deadline calls it.
   private func reschedule() {
-    let hardCap = startedAt + settings.hardCap
     let deadline: TimeInterval
     switch state {
+    case .listening where !ready: deadline = startedAt + Self.readinessTimeout
+    // Paused has already answered silence, so only the hard cap remains.
     case .listening: deadline = min(lastSpeechAt + settings.silenceTimeout, hardCap)
     case .paused: deadline = hardCap
-    case .finalizing: return
+    case .finalizing: deadline = finishingDeadline
     case .idle, .cancelled:
       clock.cancel()
       return
@@ -290,68 +267,38 @@ public actor SessionMachine {
     clock.schedule(at: deadline) { [weak self] in await self?.deadlineReached() }
   }
 
-  private func deadlineReached() async {
-    guard isActive else { return }
-    if clock.now >= startedAt + settings.hardCap {
-      finishingTask = Task { await beginFinalizing() }
-      await finishingTask?.value
-    } else if heardSpeech {
-      transition(to: .paused)
-      reschedule()
-    } else {
-      // Nothing said at all: close silently rather than leave an empty overlay sitting open.
-      cancel()
-    }
-  }
-
-  /// The only route to `finalizing`: an explicit trigger or the hard cap.
-  private func beginFinalizing() async {
-    await enterFinishing()
+  private func deadlineReached() {
     guard ending == nil else { return }
-    do {
-      if closingSend == nil { closingSend = Task { try await client.finish() } }
-      try await closingSend?.value
-    } catch {
-      // The socket is gone, so `transcript.done` will never arrive. End the loop and keep
-      // whatever was finalised. `conclude` cancels the wake-up still pending from `listening`.
-      decide(.failed(error))
+    switch state {
+    case .listening where !ready:
+      fail(SessionError.socket("The transcription connection did not become ready"))
+    case .listening, .paused:
+      if clock.now >= hardCap {
+        // The owner sees `finalizing` and drains and closes as it would for a stop.
+        beginFinishing()
+      } else if heardSpeech {
+        transition(to: .paused)
+      } else {
+        // Nothing said at all: close silently rather than leave an empty overlay sitting open.
+        cancel()
+      }
+    case .finalizing:
+      // Drain, closing or `transcript.done` outlasted the deadline. Ending the loop keeps the
+      // committed segments, on the same reasoning as a dropped socket: a visibly truncated
+      // transcript beats losing the speech.
+      decide(.timedOut)
       transport.close()
-      return
+    case .idle, .cancelled:
+      break
     }
-  }
-
-  /// The endpoint never answered `finalize`. Ending the loop keeps the committed segments, on
-  /// the same reasoning as a dropped socket: a visibly truncated transcript beats losing the
-  /// speech.
-  private func finalizingDeadlineReached() {
-    guard ending == nil, state == .finalizing else { return }
-    decide(.timedOut)
-    abortWork()
-    transport.close()
-  }
-
-  private func abortWork() {
-    if abortTask == nil { abortTask = Task { await onAbort() } }
   }
 
   private func conclude(_ ending: Ending) async -> Outcome {
-    transport.close()
-    abortWork()
-    await abortTask?.value
-    if case .cancelled = ending {
-      // Join an effect already requested before cancellation, without starting a new one.
-      await finishingEffect?.value
-    } else {
-      await finishEffect()
-    }
-    // Recorded so that a late trigger or cancel is rejected rather than transitioning a session
-    // that has already ended.
+    // Recorded so that a late `beginFinishing()` or `cancel()` is rejected rather than
+    // transitioning a session that has already ended.
     decide(ending)
     clock.cancel()
     await client.close()
-    _ = await closingSend?.result
-    transport.close()
-    await finishingTask?.value
     let text = transcript.text
 
     let outcome: Outcome
@@ -376,10 +323,12 @@ public actor SessionMachine {
     return outcome
   }
 
+  /// Every state change publishes and recomputes the pending deadline.
   private func transition(to next: State) {
     guard state != next else { return }
     state = next
     publish()
+    reschedule()
   }
 
   /// Publishes the current snapshot unless it is the one already published.

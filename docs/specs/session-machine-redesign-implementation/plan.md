@@ -1,6 +1,6 @@
 # SessionMachine redesign implementation plan
 
-Status: draft; implementation has not started.
+Status: workstreams 1 and 2 accepted; final whole-feature review not started.
 
 ## Orchestration record
 
@@ -16,7 +16,7 @@ Status: draft; implementation has not started.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Protect finishing with outcome tests](01-outcome-tests.md) | Approved spec | Accepted |
-| 2 | [Invert finishing ownership](02-finishing-ownership.md) | 1 | Not started |
+| 2 | [Invert finishing ownership](02-finishing-ownership.md) | 1 | Accepted |
 | Final | [Whole-feature review](final-review.md) | 1 and 2 | Not started |
 
 Statuses: Not started, Implementing, Review, Remediation, Closure review, Blocked, Accepted. The lead updates its own row on each transition. Only one row is active at a time.
@@ -54,15 +54,16 @@ Workstream 2 is the single production change: removing the callbacks, the one de
 
 | Gate | Owner and placement | Status | Candidate | Required evidence and resume condition |
 |---|---|---|---|---|
-| G1 Signed dictation smoke check | 2, after closure before acceptance | Pending | TBD | Aidan dictates with the signed candidate: a normal dictation, stopping mid-sentence with no lost final words, Escape while Transcribing, and one reply request that sends Return. Resume when Aidan reports results in the escalation entry |
+| G1 Signed dictation smoke check | 2, after closure before acceptance | Passed, 2026-10-01 | `.build/EchoType-redesign.app`, executable SHA-256 `3dd36a71ba580cd3ae1d9fdfb307c13edb87fdb90f5e7c96084d549547f45415` | Aidan explicitly reported normal dictation, stop mid-sentence without lost words and Escape while Transcribing passed. His fourth test, dictated ending with "reply with EchoType", arrived as a submitted message in this thread, confirming paste and Return. See [workstream 2 external validation](02-finishing-ownership.md#external-validation) |
 
 ## Escalations
 
-None.
+None. G1 results are preserved in the gate table and workstream 2 record.
 
 ## Conventions learned
 
 - Outcome tests for an ordering-sensitive behavior need a mutation check: move or remove the production line the behavior depends on, confirm a test fails, then restore `Sources/` exactly. Workstream 1's first pass missed a destination captured at insertion time and a repeated stop.
+- Electron focused-field lookup may require enabling its advertised AXManualAccessibility capability. Preserve two-sample capture and application/window/target/PID identity checks; readiness success alone is not insertion or signed smoke evidence.
 
 ## Completion summary
 
@@ -78,4 +79,7 @@ Filled by the final-review lead before its commit.
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-10-01 | Accept the test point rename from `closingSend` to `closingFrame` as packet-level drift | The obsolete-name check also matched the fake transport's point name. The rename changes no assertions or test behavior | Aidan | 2 |
+| 2026-10-01 | Resolve optional O1 and O4 after independent review | Add a cancellation check after audio drain and before closing messages; update the SessionClock comment to include readiness and finishing. O2 remains unchanged | Aidan | 2 |
+| 2026-10-01 | Add the authorised Electron destination correction to workstream 2 | T3 hid its focused web field until AXManualAccessibility was enabled. Request it only when false; retain all destination identity checks. This extends the specification and packet destination non-goal | Aidan | 2 |
+| 2026-10-01 | Accept G1 on the supplied signed candidate | Aidan reported checks 1, 2 and 3 passed; his fourth dictated reply request arrived as a submitted message, confirming paste and Return. The executable hash still matches the recorded candidate | Aidan | 2 and Final |

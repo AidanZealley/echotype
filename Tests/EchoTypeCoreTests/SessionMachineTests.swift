@@ -69,7 +69,7 @@ struct SessionMachineTests {
     #expect(await log.next() == .listening)
     await transport.emit(Fixture.partial("three", isFinal: true, speechFinal: true))
 
-    await session.trigger()
+    await session.finish()
     #expect(await log.next() == .finalizing)
     #expect(await transport.textFrames == closingFrames)
 
@@ -102,6 +102,9 @@ struct SessionMachineTests {
     await clock.advance(by: 300)
     #expect(await log.next() == .paused)
     #expect(await log.next() == .finalizing)
+    // The owner drains its audio before closing, so the session never closes on its own.
+    #expect(await transport.textFrames.isEmpty)
+    await session.sendClosing()
     #expect(await transport.textFrames == closingFrames)
 
     await transport.emit(Fixture.done)
@@ -132,7 +135,7 @@ struct SessionMachineTests {
     let running = await start()
     defer { running.cancel(); transport.close() }
 
-    await session.trigger()
+    await session.finish()
     #expect(await log.next() == .finalizing)
     #expect(await transport.textFrames == closingFrames)
 
@@ -148,7 +151,7 @@ struct SessionMachineTests {
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("said and done", speechFinal: true))
 
-    await session.trigger()
+    await session.finish()
     #expect(await log.next() == .finalizing)
     #expect(await transport.textFrames == closingFrames)
 
@@ -212,6 +215,24 @@ struct SessionMachineTests {
     #expect(await transport.textFrames.isEmpty)
   }
 
+  @Test("A transcript.done before closing begins is not a finalised transcript")
+  func doneBeforeClosingDoesNotCommit() async {
+    let running = await start()
+    defer { running.cancel(); transport.close() }
+    await transport.emit(Fixture.created)
+    await transport.emit(Fixture.partial("still draining", speechFinal: true))
+
+    // Finishing has begun, but the owner is still draining audio the endpoint has not heard.
+    await session.beginFinishing()
+    await transport.emit(Fixture.done)
+    guard case .failed(let text, .socket) = await running.value else {
+      Issue.record("expected a socket failure")
+      return
+    }
+    #expect(text == "still draining")
+    #expect(await transport.textFrames.isEmpty)
+  }
+
   @Test("A frame the session cannot decode ends the session rather than truncating in silence")
   func undecodableFrameEndsTheSession() async {
     let running = await start()
@@ -224,7 +245,7 @@ struct SessionMachineTests {
     // produce `.insert("first sentence")`: the client died on the bad frame while the session
     // kept looping, so the trigger reported a truncated transcript as a clean success.
     await transport.emit(Fixture.partial("second sentence", isFinal: true, speechFinal: true))
-    await session.trigger()
+    await session.finish()
     await transport.emit(Fixture.done)
 
     let outcome = await running.value
@@ -243,7 +264,7 @@ struct SessionMachineTests {
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial(""))
 
-    await session.trigger()
+    await session.finish()
     #expect(await log.next() == .finalizing)
 
     await transport.emit(Fixture.done)
@@ -292,7 +313,7 @@ struct SessionMachineTests {
         .init(state: .listening, committed: "install pnpm then add shadcn", utterance: "", provisional: ""),
       ])
 
-    await session.trigger()
+    await session.finish()
     await transport.emit(Fixture.done)
     #expect(await running.value == .insert("install pnpm then add shadcn"))
   }
@@ -333,7 +354,7 @@ struct SessionMachineTests {
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("said and done", speechFinal: true))
 
-    await session.trigger()
+    await session.finish()
     #expect(await log.next() == .finalizing)
     // What `finalize` resolves the tail into arrives while the pill shows transcribing.
     await transport.emit(Fixture.partial("then some"))
@@ -370,7 +391,7 @@ struct SessionMachineTests {
     defer { transport.close() }
     await transport.emit(Fixture.created)
     await transport.emit(Fixture.partial("available words", speechFinal: true))
-    await session.trigger()
+    await session.finish()
     transport.close()
     guard case .failed(let text, .socket) = await running.value else { Issue.record("Expected incomplete protocol failure"); return }
     #expect(text == "available words")
@@ -385,79 +406,12 @@ struct SessionMachineTests {
     }
     guard case .failed(_, .socket) = await running.value else { Issue.record("Expected backlog failure"); return }
   }
-
-  private actor FinishingLog {
-    var calls = 0
-    var framesAtEntry: [[String]] = []
-    func record(_ frames: [String]) { calls += 1; framesAtEntry.append(frames) }
-  }
-
-  @Test("Finishing effect precedes protocol close and runs once", arguments: ["stop", "hardCap", "failure", "cancel"])
-  func finishingEffectOrdering(path: String) async {
-    let effect = FinishingLog()
-    let session = SessionMachine(transport: transport, settings: Settings(), clock: clock,
-      onFinishing: { await effect.record(await transport.textFrames) })
-    let snapshots = SnapshotLog(session.snapshots)
-    let running = Task { await session.run() }
-    defer { running.cancel(); transport.close() }
-    #expect(await snapshots.next() == .listening)
-    await transport.emit(Fixture.created)
-    await transport.emit(Fixture.partial("words", speechFinal: true))
-    switch path {
-    case "stop":
-      // Controller enters finishing before stopping/draining capture; trigger follows drain.
-      await session.enterFinishing()
-      #expect(await effect.calls == 1)
-      #expect(await transport.textFrames.isEmpty)
-      await session.enterFinishing()
-      await session.trigger()
-      await transport.emit(Fixture.done)
-    case "hardCap":
-      await clock.advance(by: 300)
-      await transport.emit(Fixture.done)
-    case "failure":
-      await transport.fail(with: SessionError.socket("lost"))
-    default:
-      await session.cancel()
-    }
-    _ = await running.value
-    #expect(await effect.calls == (path == "cancel" ? 0 : 1))
-    #expect(await effect.framesAtEntry.allSatisfy { $0.isEmpty })
-  }
-
-  @Test("Concurrent finishing requests await the same effect before protocol closure")
-  func finishingEffectIsAwaited() async {
-    let (entered, signal) = AsyncStream<Void>.makeStream()
-    let (released, release) = AsyncStream<Void>.makeStream()
-    defer { signal.finish(); release.finish(); transport.close() }
-    let effect = FinishingLog()
-    let session = SessionMachine(transport: transport, settings: Settings(), clock: clock,
-      onFinishing: {
-        await effect.record(await transport.textFrames)
-        signal.yield(())
-        for await _ in released { break }
-      })
-    let snapshots = SnapshotLog(session.snapshots)
-    let running = Task { await session.run() }
-    defer { running.cancel() }
-    #expect(await snapshots.next() == .listening)
-    await transport.emit(Fixture.created)
-    let stop = Task { await session.enterFinishing() }
-    for await _ in entered { break }
-    let trigger = await session.startTriggering()
-    #expect(await transport.textFrames.isEmpty)
-    release.yield(())
-    await stop.value
-    await trigger.value
-    #expect(await effect.calls == 1)
-    #expect(await transport.textFrames == closingFrames)
-    await transport.emit(Fixture.done)
-    _ = await running.value
-  }
-
 }
 
 private extension SessionMachine {
-  // Run until trigger actually suspends on the finishing effect before releasing that effect.
-  func startTriggering() -> Task<Void, Never> { Task.immediate { await self.trigger() } }
+  /// What the owning operation does on a stop once its audio has drained.
+  func finish() async {
+    beginFinishing()
+    await sendClosing()
+  }
 }
