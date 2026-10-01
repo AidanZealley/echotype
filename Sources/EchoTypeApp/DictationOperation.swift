@@ -55,6 +55,9 @@ import Observation
     var startCapture: @MainActor (String?) async throws -> AsyncThrowingStream<Data, any Error>
     var stopCapture: @MainActor () -> Void
     var releaseCapture: @MainActor () async -> Void
+    /// What the provider needs before a dictation starts.
+    var credential: Credential
+    /// The provider's stored key, or nil.
     var key: @Sendable () async -> String?
     var transcription: TranscriptionService
     var captureDestination: @MainActor () -> Destination?
@@ -173,11 +176,9 @@ import Observation
     publish(.starting(.init(destination: destinationReady)))
     let chunks = try await dependencies.startCapture(settings.inputDeviceID)
     try checkStartup()
-    guard let key = await dependencies.key() else {
-      try checkStartup()
-      throw OperationError.noAPIKey
-    }
+    let key = await dependencies.key()
     try checkStartup()
+    guard dependencies.credential.isSatisfied(by: key) else { throw OperationError.noAPIKey }
     let transcriber = try await startTranscriber(key: key)
     let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
@@ -192,7 +193,7 @@ import Observation
 
   /// Starting may suspend, so Escape or a capture failure during it must still close what it
   /// opened.
-  private func startTranscriber(key: String) async throws -> any LiveTranscriber {
+  private func startTranscriber(key: String?) async throws -> any LiveTranscriber {
     let service = dependencies.transcription
     let transcriber = try await service.start(
       TranscriptionRequest(settings: settings, keytermLimit: service.keytermLimit, credential: key))

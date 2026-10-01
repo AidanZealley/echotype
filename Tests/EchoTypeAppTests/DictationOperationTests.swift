@@ -178,6 +178,9 @@ private struct Insertion: Equatable {
   var insertions: [Insertion] = []
   var presented: [DictationOperation.Presentation] = []
   var insertionResult = Clipboard.InsertionResult(insertion: .attempted, sending: .notRequested)
+  var credential = Credential.apiKey(placeholder: "")
+  var storedKey: String? = "fake-key"
+  var requests: [TranscriptionRequest] = []
 
   init() {
     transcriber = Transcriber(points)
@@ -200,11 +203,13 @@ private struct Insertion: Equatable {
           Task { await points.pass(.captureStop); self.chunks.finish() }
         },
         releaseCapture: { points.record(.captureRelease) },
-        key: {
+        credential: credential,
+        key: { [storedKey] in
           await points.pass(.key)
-          return "fake-key"
+          return storedKey
         },
-        transcription: TranscriptionService(keytermLimit: 100) { _ in
+        transcription: TranscriptionService(keytermLimit: 100) { request in
+          await MainActor.run { self.requests.append(request) }
           await points.pass(.transcriberStart)
           return self.transcriber
         },
@@ -369,6 +374,29 @@ struct DictationOperationTests {
     guard case .failed = result.outcome else { Issue.record("Expected startup failure"); return }
     #expect(h.points.count(.transcriberStart) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
     #expect(result.startupFailure != nil && result.trace == nil)
+  }
+
+  @Test("A provider that needs no credential dictates without a stored key")
+  func noCredentialNeeded() async {
+    let h = Harness()
+    h.credential = .none
+    h.storedKey = nil
+    let operation = h.operation()
+    let task = await h.start(operation)
+    operation.commit()
+    #expect(await task.value.outcome == .insert("spoken words"))
+    #expect(h.requests.map(\.credential) == [nil])
+  }
+
+  @Test("A missing key fails before a transcriber starts")
+  func missingKey() async {
+    let h = Harness()
+    h.storedKey = nil
+    let result = await h.operation().run()
+    guard case DictationOperation.OperationError.noAPIKey? = result.startupFailure else {
+      Issue.record("Expected noAPIKey"); return
+    }
+    #expect(h.points.count(.transcriberStart) == 0 && h.points.count(.captureRelease) == 1)
   }
 
   @Test("Readiness fails the session without .ready in five seconds or past the held audio bound",

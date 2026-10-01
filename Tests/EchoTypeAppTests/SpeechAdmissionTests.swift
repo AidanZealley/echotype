@@ -44,7 +44,7 @@ private final class AdmissionTranscriber: LiveTranscriber {
       write: { _ in }, post: { _, _ in }, wait: { _ in })),
     makeReader: { source, id, settings, present, _ in
       let reader = Reader(source, id: id, settings: settings, dependencies: .init(
-        selection: { _ in nil }, cleanup: {}, key: {
+        selection: { _ in nil }, cleanup: {}, credential: .apiKey(placeholder: ""), key: {
           self.readingEntered.open(); await self.readingRelease.wait(); return nil
         }, voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 1) { _ in
           fatalError("No network expected")
@@ -60,7 +60,8 @@ private final class AdmissionTranscriber: LiveTranscriber {
           } else { await self.captureRelease.wait() }
           return self.audio
         },
-        stopCapture: { self.chunks.finish() }, releaseCapture: {}, key: { "fake" },
+        stopCapture: { self.chunks.finish() }, releaseCapture: {},
+        credential: .apiKey(placeholder: ""), key: { "fake" },
         transcription: TranscriptionService(keytermLimit: 100) { _ in self.transcriber },
         captureDestination: { nil },
         insert: { _, _, _, _, begin in

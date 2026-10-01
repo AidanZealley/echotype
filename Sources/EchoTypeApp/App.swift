@@ -1,4 +1,5 @@
 import AppKit
+import EchoTypeCore
 import ServiceManagement
 import SwiftUI
 
@@ -75,7 +76,9 @@ struct EchoTypeApp: App {
   private var statusLine: String {
     guard let controller else { return "Overlay demo" }
     if !store.hotkeysActive { return "Inactive" }
-    if controller.hasAPIKey == false { return "Add your xAI API key in Settings" }
+    if controller.hasAPIKey == false {
+      return "Add your \(Providers[store.settings.provider].name) API key in Settings"
+    }
     if let error = controller.lastError { return error }
     if controller.hasAPIKey == nil { return "Checking API key…" }
     return switch controller.state {

@@ -1,7 +1,8 @@
 # 0010 How settings and the API key are stored
 
 Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-30 for compatible speech-speed validation
-and 2026-10-01 for the retired `cleanUp` key.
+and 2026-10-01 for the retired `cleanUp` key, the `provider` key and one Keychain item per
+provider.
 Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 ## Context
@@ -15,7 +16,7 @@ Keychain item the app cannot read without a prompt.
 
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
-  `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
+  `provider`, `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
   `readAloudHotkey` (shaped like `hotkey`), `voice`, `speechSpeed` and
   `sendReplyRequests`. The key names and
   the modifier bit positions are the upgrade contract.
@@ -28,6 +29,9 @@ Keychain item the app cannot read without a prompt.
   requests, including when callers construct or mutate Settings with NaN or infinity.
   The slider uses the shared range and retains its 0.1 step. Storage keys and modifier bits
   are unchanged; there is no migration or schema version.
+- `provider` is the selected provider's id ([0025](0025-provider-adapters.md)). A missing
+  id, or one no registered provider has, gives the first entry of `Providers.all`, today
+  `xai`.
 - The retired `batchOnCommit` and `cleanUp` keys are ignored on decode and never written,
   so an old batch or cleanup preference does not govern revision, which is always on (see
   [0021](0021-revise-committed-dictation.md)).
@@ -47,12 +51,14 @@ Keychain item the app cannot read without a prompt.
 - `SettingsStore` in the app is the only writer of `UserDefaults`. The hotkey monitor
   reads the current hotkey on every key event, so a change applies without a relaunch.
   The coordinator snapshots settings when reserving dictation, Test or reading.
-- The API key lives only in the Keychain, as one generic password item whose service
-  is the bundle identifier in `Resources/Info.plist` and whose account is `xai`.
-  `Keychain.save` deletes every item under that service, then adds the new one.
-  Because the app writes the item itself, it reads it back
-  without a prompt. Keychain calls can block on a prompt, so the window makes them from
-  detached tasks.
+- Each provider's API key lives only in the Keychain, as one generic password item whose
+  service is the bundle identifier in `Resources/Info.plist` and whose account is the
+  provider id, `xai` for xAI. The wrapper reads, saves and removes only the selected
+  provider's item; reading no longer accepts an item under any other account name, and
+  there is no migration for one. `Keychain.save` updates the existing item, so its access
+  rule survives a changed key, and adds one when there is none. Because the app writes the
+  item itself, it reads it back without a prompt. Keychain calls can block on a prompt, so
+  the app makes them from detached tasks.
 
 ## Consequences
 
@@ -62,6 +68,6 @@ Keychain item the app cannot read without a prompt.
   construction/mutation through actual JSON persistence and speech request encoding.
   Coordinator coverage preserves a previous Last Dictation across Test and checks that
   dictation/read-aloud hotkeys, Escape, Space and supplied speech cannot take over Test.
-- Delete-then-add leaves a gap of microseconds with no key, and a failed add leaves none.
-  The window reports a failed save. Changing this means checking the Keychain paths by
-  hand again.
+- The window reports a failed save or remove. Changing the Keychain paths means checking
+  them by hand again; reading, saving and removing by account is checked on the Mac rather
+  than through a protocol around the Keychain.

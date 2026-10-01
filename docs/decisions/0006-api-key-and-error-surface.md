@@ -3,7 +3,8 @@
 Status: accepted, 2026-09-23 (dictation). The error surface is superseded by
 [0009](0009-overlay-behaviour.md): failures now show in the overlay. The hand-seeded key
 is superseded by [0010](0010-settings-storage-and-api-key.md), where the settings window
-writes it. Reading the key from the Keychain stands.
+writes it. Reading the key from the Keychain stands. Errors are worded through the
+provider adapters since 2026-10-01 ([0025](0025-provider-adapters.md)).
 
 ## Context
 
@@ -21,8 +22,16 @@ variable was never an option.
   missing key. The overlay and settings milestones take this over. (Superseded: the
   state line now shows the session state, missing key and most recent session error.)
 - `api.x.ai` answers a wrong key with 400 (`"Incorrect API key provided"`) and sends
-  401 only when no credentials are presented. `STTError(httpStatus:)` stays faithful
-  to HTTP, and the app words both `.badRequest` and `.unauthorized` as a key problem.
+  401 only when no credentials are presented. Every failure reaches the app as a
+  `ProviderError`. The shared mapping in `Providers/HTTP/` gives 401 and 403
+  `rejectedCredential`, 429 `rateLimited`, 5xx `unavailable` and anything else
+  `failed`; the xAI adapter also maps 400 to `rejectedCredential`. (Updated 2026-10-01:
+  this replaced `STTError(httpStatus:)`.)
+- The app words each `ProviderError` with the name of the provider the dictation or
+  reading ran with: "<name> rejected the API key", "<name> rate limit reached", "<name> is
+  unavailable" and "<name> error: …", and a missing key as "Add your <name> API key in
+  EchoType Settings". For xAI this is the text the app showed before provider adapters.
+  Connection, microphone and selection messages name no provider.
 
 ## Consequences
 

@@ -87,11 +87,12 @@ import Observation
     let clipboard = Clipboard()
     let panel = OverlayPanel()
     self.init(store: store, clipboard: clipboard, makeReader: { source, id, settings, present, level in
-      Reader(source, id: id, settings: settings, dependencies: .init(
+      let provider = Providers[settings.provider]
+      return Reader(source, id: id, settings: settings, dependencies: .init(
         selection: { await clipboard.copySelection(cancelled: $0) },
         cleanup: { await clipboard.waitForCleanup() },
-        key: { await Task.detached { Keychain.apiKey() }.value },
-        voice: XAI.voice, player: SpeechPlayer(onLevel: level)), onPresentation: present)
+        credential: provider.credential, key: { await Self.storedKey(for: provider) },
+        voice: provider.voice, player: SpeechPlayer(onLevel: level)), onPresentation: present)
     }, focusedScreen: { NSScreen.forFocusedWindow() }, showPanel: { pill, screen in
       if let screen { panel.show(pill, on: screen) }
     }, hidePanel: { panel.hide() })
@@ -122,16 +123,32 @@ import Observation
           SpeechDelivery.replyName, object: nil, userInfo: reply, options: [.deliverImmediately])
       }
     }
-    Task { await refreshAPIKeyStatus() }
+    // Checks the key at launch and again whenever the provider changes.
+    Task { [weak self, store] in
+      var checked: ProviderID?
+      for await provider in Observations({ store.settings.provider }) where provider != checked {
+        checked = provider
+        await self?.refreshAPIKeyStatus()
+      }
+    }
   }
 
+  /// Whether the selected provider has its credential.
   func refreshAPIKeyStatus(clearError: Bool = false) async {
     keyStatusGeneration += 1
     let generation = keyStatusGeneration
-    let available = await Task.detached { Keychain.apiKey() != nil }.value
+    let provider = Providers[store.settings.provider]
+    let available = provider.credential.isSatisfied(by: await Self.storedKey(for: provider))
     guard generation == keyStatusGeneration else { return }
     hasAPIKey = available
     if clearError { lastError = nil }
+  }
+
+  /// The provider's key from the Keychain, read off the main actor. A provider that needs no
+  /// key reads nothing.
+  nonisolated private static func storedKey(for provider: Provider) async -> String? {
+    guard case .apiKey = provider.credential else { return nil }
+    return await Task.detached { Keychain.key(for: provider.id) }.value
   }
 
   // MARK: Input
@@ -206,7 +223,7 @@ import Observation
       let failure = await operation.run()
       guard isReading(operation) else { return }
       phase = .idle; readingTask = nil
-      end(showing: failure.map(describe))
+      end(showing: failure.map { Self.describe($0, provider: Providers[settings.provider]) })
     }
   }
 
@@ -252,18 +269,20 @@ import Observation
   private func makeOperation(isTest: Bool) -> DictationOperation {
     if let makeDictation { return makeDictation(isTest) }
     let audio = AudioCapture()
-    let operation = DictationOperation(settings: store.settings, isTest: isTest,
+    let settings = store.settings
+    let provider = Providers[settings.provider]
+    let operation = DictationOperation(settings: settings, isTest: isTest,
       dependencies: .init(
         startCapture: { try await audio.start(deviceUID: $0) },
         stopCapture: { audio.stop() },
         releaseCapture: { await audio.waitForCleanup() },
-        key: { await Task.detached { Keychain.apiKey() }.value },
-        transcription: XAI.transcription,
+        credential: provider.credential, key: { await Self.storedKey(for: provider) },
+        transcription: provider.transcription,
         captureDestination: { DestinationFocus().capture() },
         insert: { [clipboard] text, destination, sends, cancelled, begin in
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
         },
-        cleanup: XAI.cleanup,
+        cleanup: provider.cleanup,
         clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()),
       onPresentation: { [weak self] presentation, settled, provisional in
         if presentation == .cancelled { self?.end(); return }
@@ -314,8 +333,11 @@ import Observation
       let result = await operation.run()
       guard owns(operation) else { return result }
       if let trace = result.trace { lastTrace = trace }
-      var message = result.startupFailure.map(describe)
-      if message == nil, case .failed(_, let error) = result.outcome { message = describe(error) }
+      let provider = Providers[operation.settings.provider]
+      var message = result.startupFailure.map { Self.describe($0, provider: provider) }
+      if message == nil, case .failed(_, let error) = result.outcome {
+        message = Self.describe(error, provider: provider)
+      }
       if case .skipped = result.insertion.insertion {
         message = [message, "Destination changed or unavailable. Copy the text from Last Dictation."].compactMap { $0 }.joined(separator: " ")
       } else if case .skipped = result.insertion.sending {
@@ -339,11 +361,12 @@ import Observation
     guard owns(operation) else { return nil }
     phase = .idle
     operationTask = nil
-    if let failure = result.startupFailure { return .failed(describe(failure)) }
+    let provider = Providers[operation.settings.provider]
+    if let failure = result.startupFailure { return .failed(Self.describe(failure, provider: provider)) }
     return switch result.outcome {
     case .insert(let text): .heard(text)
     case .nothing: .heardNothing
-    case .failed(_, let error): .failed(describe(error))
+    case .failed(_, let error): .failed(Self.describe(error, provider: provider))
     }
   }
 
@@ -399,19 +422,15 @@ import Observation
     }
   }
 
-  private static let noAPIKey = "Add your xAI API key in EchoType Settings"
-
-  /// Words a dictation or reading failure for the pill.
-  private func describe(_ error: any Error) -> String {
+  /// Words a dictation or reading failure for the pill, naming the provider it ran with.
+  static func describe(_ error: any Error, provider: Provider) -> String {
     switch error {
     case Reader.Failure.nothingSelected:
       "Nothing selected"
-    case Reader.Failure.noAPIKey:
-      Self.noAPIKey
+    case Reader.Failure.noAPIKey, DictationOperation.OperationError.noAPIKey:
+      "Add your \(provider.name) API key in EchoType Settings"
     case Reader.Failure.playback(let underlying):
       "Audio output failed: \(underlying.localizedDescription)"
-    case DictationOperation.OperationError.noAPIKey:
-      Self.noAPIKey
     case AudioCapture.Failure.microphoneDenied:
       "Microphone access is off. Allow it in System Settings > Privacy & Security > Microphone"
     case AudioCapture.Failure.noInputDevice:
@@ -420,7 +439,7 @@ import Observation
       "Microphone failed: \(underlying.localizedDescription)"
     // Reading throws `ProviderError` itself, where dictation wraps it in `SessionError`.
     case SessionError.provider(let error), let error as ProviderError:
-      describe(error)
+      describe(error, provider: provider)
     case SessionError.socket(let description):
       "Connection failed: \(description)"
     case let error as URLError:
@@ -430,12 +449,12 @@ import Observation
     }
   }
 
-  private func describe(_ error: ProviderError) -> String {
+  private static func describe(_ error: ProviderError, provider: Provider) -> String {
     switch error {
-    case .rejectedCredential: "xAI rejected the API key"
-    case .rateLimited: "xAI rate limit reached"
-    case .unavailable: "xAI is unavailable"
-    case .failed(let description): "xAI error: \(description)"
+    case .rejectedCredential: "\(provider.name) rejected the API key"
+    case .rateLimited: "\(provider.name) rate limit reached"
+    case .unavailable: "\(provider.name) is unavailable"
+    case .failed(let description): "\(provider.name) error: \(description)"
     }
   }
 }

@@ -30,7 +30,7 @@ struct SettingsView: View {
           .navigationTitle("EchoType Settings")
       }
       Tab("API Key", systemImage: "key") {
-        APIKeyTab(controller: controller)
+        APIKeyTab(store: store, controller: controller)
           .navigationTitle("EchoType Settings")
       }
       Tab("Updates", systemImage: "arrow.triangle.2.circlepath") {
@@ -177,7 +177,7 @@ private struct ReadAloudTab: View {
         }
       }
       Picker("Voice", selection: $store.settings.voice) {
-        ForEach(XAI.voice.voices) { voice in
+        ForEach(Providers[store.settings.provider].voice.voices) { voice in
           Text(verbatim: voice.name).tag(voice.id)
         }
       }
@@ -209,13 +209,14 @@ extension EchoTypeCore.Settings.Hotkey {
   }
 }
 
-/// A saved key is shown masked, never in an editable field. Save, Replace and Remove are
-/// explicit, and every Keychain call runs off the main actor with the buttons disabled until it
-/// finishes, so two writes cannot race.
+/// The selected provider's key. A saved key is shown masked, never in an editable field. Save,
+/// Replace and Remove are explicit, and every Keychain call runs off the main actor with the
+/// buttons disabled until it finishes, so two writes cannot race.
 ///
 /// Test runs a five second session through the controller with the saved key and shows what it
 /// heard.
 private struct APIKeyTab: View {
+  let store: SettingsStore
   let controller: DictationController?
   /// What the Keychain holds. Nil when there is no key.
   @State private var savedKey: String?
@@ -232,9 +233,15 @@ private struct APIKeyTab: View {
   @State private var testing = false
   @State private var testOutcome: DictationController.TestOutcome?
 
+  private var provider: Provider { Providers[store.settings.provider] }
+
+  private var placeholder: String {
+    if case .apiKey(let placeholder) = provider.credential { placeholder } else { "" }
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("xAI API key")
+      Text(verbatim: "\(provider.name) API key")
       if !loaded {
         ProgressView().controlSize(.small)
       } else if let savedKey, !replacing {
@@ -247,8 +254,9 @@ private struct APIKeyTab: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
-    .task {
-      savedKey = await Task.detached { Keychain.apiKey() }.value
+    .task(id: provider.id) {
+      let id = provider.id
+      savedKey = await Task.detached { Keychain.key(for: id) }.value
       loaded = true
     }
     .confirmationDialog("Remove the API key?", isPresented: $confirmingRemove) {
@@ -296,7 +304,7 @@ private struct APIKeyTab: View {
   /// means it is not masked, which a secure field would need.
   private var entry: some View {
     VStack(alignment: .leading, spacing: 8) {
-      TextField("xAI API key", text: $draft, prompt: Text(verbatim: "xai-…"), axis: .vertical)
+      TextField("\(provider.name) API key", text: $draft, prompt: Text(verbatim: placeholder), axis: .vertical)
         .labelsHidden()
         .font(.body.monospaced())
         .lineLimit(2...4)
@@ -340,7 +348,7 @@ private struct APIKeyTab: View {
     }
   }
 
-  /// `xai-••••…••••a3F9`: enough to tell keys apart without showing one. The bullets fill one
+  /// `key-••••…••••a3F9`: enough to tell keys apart without showing one. The bullets fill one
   /// line of `width`, up to the key's own length.
   private static func masked(_ key: String, width: CGFloat) -> String {
     let prefix = key.firstIndex(of: "-").map { key[...$0] } ?? ""
@@ -362,7 +370,8 @@ private struct APIKeyTab: View {
   private func save() async {
     let key = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !key.isEmpty, !writing else { return }
-    guard await write("Couldn't save the key", { Keychain.save(key) }) else { return }
+    let id = provider.id
+    guard await write("Couldn't save the key", { Keychain.save(key, for: id) }) else { return }
     savedKey = key
     await controller?.refreshAPIKeyStatus(clearError: true)
     draft = ""
@@ -371,7 +380,8 @@ private struct APIKeyTab: View {
   }
 
   private func remove() async {
-    guard await write("Couldn't remove the key", Keychain.clear) else { return }
+    let id = provider.id
+    guard await write("Couldn't remove the key", { Keychain.remove(for: id) }) else { return }
     savedKey = nil
     await controller?.refreshAPIKeyStatus(clearError: true)
     revealed = false
@@ -428,7 +438,7 @@ private struct KeytermsTab: View {
       HStack {
         Text("Separate with commas")
         Spacer()
-        Text(verbatim: "\(store.settings.keyterms.count) of \(XAI.transcription.keytermLimit - 1) keyterms used")
+        Text(verbatim: "\(store.settings.keyterms.count) of \(Providers[store.settings.provider].transcription.keytermLimit - 1) keyterms used")
           .monospacedDigit()
       }
       .foregroundStyle(.secondary)

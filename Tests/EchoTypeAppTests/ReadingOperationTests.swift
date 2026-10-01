@@ -51,6 +51,8 @@ private final class FakeSpeechStream: SpeechStream {
   var suspendCleanup = false
   var cleanup = 0
   var keys = 0
+  var credential = Credential.apiKey(placeholder: "")
+  var storedKey: String? = "fake"
   init(_ request: FakeSpeechStream = FakeSpeechStream()) { self.request = request }
   func reader(_ source: Reader.Source = .text("Hello"), id: UUID = UUID(),
     settings: Settings = Settings(), onPresentation: @escaping @MainActor (Reader) -> Void = { _ in }
@@ -64,10 +66,10 @@ private final class FakeSpeechStream: SpeechStream {
       }, cleanup: {
         self.cleanup += 1; self.cleanupEntered.open()
         if self.suspendCleanup { await self.cleanupRelease.wait() }
-      }, key: {
+      }, credential: credential, key: {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
-        return "fake"
+        return self.storedKey
       }, voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 5) {
           request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
         }, player: playback.player), onPresentation: onPresentation)
@@ -123,6 +125,23 @@ private final class FakeSpeechStream: SpeechStream {
     #expect(await reader.run() is Reader.Failure)
     if case .failed = reader.presentation {} else { Issue.record("Failure presentation missing") }
     #expect(fixture.keys == 0 && fixture.requests.isEmpty && fixture.cleanup == 1)
+  }
+
+  @Test("A provider that needs no credential reads without a stored key")
+  func noCredentialNeeded() async {
+    let fixture = ReadingFixture(); fixture.credential = .none; fixture.storedKey = nil
+    let reader = fixture.reader(); let task = Task { await reader.run() }
+    await fixture.request.entered.wait(); reader.stop()
+    #expect(await task.value == nil)
+    #expect(fixture.requests.map(\.credential) == [nil])
+  }
+
+  @Test("A missing key fails before any request")
+  func missingKey() async {
+    let fixture = ReadingFixture(); fixture.storedKey = nil
+    let reader = fixture.reader()
+    guard case Reader.Failure.noAPIKey? = await reader.run() else { Issue.record("Expected noAPIKey"); return }
+    #expect(fixture.requests.isEmpty)
   }
 
   @Test func fasterThanPlaybackResponseStopsAtQueueLimit() async {

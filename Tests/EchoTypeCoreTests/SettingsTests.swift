@@ -6,6 +6,7 @@ import Testing
 func settingsRoundTrip() {
   let settings = Settings(
     hotkey: .controlOptionD,
+    provider: "xai",
     keyterms: ["shadcn", "TanStack Start"],
     language: "en-GB",
     inputDeviceID: "BuiltInMicrophoneDevice",
@@ -16,6 +17,7 @@ func settingsRoundTrip() {
   )
 
   #expect(Settings(decoding: settings.encoded()) == settings)
+  #expect(String(decoding: settings.encoded(), as: UTF8.self).contains(#""provider":"xai""#))
 }
 
 /// The bytes this version stores. If this fails, a key name, the hotkey's shape or a modifier's
@@ -27,13 +29,14 @@ func settingsRoundTrip() {
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
+    {"hotkey":{"keyCode":2,"modifiers":6},"provider":"xai","keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":1.25}
     """#.utf8)
 
   #expect(
     Settings(decoding: stored)
       == Settings(
         hotkey: .controlOptionD,
+        provider: "xai",
         keyterms: ["shadcn", "TanStack Start"],
         language: "en-GB",
         inputDeviceID: "BuiltInMicrophoneDevice",
@@ -51,10 +54,19 @@ func missingFieldsDefault() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6}}"#.utf8)
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
+  #expect(Settings(decoding: stored).provider == Providers.all[0].id)
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
   #expect(Settings(decoding: stored).voice == "ara")
   #expect(Settings(decoding: stored).speechSpeed == 1.0)
   #expect(Settings(decoding: stored).sendReplyRequests)
+}
+
+@Test("An unknown provider falls back to the default without discarding other settings")
+func unknownProvider() {
+  let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6},"provider":"retired"}"#.utf8)
+
+  #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
+  #expect(Settings(decoding: stored).provider == Providers.all[0].id)
 }
 
 @Test("A malformed sendReplyRequests falls back to on without discarding other settings")
