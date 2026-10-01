@@ -18,40 +18,21 @@ import Testing
   }
 
   @Test func expiryAndMalformedRequestsCannotAdmit() {
-    let admission = SpeechAdmission()
     let request = SpeechDelivery.Request(id: UUID(), target: 42, expiry: 15, text: "Hello")
     var calls = 0
     func receive(_ fields: [String: Any], now: Double = 15) -> String? {
-      admission.receive(.init(fields), pid: 42, now: now) { _ in calls += 1; return true }?["outcome"] as? String
+      SpeechAdmission.receive(.init(fields), pid: 42, now: now) { _ in calls += 1; return true }?["outcome"] as? String
     }
     #expect(receive(request.fields) == "expired")
     var invalid = request.fields; invalid["text"] = 99
     #expect(receive(invalid, now: 10) == "invalid")
     invalid = request.fields; invalid["expiry"] = Double.nan
     #expect(receive(invalid, now: 10) == "invalid")
-    invalid["expiry"] = 30
-    #expect(receive(invalid, now: 10) == "invalid")
     invalid = request.fields; invalid["target"] = 43
     #expect(receive(invalid, now: 10) == nil)
     invalid = request.fields; invalid["id"] = "bad"
     #expect(receive(invalid, now: 10) == nil)
     #expect(calls == 0)
-  }
-
-  @Test func duplicateNotificationRepeatsReplyWithoutRepeatedPlayback() {
-    let admission = SpeechAdmission()
-    let request = SpeechDelivery.Request(id: UUID(), target: 42, expiry: 15, text: "Hello")
-    var calls = 0
-    for now in [10.0, 12.0] {
-      let reply = admission.receive(.init(request.fields), pid: 42, now: now) { _ in calls += 1; return true }
-      #expect(reply?["outcome"] as? String == "accepted")
-    }
-    var malformedDuplicate = request.fields; malformedDuplicate["text"] = 99
-    let malformed = admission.receive(.init(malformedDuplicate), pid: 42, now: 12) { _ in calls += 1; return true }
-    #expect(malformed?["outcome"] as? String == "invalid")
-    let expired = admission.receive(.init(request.fields), pid: 42, now: 15) { _ in calls += 1; return true }
-    #expect(expired?["outcome"] as? String == "expired")
-    #expect(calls == 1)
   }
 
   @Test func lostReplyIsUnconfirmedAndNeverReposts() throws {
@@ -64,7 +45,6 @@ import Testing
       }, post: { _ in posts += 1 })
     }
     #expect(posts == 1)
-    #expect(SpeechDelivery.Failure.unconfirmed.localizedDescription.contains("may have admitted"))
   }
   @Test(arguments: [false, true])
   func deliveryErrorsKeepTheirMeaningInBothProtocolModes(_ legacy: Bool) throws {

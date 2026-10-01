@@ -55,7 +55,9 @@ Dictation. Cancellation is checked immediately before the clipboard write. Once 
 transaction begins, cleanup completes. A changed destination before Return suppresses
 sending without repeating paste. Synthetic keys prove only an attempt, not editor receipt.
 
-A changed pasteboard count while saving or revalidating invalidates the saved snapshot.
+Destination identity is checked once at the write boundary, after saving the pasteboard,
+and again before Return. A changed pasteboard count while saving or verifying invalidates
+the saved snapshot.
 A changed count after EchoType's write invalidates restoration. Copy counts
 cannot identify the writer: an external write observed first can be mistaken for Copy.
 A second write during the Copy window prevents restoration; a Copy response later than

@@ -84,7 +84,7 @@ private final class AdmissionTransport: WebSocketTransport, Sendable {
   func admit() -> String? {
     let request = SpeechDelivery.Request(id: UUID(), target: 42,
       expiry: 15, text: "Hello")
-    return SpeechAdmission().receive(.init(request.fields), pid: 42, now: 10,
+    return SpeechAdmission.receive(.init(request.fields), pid: 42, now: 10,
       admit: controller.speak)?["outcome"] as? String
   }
 }

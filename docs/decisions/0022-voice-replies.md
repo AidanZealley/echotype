@@ -45,12 +45,13 @@ because of code blocks, paths and markdown, and speech is billed per character.
 - **Delivery uses correlated distributed notifications.** The `--mcp` process finds the
   running app by bundle identifier and sends a UUID, intended GUI PID, text and five-second
   system-uptime expiry with `deliverImmediately`. It registers for the reply before posting
-  and services the main run loop while stdin is read on a background thread. It creates no
+  and services the main run loop while it waits; stdin is read with a plain blocking loop,
+  since replies matter only during that wait. It creates no
   NSApplication and never starts another app. The running coordinator checks shape, target
   and expiry on its main actor, then reserves reading before replying. Idle accepts; reading,
   including startup or pause, accepts a replacement after required cleanup; dictation and
-  microphone Test return busy. Nothing queues for later speech. Duplicate live requests
-  repeat their original reply without repeating playback; expiry bounds that temporary state.
+  microphone Test return busy. Nothing queues for later speech. Admission keeps no state;
+  distributed notifications are not duplicated, so there is no replay cache.
   Core retains a throwing delivery closure and has no macOS notification types. The obsolete
   fire-and-forget path is removed.
 
@@ -96,3 +97,8 @@ phase/Test evidence. Fresh closure and final reviewed-candidate signed recheck p
 All four authorised G6 requests are charged; prior lifecycle allowances and deferrals remain
 unchanged. Signed busy-operation validation remains unverified under the explicit deferral.
 Candidate details and exact commands are in [packet 5](../specs/macos-rewrite-implementation/05-mcp-admission.md).
+
+Simplified on 2026-10-01 after whole-feature review: the replay cache and its cleanup task,
+the far-future expiry rejection and the background stdin reader were removed as protection
+against failures that do not occur. Correlation, expiry and the five-second bounded wait
+are unchanged.

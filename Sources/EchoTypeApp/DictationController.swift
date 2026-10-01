@@ -18,8 +18,8 @@ import Observation
     guard case .dictating(let operation) = phase else { return .idle }
     switch operation.presentation {
     case .starting: return .starting
-    case .capturing(let snapshot, let ready, _):
-      guard ready else { return .starting }
+    case .capturing(let snapshot, let readiness):
+      guard readiness.microphone else { return .starting }
       return snapshot.state == .paused ? .paused : .listening
     case .finishing: return .finishing
     case .inserting: return .inserting
@@ -66,7 +66,6 @@ import Observation
   @ObservationIgnored private var readingTask: Task<Void, Never>?
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
-  private let speechAdmission = SpeechAdmission()
   @ObservationIgnored private var speakObserver: (any NSObjectProtocol)?
 
   /// The session's pill and the screen it stays on, from the press until the session ends.
@@ -116,7 +115,7 @@ import Observation
       let request = SpeechDelivery.Incoming(fields)
       MainActor.assumeIsolated {
         guard let self,
-          let reply = self.speechAdmission.receive(request, pid: getpid(),
+          let reply = SpeechAdmission.receive(request, pid: getpid(),
             now: ProcessInfo.processInfo.systemUptime, admit: self.speak)
         else { return }
         DistributedNotificationCenter.default().postNotificationName(
@@ -271,7 +270,7 @@ import Observation
         clock: SystemClock(), testClock: SystemClock()),
       onPresentation: { [weak self] presentation, settled, provisional in
         if presentation == .cancelled { self?.end(); return }
-        if case .starting(false, _) = presentation { self?.showStarting() }
+        if case .starting(let readiness) = presentation, !readiness.microphone { self?.showStarting() }
         self?.updatePill {
           if case .capturing = presentation { $0.canCommit = true } else { $0.canCommit = false }
           $0.settled = settled
