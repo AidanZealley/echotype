@@ -5,17 +5,17 @@ Status: draft; implementation has not started.
 ## Orchestration record
 
 - Target branch: `refactor/macos-lifecycle`, which merges to `main` as one complete rewrite after this workflow
-- Integration branch: `TBD` (the target itself, or a working branch from it)
-- Starting commit: `TBD`
+- Integration branch: `refactor/macos-lifecycle` (the target itself)
+- Starting commit: `256f3bb6cb543292dee7f6e23cf0a72d73b23feb`
 - Review command: `lead subagents`
 - Specification approved at commit: `TBD`
-- Started: `TBD`
+- Started: `2026-10-01`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Protect finishing with outcome tests](01-outcome-tests.md) | Approved spec | Not started |
+| 1 | [Protect finishing with outcome tests](01-outcome-tests.md) | Approved spec | Accepted |
 | 2 | [Invert finishing ownership](02-finishing-ownership.md) | 1 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1 and 2 | Not started |
 
@@ -32,6 +32,8 @@ Workstream 2 is the single production change: removing the callbacks, the one de
 - Workstream 1's operation tests drive `DictationOperation` only through its `Dependencies`, `run()`, `commit()`, `cancel()`, `captureFailed(_:)`, `microphoneReady()` and published presentation. They do not reference `SessionMachine` internals, `onFinishing`, `onAbort` or `enterFinishing`.
 - Workstream 2 keeps `DictationOperation.Dependencies`, `Result` and `Presentation` unchanged, so workstream 1's tests compile and pass without edits. A needed change to them is drift: record it, and change the tests only to follow the renamed API, never to weaken an assertion.
 - Behavior is exactly the specification's "Behavior to preserve" list. No user-visible change.
+- Workstream 1's tests rely on two orderings the specification already requires: the session's first clock schedule is the readiness deadline, and `beginFinishing()` arms the finishing deadline before capture stops or closing frames are sent. Breaking either is drift, not a reason to edit the tests.
+- In-order delivery of audio held before the handshake is not observable at the operation level; workstream 2 keeps the `STTClientTests` that cover it.
 
 ## Ownership handoffs
 
@@ -60,7 +62,7 @@ None.
 
 ## Conventions learned
 
-None yet.
+- Outcome tests for an ordering-sensitive behavior need a mutation check: move or remove the production line the behavior depends on, confirm a test fails, then restore `Sources/` exactly. Workstream 1's first pass missed a destination captured at insertion time and a repeated stop.
 
 ## Completion summary
 
