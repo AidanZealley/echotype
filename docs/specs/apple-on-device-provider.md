@@ -1,6 +1,6 @@
 # Apple on-device provider
 
-Status: draft, 2026-10-01. Depends on [Provider adapters](provider-adapters.md) being merged. Implementation has not started.
+Status: draft, 2026-10-01. Depends on the [provider adapter implementation](../decisions/0025-provider-adapters.md) being merged. Implementation has not started.
 
 ## Goal and scope
 
@@ -49,13 +49,13 @@ The gate is complete when Aidan's decision is recorded here.
 
 ### Availability
 
-Spec 1 only checks credentials. Apple's services can exist and still be unusable on a given Mac, so add the smallest availability check that covers the spike results:
+The current provider contract only checks credentials. Apple's services can exist and still be unusable on a given Mac, so add the smallest availability check that covers the spike results:
 
 - Each service can report that it is ready, needs setup with a short reason (such as "Downloading speech model"), or is unavailable with a short reason (such as "Needs Apple Intelligence").
 - **Provider tab.** A service that isn't ready shows a grey mark and its reason in the feature list.
 - **Transcription not ready.** Dictation shows the reason in the error pill and does not start.
 - **Read aloud not ready.** Reading shows the reason in the error pill.
-- **Cleanup not ready.** Dictation runs without a reviser, using the path spec 1 kept for providers without cleanup.
+- **Cleanup not ready.** Dictation runs without a reviser, using the existing path for providers without cleanup.
 - xAI reports ready whenever it has its key, so its behaviour doesn't change.
 
 S1 decides how model installation starts. The preference is to start it automatically when Apple is selected and show its progress in the feature list, with no separate download setting.

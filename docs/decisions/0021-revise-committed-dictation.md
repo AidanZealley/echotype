@@ -22,7 +22,7 @@ self-corrections. It also kept the whole recording in memory and delayed every i
   streamed. The pill shows accepted revisions, and its final text is what gets inserted.
   When the provider has no cleanup service, insert the streamed transcript. The Test
   button never revises. (Until 2026-10-01 a **Clean up text** setting, on by default,
-  could turn cleanup off. The [provider adapters specification](../specs/provider-adapters.md)
+  could turn cleanup off. The [provider adapter decision](0025-provider-adapters.md)
   removed it, and its stored `cleanUp` key is now ignored.)
 - `Reviser` owns the prompt, the windows and the faithfulness check, which are product
   behaviour. Each request goes through the provider's `CleanupService` with the prompt,

@@ -1,7 +1,6 @@
 # 0025 Everything specific to a provider sits behind its adapters
 
-Status: accepted, 2026-10-01 (provider adapters, registry and credentials). Specified in
-[provider adapters](../specs/provider-adapters.md).
+Status: accepted, 2026-10-01 (provider adapters, registry, credentials and settings).
 
 ## Context
 
@@ -38,6 +37,28 @@ meant editing each of them.
 - Failures reach the app as `ProviderError` and are worded with the provider's name, as
   [0006](0006-api-key-and-error-surface.md) describes.
 
+## Service responsibilities
+
+- `SessionMachine` holds audio until the transcriber is ready and awaits each send before
+  starting the next. It calls `finish()` at most once after the last send. Finishing before
+  readiness is valid when no audio was sent, preserving a quick stop during startup.
+  An adapter may emit a final transcript immediately before its finished event so the
+  session keeps the resolved tail. Adapters report `ProviderError`; the old `STTError`
+  type is removed.
+- `Reader` pulls audio from `SpeechStream`, so pausing playback stops consumption and
+  bounds adapter read-ahead. Every chunk uses the same sample rate and holds at most
+  100 ms of audio. Cancellation interrupts a pending pull; the caller stops pulling
+  afterwards and does not rely on later results. See [0018](0018-read-aloud-audio-fetch.md).
+- `Reviser` owns the cleanup prompt and faithfulness validation. The operation owns the
+  final revision budget, while `CleanupService` makes the provider request. This keeps
+  product rules independent of the provider's model and request parameters. See
+  [0021](0021-revise-committed-dictation.md) and
+  [0024](0024-dictation-operation-lifetime.md).
+- Legacy reading migration stays in the registry so `Settings` does not name xAI.
+  The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
+  credential status separate when the selection changes. Storage and validation are
+  described in [0010](0010-settings-storage-and-api-key.md).
+
 ## Adding a provider
 
 1. Create `Providers/<Name>/` with its description and one adapter per service. Give it a
@@ -59,5 +80,7 @@ are needed.
 - Operation and reading tests drive fake services and a fake credential, so they cover a
   provider without a credential and a missing key without the Keychain. Error wording is
   tested with a provider defined in the test, not a second registered one.
-- Reading and saving the key by account is checked on the Mac in the final gate, not
-  through a protocol around the Keychain.
+- Keychain behaviour is checked on the Mac rather than through a protocol around the
+  Keychain. The signed build's Mac validation confirmed retained key, voice and speed,
+  dictation with cleanup, read aloud, MCP speech, Test transcription, wrong-key rejection
+  and recovery, and the Provider tab in both themes on 2026-10-01.
