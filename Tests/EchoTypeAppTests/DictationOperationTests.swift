@@ -5,14 +5,67 @@ import Foundation
 import Synchronization
 import Testing
 
+// These tests drive `DictationOperation` only through its dependencies, its admission signals and
+// its presentation, and assert outcomes: inserted text, frames on the wire, the trace and which
+// resources were released. They must keep passing unchanged while the session's internals move.
+
 private final class Gate: Sendable {
   private let stream: AsyncStream<Void>
   private let release: AsyncStream<Void>.Continuation
   init() { (stream, release) = AsyncStream.makeStream() }
+  /// Returns once opened, or when the waiting task is cancelled.
   func wait() async { for await _ in stream { break } }
   func open() { release.finish() }
 }
 
+/// Places the fakes pass through, and presentation the operation publishes.
+enum Point: Hashable, Sendable {
+  case captureStart, key, socket, binarySend, closingSend, audioDone, captureStop, captureRelease
+  case destination, revision
+  /// Insertion before and after the clipboard boundary.
+  case insertion, clipboard
+  case heard, paused, finishing
+}
+
+/// Records each point reached. A test waits for a point, or holds one to keep the operation
+/// suspended there until it releases it.
+private final class Points: Sendable {
+  private struct State {
+    var counts: [Point: Int] = [:]
+    var arrivals: [Point: Gate] = [:]
+    var holds: [Point: Gate] = [:]
+  }
+  private let state = Mutex(State())
+
+  func record(_ point: Point) {
+    state.withLock { state -> Gate? in
+      state.counts[point, default: 0] += 1
+      return state.arrivals.removeValue(forKey: point)
+    }?.open()
+  }
+
+  func pass(_ point: Point) async {
+    record(point)
+    await state.withLock { $0.holds[point] }?.wait()
+  }
+
+  func reached(_ point: Point) async {
+    let arrival = state.withLock { state -> Gate? in
+      guard state.counts[point, default: 0] == 0 else { return nil }
+      if let gate = state.arrivals[point] { return gate }
+      let gate = Gate()
+      state.arrivals[point] = gate
+      return gate
+    }
+    await arrival?.wait()
+  }
+
+  func count(_ point: Point) -> Int { state.withLock { $0.counts[point, default: 0] } }
+  func hold(_ point: Point) { state.withLock { $0.holds[point] = Gate() } }
+  func release(_ point: Point) { state.withLock { $0.holds.removeValue(forKey: point) }?.open() }
+}
+
+/// Time moves only when a test advances it. `advance` returns after a due wake-up has run.
 private final class ManualClock: SessionClock, Sendable {
   private struct State {
     var now: TimeInterval = 0
@@ -20,9 +73,12 @@ private final class ManualClock: SessionClock, Sendable {
     var deadline: TimeInterval?
   }
   private let state = Mutex(State())
+  /// Opens on the first wake-up scheduled.
+  let armed = Gate()
   var now: TimeInterval { state.withLock { $0.now } }
   func schedule(at deadline: TimeInterval, fire: @escaping @Sendable () async -> Void) {
     state.withLock { $0.deadline = deadline; $0.action = fire }
+    armed.open()
   }
   func cancel() { state.withLock { $0.deadline = nil; $0.action = nil } }
   func advance(_ seconds: TimeInterval) async {
@@ -36,146 +92,155 @@ private final class ManualClock: SessionClock, Sendable {
   }
 }
 
-private final class OperationTransport: WebSocketTransport, Sendable {
-  enum Mode: Sendable { case normal, binaryFailure, binaryStall, closingStall }
-  let mode: Mode
-  let sendEntered = Gate()
-  let sendRelease = Gate()
-  let closingEntered = Gate()
+private let finalize = #"{"type":"finalize"}"#
+private let audioDone = #"{"type":"audio.done"}"#
+
+/// Records sent frames (binary frames as `audio <first byte>`) and lets the test emit events.
+/// Answers `audio.done` with `transcript.done` unless told not to.
+private final class Transport: WebSocketTransport, Sendable {
+  private struct State {
+    var frames: [String] = []
+    var failing: Point?
+    var answersAudioDone = true
+  }
+  private let points: Points
+  private let state = Mutex(State())
   private let incoming: AsyncThrowingStream<String, any Error>
   private let publisher: AsyncThrowingStream<String, any Error>.Continuation
-  private let frames = Mutex<[String]>([])
-  init(_ mode: Mode = .normal) {
-    self.mode = mode
+  init(_ points: Points) {
+    self.points = points
     (incoming, publisher) = AsyncThrowingStream.makeStream()
   }
-  var sent: [String] { frames.withLock { $0 } }
+
+  var frames: [String] { state.withLock { $0.frames } }
+  /// Sends at this point throw.
+  func fail(at point: Point) { state.withLock { $0.failing = point } }
+  func withholdTranscriptDone() { state.withLock { $0.answersAudioDone = false } }
+
   func emit(_ text: String) { publisher.yield(text) }
+  func say(_ words: String) {
+    emit("{\"type\":\"transcript.partial\",\"text\":\"\(words)\",\"is_final\":true,\"speech_final\":true}")
+  }
+  /// The server closes the socket.
+  func disconnect() { publisher.finish() }
+
   func send(binary: Data) async throws {
-    sendEntered.open()
-    if mode == .binaryFailure { throw STTError.unavailable }
-    if mode == .binaryStall { await sendRelease.wait(); try Task.checkCancellation() }
-    frames.withLock { $0.append("audio") }
+    try await pass(.binarySend)
+    state.withLock { $0.frames.append("audio \(binary.first ?? 0)") }
   }
   func send(text: String) async throws {
-    closingEntered.open()
-    if mode == .closingStall { await sendRelease.wait(); try Task.checkCancellation() }
-    frames.withLock { $0.append(text) }
-    if text.contains("audio.done") { emit(#"{"type":"transcript.done"}"#) }
+    try await pass(.closingSend)
+    let answers = state.withLock { state in
+      state.frames.append(text)
+      return text == audioDone && state.answersAudioDone
+    }
+    if text == audioDone { points.record(.audioDone) }
+    if answers { emit(#"{"type":"transcript.done"}"#) }
+  }
+  private func pass(_ point: Point) async throws {
+    await points.pass(point)
+    try Task.checkCancellation()
+    if state.withLock({ $0.failing == point }) { throw STTError.unavailable }
   }
   func messages() -> AsyncThrowingStream<String, any Error> { incoming }
-  func close() { sendRelease.open(); publisher.finish() }
+  /// Closing releases suspended sends, as a real socket does.
+  func close() {
+    points.release(.binarySend)
+    points.release(.closingSend)
+    publisher.finish()
+  }
+}
+
+private struct Insertion: Equatable {
+  var text: String
+  var sends: Bool
 }
 
 @MainActor private final class Harness {
-  let transport: OperationTransport
+  let points = Points()
+  let transport: Transport
   let clock = ManualClock()
   let testClock = ManualClock()
   let revisionClock = ManualClock()
-  let captureEntered = Gate()
-  let captureRelease = Gate()
-  let keyEntered = Gate()
-  let keyRelease = Gate()
-  let revisionEntered = Gate()
-  let revisionRelease = Gate()
-  let running = Gate()
-  let paused = Gate()
-  let wordsReceived = Gate()
-  let finished = Gate()
-  let drainEntered = Gate()
-  let insertionEntered = Gate()
-  let insertionRelease = Gate()
-  let audio: AsyncThrowingStream<Data, any Error>
-  let chunks: AsyncThrowingStream<Data, any Error>.Continuation
-  var suspendCapture = false
-  var suspendKey = false
-  var suspendRevision = false
-  var suspendDrain = false
-  var suspendInsertion = false
-  var tail: Data?
-  var captures = 0
-  var keys = 0
-  var opened = 0
-  var stopped = 0
-  var released = 0
-  var destinations = 0
+  private let capture: AsyncThrowingStream<Data, any Error>
+  private let chunks: AsyncThrowingStream<Data, any Error>.Continuation
+  /// The partial chunk capture flushes when it stops.
+  var finalChunk: Data?
   var focusedDestination: Destination?
   var insertedDestination: Destination?
-  var insertions: [(String, Bool)] = []
-  var presentations = 0
+  var insertions: [Insertion] = []
   var presented: [DictationOperation.Presentation] = []
   var insertionResult = Clipboard.InsertionResult(insertion: .attempted, sending: .notRequested)
-  var beforeInsertion: (@MainActor () -> Void)?
-  init(_ mode: OperationTransport.Mode = .normal) {
-    transport = OperationTransport(mode)
-    (audio, chunks) = AsyncThrowingStream.makeStream()
+
+  init() {
+    transport = Transport(points)
+    (capture, chunks) = AsyncThrowingStream.makeStream()
   }
+
+  func speak(_ chunk: Data) { chunks.yield(chunk) }
+
   func operation(test: Bool = false, cleanup: Bool = false) -> DictationOperation {
-    DictationOperation(settings: Settings(cleanUp: cleanup, sendReplyRequests: true), isTest: test,
+    let points = points
+    return DictationOperation(settings: Settings(cleanUp: cleanup, sendReplyRequests: true), isTest: test,
       dependencies: .init(
         startCapture: { _ in
-          self.captures += 1
-          self.captureEntered.open()
-          if self.suspendCapture { await self.captureRelease.wait() }
-          return self.audio
+          await points.pass(.captureStart)
+          return self.capture
         },
         stopCapture: {
-          self.stopped += 1
-          if let tail = self.tail { self.chunks.yield(tail); self.tail = nil }
-          if !self.suspendDrain { self.chunks.finish() }
-          self.drainEntered.open()
+          if let chunk = self.finalChunk { self.chunks.yield(chunk); self.finalChunk = nil }
+          // Holding `.captureStop` stalls the drain: the stream stays open until released.
+          Task { await points.pass(.captureStop); self.chunks.finish() }
         },
-        releaseCapture: { self.released += 1 },
-        key: { [self] in
-          await MainActor.run { keys += 1; keyEntered.open() }
-          if await suspendKey { await keyRelease.wait() }
+        releaseCapture: { points.record(.captureRelease) },
+        key: {
+          await points.pass(.key)
           return "fake-key"
         },
-        transport: { _, _ in self.opened += 1; return self.transport },
-        captureDestination: { self.destinations += 1; return self.focusedDestination },
+        transport: { _, _ in points.record(.socket); return self.transport },
+        captureDestination: { points.record(.destination); return self.focusedDestination },
         insert: { text, destination, sends, cancelled, begin in
           self.insertedDestination = destination
-          self.beforeInsertion?()
+          await points.pass(.insertion)
           if cancelled() { return .init(insertion: .cancelled, sending: .notRequested) }
           if text.isEmpty { return .init(insertion: .notAttempted, sending: .notRequested) }
           begin()
-          self.insertionEntered.open()
-          if self.suspendInsertion { await self.insertionRelease.wait() }
-          self.insertions.append((text, sends))
+          await points.pass(.clipboard)
+          self.insertions.append(.init(text: text, sends: sends))
           return self.insertionResult
         },
         revise: { _ in
-          Reviser(request: { $0 }, finalRequest: { [self] text in
-            revisionEntered.open()
-            if await suspendRevision { await revisionRelease.wait() }
+          Reviser(request: { $0 }, finalRequest: { text in
+            await points.pass(.revision)
             try Task.checkCancellation()
             return text
           }, finalClock: self.revisionClock)
         }, clock: clock, testClock: testClock),
       onPresentation: { phase, _, _ in
-        self.presentations += 1
         self.presented.append(phase)
-        if phase == .finishing { self.finished.open() }
-        if case .capturing(let snapshot, _) = phase {
-          self.running.open()
-          if snapshot.state == .paused { self.paused.open() }
-          if !snapshot.committed.isEmpty { self.wordsReceived.open() }
+        switch phase {
+        case .capturing(let snapshot, _):
+          if snapshot.state == .paused { points.record(.paused) }
+          if !snapshot.committed.isEmpty { points.record(.heard) }
+        case .finishing: points.record(.finishing)
+        default: break
         }
       })
   }
-  func start(_ operation: DictationOperation, words: String = "spoken words") async -> Task<DictationOperation.Result, Never> {
+
+  /// Runs the operation until `words` are committed.
+  func start(_ operation: DictationOperation, saying words: String = "spoken words") async -> Task<DictationOperation.Result, Never> {
     let task = Task { await operation.run() }
-    await running.wait()
     transport.emit(#"{"type":"transcript.created"}"#)
-    transport.emit("{\"type\":\"transcript.partial\",\"text\":\"\(words)\",\"is_final\":true,\"speech_final\":true}")
-    await wordsReceived.wait()
+    transport.say(words)
+    await points.reached(.heard)
     return task
   }
-  func close() {
-    captureRelease.open(); keyRelease.open(); revisionRelease.open()
-    insertionRelease.open(); chunks.finish(); transport.close()
-  }
 }
+
+/// What ends capture and starts finishing.
+enum Trigger: Sendable, CaseIterable { case stop, replyRequest, hardCap }
+enum ReadinessFailure: Sendable, CaseIterable { case noCreated, backlog }
 
 @Suite(.timeLimit(.minutes(1))) @MainActor
 struct DictationOperationTests {
@@ -184,305 +249,307 @@ struct DictationOperationTests {
       window: AXUIElementCreateApplication(2), target: AXUIElementCreateApplication(target), pid: 1)
   }
 
+  // MARK: Readiness
+
   @Test("Destination readiness follows focus during silent buffers and cannot revive finishing")
   func destinationReadiness() async {
     let h = Harness()
-    defer { h.close() }
     let operation = h.operation()
     let task = await h.start(operation)
     #expect(operation.presentation.pillPhase == .starting)
     operation.microphoneReady()
     #expect(operation.presentation.pillPhase == .selectInput)
-    #expect(h.destinations == 1)
+    #expect(h.points.count(.destination) == 1)
     h.focusedDestination = destination()
     operation.microphoneReady()
     #expect(operation.presentation.pillPhase == .selectInput)
-    #expect(h.destinations == 1)
+    #expect(h.points.count(.destination) == 1)
     await h.clock.advance(0.5)
     operation.microphoneReady()
     #expect(operation.presentation.pillPhase == .listening)
-    #expect(h.destinations == 2)
+    #expect(h.points.count(.destination) == 2)
     await h.clock.advance(10)
-    await h.paused.wait()
+    await h.points.reached(.paused)
     #expect(operation.presentation.pillPhase == .paused)
     // Silent buffers keep reporting levels after the session pauses.
     h.focusedDestination = nil
     operation.microphoneReady()
     #expect(operation.presentation.pillPhase == .selectInput)
-    #expect(h.destinations == 3)
+    #expect(h.points.count(.destination) == 3)
     operation.commit()
+    await h.points.reached(.finishing)
+    let probes = h.points.count(.destination)
     operation.microphoneReady()
     #expect(operation.presentation.pillPhase == .transcribing)
-    #expect(h.destinations == 3)
+    #expect(h.points.count(.destination) == probes)
     _ = await task.value
-    #expect(h.destinations == 4 && h.captures == 1 && h.opened == 1)
   }
 
   @Test("Ready focus preserves microphone startup; cancellation stops advisory probes")
   func microphoneReadinessPrecedence() async {
     let h = Harness()
-    defer { h.close() }
     h.focusedDestination = destination()
-    h.suspendCapture = true
+    h.points.hold(.captureStart)
     let operation = h.operation()
     let task = Task { await operation.run() }
-    await h.captureEntered.wait()
+    await h.points.reached(.captureStart)
     #expect(operation.presentation.pillPhase == .starting)
     operation.microphoneReady()
     #expect(operation.presentation.pillPhase == .listening)
     operation.cancel()
     await h.clock.advance(1)
     operation.microphoneReady()
-    #expect(operation.presentation == .cancelled && h.destinations == 1)
-    h.captureRelease.open()
+    #expect(operation.presentation == .cancelled && h.points.count(.destination) == 1)
+    h.points.release(.captureStart)
     _ = await task.value
   }
 
-  @Test("Finishing captures a new destination instead of retaining advisory identity", arguments: [true, false])
-  func finishingDestinationIsFresh(available: Bool) async {
-    let h = Harness()
-    defer { h.close() }
-    let early = destination()
-    let final = available ? destination(target: 4) : nil
-    h.focusedDestination = early
-    let operation = h.operation()
-    let task = await h.start(operation)
-    operation.microphoneReady()
-    h.focusedDestination = final
-    operation.commit()
-    _ = await task.value
-    let finalFocus = DestinationFocus(lookup: { final })
-    let earlyFocus = DestinationFocus(lookup: { early })
-    #expect(finalFocus.verify(h.insertedDestination) == (available ? .matching : .unavailable))
-    #expect(earlyFocus.verify(h.insertedDestination) == (available ? .changed : .unavailable))
-    #expect(h.destinations == 2 && h.insertions.count == 1)
-  }
+  // MARK: Startup
 
-  @Test("Cancellation before run acquires no capture, key or socket")
+  @Test("Cancellation before run acquires nothing and shows only cancellation")
   func cancelledBeforeRun() async {
     let h = Harness()
-    defer { h.close() }
     let operation = h.operation()
     operation.cancel()
     let result = await operation.run()
     #expect(result.outcome == .nothing && result.startupFailure == nil && result.trace == nil)
-    #expect(h.captures == 0 && h.keys == 0 && h.opened == 0)
-    #expect(h.insertions.isEmpty && h.released == 1)
+    #expect(h.points.count(.captureStart) == 0 && h.points.count(.key) == 0 && h.points.count(.socket) == 0)
+    #expect(h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
     #expect(h.presented == [.cancelled])
   }
 
-  @Test("Deferred clipboard cleanup cannot revive cancelled startup presentation")
-  func cancelledDuringCleanup() async {
+  @Test("Cancellation during capture or key setup never opens a socket", arguments: [Point.captureStart, .key])
+  func cancelledStartup(at point: Point) async {
     let h = Harness()
-    defer { h.close() }
-    let cleanupEntered = Gate()
-    let cleanupRelease = Gate()
+    h.points.hold(point)
     let operation = h.operation()
-    // The coordinator retains the operation while the previous clipboard owner cleans up.
-    // Startup presentation now comes from run, so resuming this wait cannot create a pill.
-    let task = Task {
-      cleanupEntered.open()
-      await cleanupRelease.wait()
-      return await operation.run()
-    }
-    await cleanupEntered.wait()
+    let task = Task { await operation.run() }
+    await h.points.reached(point)
     operation.cancel()
-    #expect(h.presented == [.cancelled])
-    cleanupRelease.open()
+    h.points.release(point)
     let result = await task.value
-    #expect(result.outcome == .nothing && result.startupFailure == nil && result.trace == nil)
-    #expect(h.captures == 0 && h.keys == 0 && h.opened == 0 && h.released == 1)
-    #expect(h.insertions.isEmpty && h.presented == [.cancelled])
+    #expect(result.outcome == .nothing && result.trace == nil)
+    #expect(h.points.count(.socket) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
   }
 
   @Test("Capture failure during key setup prevents a later socket open")
   func captureFailureDuringStartup() async {
     let h = Harness()
-    defer { h.close() }
-    h.suspendKey = true
+    h.points.hold(.key)
     let operation = h.operation()
     let task = Task { await operation.run() }
-    await h.keyEntered.wait()
+    await h.points.reached(.key)
     operation.captureFailed(CaptureError("Microphone stopped"))
-    h.keyRelease.open()
+    h.points.release(.key)
     let result = await task.value
     guard case .failed = result.outcome else { Issue.record("Expected startup failure"); return }
-    #expect(h.opened == 0 && h.insertions.isEmpty && h.released == 1)
+    #expect(h.points.count(.socket) == 0 && h.insertions.isEmpty && h.points.count(.captureRelease) == 1)
     #expect(result.startupFailure != nil && result.trace == nil)
   }
 
-  @Test("Cancellation during capture or key setup never opens a socket", arguments: [false, true])
-  func cancelledStartup(key: Bool) async {
+  @Test("Readiness fails the session without transcript.created in five seconds or past the held audio bound",
+    arguments: ReadinessFailure.allCases)
+  func readinessFailure(_ failure: ReadinessFailure) async {
     let h = Harness()
-    defer { h.close() }
-    h.suspendCapture = !key
-    h.suspendKey = key
     let operation = h.operation()
+    if failure == .backlog { h.speak(Data(count: STTClient.preHandshakeBytes + 1)) }
     let task = Task { await operation.run() }
-    if key { await h.keyEntered.wait() } else { await h.captureEntered.wait() }
-    operation.cancel()
-    h.captureRelease.open(); h.keyRelease.open()
-    let result = await task.value
-    #expect(result.outcome == .nothing)
-    #expect(h.opened == 0 && h.insertions.isEmpty && h.released == 1)
-    #expect(result.trace == nil)
+    await h.clock.armed.wait()
+    if failure == .noCreated { await h.clock.advance(5) }
+    guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected readiness failure"); return }
+    #expect(text.isEmpty && h.transport.frames.isEmpty && h.points.count(.captureRelease) == 1)
   }
 
-  @Test("One operation drains audio before closing and inserts once")
-  func orderedCompletion() async {
-    let h = Harness(.binaryStall)
-    defer { h.close() }
+  // MARK: Finishing
+
+  @Test("Stop, reply request and hard cap drain captured audio before the closing frames", arguments: Trigger.allCases)
+  func drainsBeforeClosing(_ trigger: Trigger) async {
+    let h = Harness()
+    h.finalChunk = Data([2])
     let operation = h.operation()
     let task = await h.start(operation)
-    h.chunks.yield(Data([1]))
-    await h.transport.sendEntered.wait()
-    operation.commit(); operation.commit()
-    await h.finished.wait()
-    #expect(h.transport.sent.isEmpty)
-    h.transport.sendRelease.open()
+    // The first chunk is still on its way out when finishing begins.
+    h.points.hold(.binarySend)
+    h.speak(Data([1]))
+    await h.points.reached(.binarySend)
+    switch trigger {
+    case .stop: operation.commit(); operation.commit() // A repeated stop finishes once.
+    case .replyRequest: h.transport.say("Reply with EchoType")
+    case .hardCap: Task { await h.clock.advance(operation.settings.hardCap) }
+    }
+    await h.points.reached(.captureStop)
+    h.points.release(.binarySend)
     let result = await task.value
-    #expect(result.outcome == .insert("spoken words"))
-    #expect(h.transport.sent == ["audio", #"{"type":"finalize"}"#, #"{"type":"audio.done"}"#])
-    #expect(h.insertions.count == 1 && h.destinations == 2 && h.released == 1)
+    #expect(h.transport.frames == ["audio 1", "audio 2", finalize, audioDone])
+    let text = trigger == .replyRequest ? "spoken words Reply with EchoType" : "spoken words"
+    #expect(result.outcome == .insert(text))
+    #expect(h.insertions == [.init(text: text, sends: trigger == .replyRequest)])
     #expect(result.trace?.insertion == .attempted)
   }
 
-  @Test("Binary failure preserves committed words and never automatically sends")
-  func binaryFailure() async {
-    let h = Harness(.binaryFailure)
-    defer { h.close() }
-    let operation = h.operation()
-    h.tail = Data([1])
-    let task = await h.start(operation, words: "Reply with EchoType")
-    let result = await task.value
-    guard case .failed(let text, .stt(.unavailable)) = result.outcome else { Issue.record("Expected send failure"); return }
-    #expect(text == "Reply with EchoType")
-    #expect(h.insertions.count == 1 && h.insertions[0].1 == false)
-    #expect(h.destinations == 2)
-  }
-
-  @Test("Finishing budget covers a stalled binary or closing send", arguments: [false, true])
-  func stalledSends(closing: Bool) async {
-    let h = Harness(closing ? .closingStall : .binaryStall)
-    defer { h.close() }
+  @Test("The finishing deadline starts when finishing begins and covers transcript.done", arguments: [false, true])
+  func finishingDeadline(expires: Bool) async {
+    let h = Harness()
+    h.transport.withholdTranscriptDone()
     let operation = h.operation()
     let task = await h.start(operation)
-    if !closing { h.chunks.yield(Data([1])); await h.transport.sendEntered.wait() }
+    await h.clock.advance(9) // Listening time does not count against the deadline.
     operation.commit()
-    // SessionMachine arms the finishing deadline before requesting capture drain.
-    await h.drainEntered.wait()
-    if closing { await h.transport.closingEntered.wait() }
-    await h.clock.advance(8)
-    let result = await task.value
-    guard case .failed(let text, _) = result.outcome else { Issue.record("Expected timeout"); return }
-    #expect(text == "spoken words" && h.released == 1)
-    #expect(h.insertions.first?.1 == false)
+    await h.points.reached(.audioDone)
+    let timeout = operation.settings.finalizeTimeout
+    await h.clock.advance(expires ? timeout : timeout - 0.1)
+    h.transport.emit(#"{"type":"transcript.done"}"#)
+    let outcome = await task.value.outcome
+    if expires {
+      guard case .failed(let text, _) = outcome else { Issue.record("Expected timeout"); return }
+      #expect(text == "spoken words")
+      #expect(h.insertions == [.init(text: "spoken words", sends: false)])
+    } else {
+      #expect(outcome == .insert("spoken words"))
+    }
+  }
+
+  @Test("A stalled send or capture drain ends at the finishing deadline and releases capture",
+    arguments: [Point.binarySend, .closingSend, .captureStop])
+  func stalledFinishing(at point: Point) async {
+    let h = Harness()
+    let operation = h.operation()
+    let task = await h.start(operation)
+    h.points.hold(point)
+    if point == .binarySend { h.speak(Data([1])) }
+    operation.commit()
+    // Stopping capture follows arming the deadline.
+    await h.points.reached(.captureStop)
+    await h.points.reached(point)
+    await h.clock.advance(operation.settings.finalizeTimeout)
+    guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected timeout"); return }
+    #expect(text == "spoken words" && h.insertions == [.init(text: "spoken words", sends: false)])
+    #expect(h.points.count(.captureRelease) == 1)
+  }
+
+  @Test("A send failure preserves committed words and never sends Return", arguments: [Point.binarySend, .closingSend])
+  func sendFailure(at point: Point) async {
+    let h = Harness()
+    h.transport.fail(at: point)
+    h.finalChunk = Data([1])
+    let operation = h.operation()
+    let task = await h.start(operation, saying: "Reply with EchoType")
+    guard case .failed(let text, .stt(.unavailable)) = await task.value.outcome else { Issue.record("Expected send failure"); return }
+    #expect(text == "Reply with EchoType")
+    #expect(h.insertions == [.init(text: "Reply with EchoType", sends: false)])
+    #expect(h.points.count(.captureRelease) == 1)
   }
 
   @Test("Capture overflow releases a suspended send and preserves committed words")
-  func captureFailureWhileSending() async {
-    let h = Harness(.binaryStall)
-    defer { h.close() }
+  func captureOverflow() async {
+    let h = Harness()
     let operation = h.operation()
     let task = await h.start(operation)
-    h.chunks.yield(Data([1]))
-    await h.transport.sendEntered.wait()
+    h.points.hold(.binarySend)
+    h.speak(Data([1]))
+    await h.points.reached(.binarySend)
     operation.captureFailed(CaptureError("Audio capture backlog exceeded"))
     guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected capture failure"); return }
-    #expect(text == "spoken words" && h.released == 1)
-    #expect(h.insertions.first?.1 == false)
+    #expect(text == "spoken words" && h.insertions == [.init(text: "spoken words", sends: false)])
+    #expect(h.points.count(.captureRelease) == 1)
   }
 
-  @Test("A stalled capture drain terminates within the finishing budget")
-  func stalledDrain() async {
+  @Test("An unrequested transcript.done or socket close while listening fails with the committed words",
+    arguments: [false, true])
+  func unrequestedEnd(disconnect: Bool) async {
     let h = Harness()
-    defer { h.close() }
-    h.suspendDrain = true
     let operation = h.operation()
     let task = await h.start(operation)
-    operation.commit()
-    await h.drainEntered.wait()
-    await h.clock.advance(8)
-    guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected drain timeout"); return }
-    #expect(text == "spoken words" && h.released == 1)
+    if disconnect { h.transport.disconnect() } else { h.transport.emit(#"{"type":"transcript.done"}"#) }
+    guard case .failed(let text, .socket) = await task.value.outcome else { Issue.record("Expected closed"); return }
+    #expect(text == "spoken words" && h.insertions == [.init(text: "spoken words", sends: false)])
+    #expect(!h.transport.frames.contains(finalize))
   }
 
-  @Test("Hard cap flushes the final capture chunk before protocol closure")
-  func hardCapFlushesTail() async {
+  @Test("Insertion targets the destination focused when finishing begins, not before or after", arguments: [true, false])
+  func finishingDestinationIsFresh(available: Bool) async {
     let h = Harness()
-    defer { h.close() }
-    h.tail = Data([1])
+    h.focusedDestination = destination()
     let operation = h.operation()
     let task = await h.start(operation)
-    await h.clock.advance(300)
-    #expect(await task.value.outcome == .insert("spoken words"))
-    #expect(h.transport.sent == ["audio", #"{"type":"finalize"}"#, #"{"type":"audio.done"}"#])
+    operation.microphoneReady() // The advisory probe sees the earlier focus.
+    let atStop = available ? destination(target: 4) : nil
+    let late = destination(target: 5)
+    h.focusedDestination = atStop
+    h.points.hold(.closingSend)
+    operation.commit()
+    await h.points.reached(.closingSend)
+    h.focusedDestination = late
+    h.points.release(.closingSend)
+    _ = await task.value
+    #expect(DestinationFocus(lookup: { atStop }).verify(h.insertedDestination) == (available ? .matching : .unavailable))
+    #expect(DestinationFocus(lookup: { late }).verify(h.insertedDestination) == (available ? .changed : .unavailable))
   }
 
-  @Test("Escape cancels finalisation and final revision", arguments: [false, true])
-  func escapeWhileFinishing(revision: Bool) async {
-    let h = Harness(revision ? .normal : .closingStall)
-    defer { h.close() }
-    h.suspendRevision = revision
-    let operation = h.operation(cleanup: revision)
+  // MARK: Revision and insertion
+
+  @Test("Escape cancels through drain, closing and final revision", arguments: [Point.captureStop, .closingSend, .revision])
+  func escapeWhileFinishing(at point: Point) async {
+    let h = Harness()
+    h.points.hold(point)
+    let operation = h.operation(cleanup: true)
     let task = await h.start(operation)
     operation.commit()
-    if revision { await h.revisionEntered.wait() } else { await h.transport.closingEntered.wait() }
+    await h.points.reached(point)
     operation.cancel()
     let result = await task.value
     #expect(result.outcome == .nothing && h.insertions.isEmpty)
     #expect(result.trace?.outcome == .cancelled && result.trace?.finalText == "")
+    #expect(h.points.count(.captureRelease) == 1)
   }
 
   @Test("Final revision deadline preserves available words")
   func finalRevisionDeadline() async {
     let h = Harness()
-    defer { h.close() }
-    h.suspendRevision = true
+    h.points.hold(.revision)
     let operation = h.operation(cleanup: true)
     let task = await h.start(operation)
     operation.commit()
-    await h.revisionEntered.wait()
+    await h.points.reached(.revision)
     await h.revisionClock.advance(Reviser.finalTimeout)
-    let result = await task.value
-    #expect(result.outcome == .insert("spoken words"))
-    #expect(h.insertions.first?.0 == "spoken words")
+    #expect(await task.value.outcome == .insert("spoken words"))
+    #expect(h.insertions == [.init(text: "spoken words", sends: false)])
   }
 
-  @Test("Cancellation wins at the insertion boundary after queued success")
-  func cancellationAtBoundary() async {
+  @Test("Escape wins before the clipboard boundary")
+  func cancellationBeforeClipboard() async {
     let h = Harness()
-    defer { h.close() }
+    h.points.hold(.insertion)
     let operation = h.operation()
-    h.beforeInsertion = { operation.cancel() }
     let task = await h.start(operation)
     operation.commit()
+    await h.points.reached(.insertion)
+    operation.cancel()
+    h.points.release(.insertion)
     let result = await task.value
     #expect(result.outcome == .nothing && h.insertions.isEmpty)
     #expect(result.trace?.insertion == .cancelled)
   }
 
-  @Test("Insertion owns completion after its boundary")
-  func insertionCannotBeCancelled() async {
+  @Test("Insertion owns completion after the clipboard boundary")
+  func insertionOwnsCompletion() async {
     let h = Harness()
-    defer { h.close() }
-    h.suspendInsertion = true
+    h.points.hold(.clipboard)
     let operation = h.operation()
     let task = await h.start(operation)
     operation.commit()
-    await h.insertionEntered.wait()
+    await h.points.reached(.clipboard)
     #expect(!operation.canCancel)
     operation.cancel()
-    h.insertionRelease.open()
+    h.points.release(.clipboard)
     let result = await task.value
-    #expect(result.outcome == .insert("spoken words") && h.insertions.count == 1)
+    #expect(result.outcome == .insert("spoken words") && h.insertions == [.init(text: "spoken words", sends: false)])
     #expect(!operation.cancelled)
   }
 
   @Test("Destination recovery keeps available text in the trace")
   func recovery() async {
     let h = Harness()
-    defer { h.close() }
     h.insertionResult = .init(insertion: .skipped(.changed), sending: .notRequested)
     let operation = h.operation()
     let task = await h.start(operation)
@@ -492,27 +559,28 @@ struct DictationOperationTests {
     #expect(result.trace?.insertion == .skipped(.changed))
   }
 
+  // MARK: Test mode
+
   @Test("Test keeps its timer and ignores Escape without overlay, insertion or trace")
   func microphoneTest() async {
     let h = Harness()
-    defer { h.close() }
     let operation = h.operation(test: true)
     let task = Task { await operation.run() }
-    await h.captureEntered.wait()
+    await h.points.reached(.captureStart)
     h.transport.emit(#"{"type":"transcript.created"}"#)
-    h.transport.emit(#"{"type":"transcript.partial","text":"test words","is_final":true,"speech_final":true}"#)
+    h.transport.say("test words")
     // The first binary send acknowledges that the operation installed its pump and Test timer.
-    h.chunks.yield(Data([1]))
-    await h.transport.sendEntered.wait()
+    h.speak(Data([1]))
+    await h.points.reached(.binarySend)
     operation.microphoneReady()
     await h.clock.advance(1)
     operation.microphoneReady()
-    #expect(h.destinations == 0 && h.presentations == 0)
     operation.cancel()
     #expect(!operation.cancelled)
     await h.testClock.advance(5)
     let result = await task.value
     #expect(result.outcome == .insert("test words"))
-    #expect(result.trace == nil && h.insertions.isEmpty && h.destinations == 0 && h.presentations == 0)
+    #expect(result.trace == nil && h.insertions.isEmpty)
+    #expect(h.points.count(.destination) == 0 && h.presented.isEmpty)
   }
 }
