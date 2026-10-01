@@ -1,12 +1,12 @@
 # SessionMachine redesign implementation workflow
 
-Status: draft orchestration instructions. Not approved for execution.
+Status: Accepted, 2026-10-01. Both workstreams, signed gate G1 and final whole-feature review passed.
 
-This directory is the complete handoff for a fresh orchestration agent running in Claude Code.
+This directory records the bounded implementation workflow. The final review runs through Codex in T3 Code; earlier Claude Code review records retain their original provenance.
 
 ## Source of truth
 
-1. Global instructions in `~/.claude/CLAUDE.md`. The repository has no `AGENTS.md` or `CLAUDE.md`.
+1. Aidan's current session instructions, then global preferences in `~/.claude/CLAUDE.md`. The repository has no `AGENTS.md` or `CLAUDE.md`.
 2. [Repository README](../../../README.md) for build, signing and test commands.
 3. [Approved specification](../session-machine-redesign.md). It overrides every workflow document.
 4. Decisions [0004](../../decisions/0004-session-lifecycle.md), [0021](../../decisions/0021-revise-committed-dictation.md) and [0024](../../decisions/0024-dictation-operation-lifetime.md) for the accepted lifecycle this redesign preserves.
@@ -65,7 +65,7 @@ The orchestrator writes only two things: the branch and starting commit at the s
 
 ## Agent spawning
 
-Use `Agent` with `subagent_type: general-purpose` and `run_in_background: false`, and omit `model`. The call blocks until the agent returns. No agent busy-polls another: no repeated short waits, output checks on a running agent, or scheduled wake-ups.
+Use Codex collaboration tools with fresh agents and `fork_turns: none`, inheriting the model and effort. Assign exact file or record-section ownership before work begins. Wait for agent returns without busy polling. Earlier workstream records used Claude Code agents.
 
 ## Branch and commit model
 
@@ -74,7 +74,7 @@ Use `Agent` with `subagent_type: general-purpose` and `run_in_background: false`
 - When a working branch is used, it must stay fast-forwardable onto `refactor/macos-lifecycle`. Do not rebase or rewrite `refactor/macos-lifecycle`. Bringing the accepted work back is Aidan's step, not an agent's.
 - Implementation stays uncommitted through implementation, review and remediation, so the reviewer sees one coherent diff.
 - Each workstream ends in exactly one commit with the code, the record and the lead's plan updates. Subject format: `<plain-language change> (workstream N)`, or `(final)` for the final review.
-- End commit messages with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
+- End commit messages with truthful model and harness provenance. For this final execution, use `Co-Authored-By: GPT-6.1-Sol <noreply@openai.com>` and record Codex in T3 Code in the completion record. Preserve previous commit history.
 - No document records a commit hash for an accepted workstream.
 - Do not push, open a pull request, install to `/Applications` or touch release packaging.
 

@@ -1,6 +1,6 @@
 # SessionMachine finishing redesign
 
-Status: proposed, 2026-10-01. Not started. This is the last part of the macOS lifecycle rewrite. It lands on `refactor/macos-lifecycle`, which then merges to `main` as one complete rewrite.
+Status: approved and implemented, 2026-10-01. Workstreams 1 and 2 and final whole-feature review are Accepted; signed gate G1 Passed. This is the last part of the macOS lifecycle rewrite. It lands on `refactor/macos-lifecycle`, which then merges to `main` as one complete rewrite.
 
 ## Problem
 
