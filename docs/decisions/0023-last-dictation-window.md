@@ -17,18 +17,18 @@ model returned the text unchanged. Finding out meant reproducing the requests by
   memory: it is not written to disk, logged or sent anywhere.
 - **One value, `DictationTrace`, is both what the window renders and what Copy as JSON
   encodes.** It holds each growth of committed text with its time, every revision request
-  with its window, raw reply, latency and result, the streamed and inserted text, and the
-  session outcome. `inserted` is exactly the text passed to the inserter, so a failed
-  session that inserted its surviving text shows it.
+  with its window, raw reply, latency and result, the streamed and final text, insertion and sending attempts, and the
+  session outcome. Available final text is retained even when destination loss prevents
+  paste; a synthetic paste is recorded as an attempt rather than confirmed delivery.
 - **Only the last dictation that reached `running` is kept.** Inserted, failed, cancelled
   and empty dictations all replace it; the Test button and read-aloud never do. A
-  cancelled session is told apart from an empty one by the last snapshot's state.
+  cancelled operation is told apart from an empty one by its cancellation presentation.
   Cancellation doesn't wait for an in-flight revision just to complete the trace.
   `Reviser` records every request it makes.
-- **Words are marked with the faithfulness rule.** Streamed and inserted text split into
-  words and normalise as `Reviser.isFaithful` does, sharing one tokenizer. Each inserted
+- **Words are marked with the faithfulness rule.** Streamed and final text split into
+  words and normalise as `Reviser.isFaithful` does, sharing one tokenizer. Each final
   word matches the next equal streamed word. Unmatched streamed words are deleted
-  (struck through, red); a matched word whose raw form differs is changed (inserted form
+  (struck through, red); a matched word whose raw form differs is changed (final form
   in amber, streamed form on hover). A thin mark before the word where a commit starts
   shows the time since the previous commit on hover. When a word repeats, the walk may
   strike a different copy than the model removed; the text reads the same.
@@ -60,8 +60,8 @@ diagnostic detail included. The flag no longer exists.
   utterance and its `speech_final` instead.
 - Hyphens and dashes separate words and appear in no mark, so the stutter `I-I'm` shows
   as `I` struck through and `I'm`, and `well known` revised to `well-known` shows as kept.
-- A session where nothing is said ends when the silence timeout calls `cancel()`, so it
-  records as cancelled, like Escape, not as empty.
+- A session where nothing is said ends silently with a `nothing` outcome, distinct
+  from Escape cancellation.
 - A cancelled request may be missing from the list when its call hadn't returned by the
   time the trace was published.
 - Selecting and copying the marked text includes the commit marks.
@@ -74,7 +74,7 @@ The trace now stores `finalText` separately from `insertion` and `sending`. Inse
 records not attempted, attempted, cancelled or skipped with changed/unavailable focus.
 Sending records not requested, attempted or skipped. A successful transcript outcome is
 `completed`; neither it nor a synthetic paste claims the editor received the text.
-The previous `inserted` field and outcome are removed. Traces remain in memory, so no
+This replaces the original `inserted` field and outcome. Traces remain in memory, so no
 stored-history migration or compatibility alias is needed.
 
 Marks compare streamed text with final cleanup output, including recovery results where

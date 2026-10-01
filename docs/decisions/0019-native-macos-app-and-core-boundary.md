@@ -36,3 +36,18 @@ macOS APIs even if the UI uses a cross-platform framework.
 - Secure input can prevent the global hotkey from firing while a password field has
   focus. The event tap also needs to re-enable itself after macOS disables a slow tap;
   its manual verification remains in [0007](0007-known-gaps.md).
+
+## Deterministic verification, 2026-09-30
+
+The app target is directly importable by its SwiftPM test target; no extra production
+target is needed for operation tests. Core tests use recorded protocol events and a
+manual clock, while app tests inject controlled capture, playback, focus and clipboard
+operations. Signed Mac checks cover behavior those dependencies cannot establish.
+
+The macOS pull-request job selects a Swift 6.2-capable Xcode, logs the toolchain, runs
+`swift test --enable-code-coverage` and builds the release executable. Live xAI checks
+remain opt-in and disabled in that job. Signing is separate from deterministic tests.
+Coverage identifies missing behavior rather than enforcing a percentage target.
+
+Local tests and builds passed. GitHub Actions execution remains unverified, and making
+the job a required merge check is an outstanding repository-administrator setting.

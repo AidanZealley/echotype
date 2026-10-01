@@ -83,22 +83,13 @@ reports that uncertainty and never automatically retries. Correlation and expiry
 accidental cross-request/restarted-app delivery; they do not authenticate local processes.
 Any local process can still ask EchoType to speak, as the original decision allowed.
 
-Deterministic tests drive the actual coordinator through dictation startup, final revision,
-insertion, Test and reading replacement. A signed production `--mcp` executable received
-real notifications from a separate signed fake responder with stdin held open, concurrent
-clients, modern/legacy requests, busy replies and five-second unconfirmed responses.
-That establishes CLI receive feasibility, not the running GUI's admission callback.
-Early signed-app G6 passed after Aidan authorised the development GUI-only restart and
-at most four short TTS requests. The actual inactive GUI admitted concurrent modern and
-legacy CLI requests; unavailable/no-launch behavior, expired and malformed rejection, and
-old-PID ignore passed. Independent review passed the implementation and 29 targeted tests.
-Signed busy-operation preservation is explicitly deferred using reviewed actual coordinator
-phase/Test evidence. Fresh closure and final reviewed-candidate signed recheck pass on the unchanged executable.
-All four authorised G6 requests are charged; prior lifecycle allowances and deferrals remain
-unchanged. Signed busy-operation validation remains unverified under the explicit deferral.
-Candidate details and exact commands are in [packet 5](../specs/macos-rewrite-implementation/05-mcp-admission.md).
+Deterministic tests cover coordinator admission during dictation startup, revision,
+insertion, Test and reading replacement. Signed two-process checks passed modern and
+legacy clients, admission while the GUI was inactive, unavailable/no-launch behavior,
+expired and malformed rejection, stale-PID handling and a five-second unconfirmed reply.
+The final signed app also passed busy-during-dictation rejection. Signed busy-during-Test
+preservation remains unverified under an explicit deferral.
 
-Simplified on 2026-10-01 after whole-feature review: the replay cache and its cleanup task,
-the far-future expiry rejection and the background stdin reader were removed as protection
-against failures that do not occur. Correlation, expiry and the five-second bounded wait
-are unchanged.
+The replay cache, far-future expiry rejection and background stdin reader were removed
+on 2026-10-01 because they protected against failures outside the delivery contract.
+Correlation, expiry and the bounded admission wait remain.

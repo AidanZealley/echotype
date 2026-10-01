@@ -115,24 +115,18 @@ dictation takeover; rapid replacements; finite response buffering; HTTP, network
 inactivity-timeout errors; and task cancellation. HTTP timeout errors propagate from
 URLSession's existing request policy. No new whole-reading duration limit is added.
 The REST settings, text cap, voices, speed, language and PCM format remain unchanged.
-The notification entry point retains its existing dropped-while-busy behavior; workstream
-5 owns the public acknowledged admission reply.
+Incoming speech uses the acknowledged admission policy in
+[0022](0022-voice-replies.md).
 
-G5 passed on the corrected signed workflow candidate, executable SHA-256 `51208746…`.
-Aidan confirmed selection audio and clipboard restoration, the empty-selection warning,
-playing Space pause/resume, paused Escape cancellation/pill removal, remembered startup
-pause and held-Space repeat consumption. The first supplied-text pair finished sequentially
-and supplies no replacement evidence. Aidan requested a quicker retry, then reported
-"Only received thr 2nd one this time". That establishes newest-only audible startup
-supersession. Audible-first interruption and replacement pause/level observations were
-not reported. Reviewed deterministic tests establish isolation and cleanup at the other
-replacement boundaries. Final retains the signed replacement-during-Copy checklist.
+Signed checks passed selection playback and clipboard restoration, empty-selection
+feedback, playing pause/resume, paused Escape, remembered startup pause and held-Space
+repeat handling. A rapid replacement check established newest-only audible startup
+supersession. Reviewed deterministic tests cover cleanup and isolation at the other
+replacement boundaries.
 
-Aidan explicitly deferred signed pending-Copy and paused-reading dictation takeover for
-this workflow, relying on reviewed deterministic coordinator/panel evidence and fresh
-closure. These signed checks remain unverified. Original G5 authority was eight short
-requests; one probe, approximately five manual readings and a replacement pair consumed
-it. The explicitly requested two-request retry brings the conservatively charged total
-to ten. No further live test is authorised. Full-path GUI binding still fails; no new
-grants or repeated restart are required for this acceptance. Existing G1/G2/G4 deferrals
-persist. Detailed evidence and limits are in [packet 4](../specs/macos-rewrite-implementation/04-reading.md).
+Signed replacement during pending Copy and paused-reading dictation takeover were
+explicitly deferred. Audible-first interruption and replacement pause/level checks
+remain unverified. The saturated-queue cancellation fixture acknowledges producer entry
+rather than the actual capacity wait; an independent stalled-consumer localhost probe
+established that cancellation releases the blocked callback. No production observation
+hook was added solely for that fixture.
