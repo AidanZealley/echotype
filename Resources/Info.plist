@@ -17,7 +17,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.2.1</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>EchoType listens while you dictate and sends your speech to xAI to turn it into text.</string>
+	<string>EchoType uses the microphone to turn your speech into text.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>
