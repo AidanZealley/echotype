@@ -37,8 +37,13 @@ when you stop. Select some text and press a second hotkey to hear it read back.
   toggle to turn the hotkeys off. Your API key is kept in the Keychain.
 
 <p align="center">
-  <img src="docs/images/settings-keyterms.png" width="280" alt="Keyterms settings">
-  <img src="docs/images/settings-read-aloud.png" width="280" alt="Read aloud settings">
+  <img src="docs/images/settings-window-read-aloud.png" width="440" alt="Read aloud settings with hotkey, voice and speed controls">
+</p>
+<p align="center">
+  <img src="docs/images/settings-window-provider.png" width="440" alt="Provider settings showing xAI capabilities and API key setup">
+</p>
+<p align="center">
+  <img src="docs/images/settings-window-keyterms.png" width="440" alt="Keyterms settings with example technology names and the term limit">
 </p>
 
 ## Install
