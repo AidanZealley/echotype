@@ -1,0 +1,91 @@
+# Provider adapters implementation plan
+
+Status: draft; implementation has not started. Workflow approval: pending.
+
+## Orchestration record
+
+- Integration branch: `TBD`, proposed `refactor/provider-adapters`
+- Starting commit: `TBD`
+- Review command: `lead subagents`, inherited model and effort
+- Specification approved: by Aidan on 2026-10-01; its committed version is the starting commit
+- Started: `TBD`
+
+This file is the resume record. Only one lead is active at a time. The execution procedure, recovery rules and lead prompts are in the [README](README.md).
+
+Workstream states: Not started, Implementing, Review, Remediation, Closure review, Blocked, Accepted.
+
+## Workstream order
+
+| # | Workstream | Depends on | Status |
+|---:|---|---|---|
+| 1 | [Transcription adapter](01-transcription.md) | Workflow approval | Not started |
+| 2 | [Cleanup adapter and always-on cleanup](02-cleanup.md) | 1 | Not started |
+| 3 | [Read-aloud adapter](03-read-aloud.md) | 2 | Not started |
+| 4 | [Provider registry and credentials](04-registry-credentials.md) | 3 | Not started |
+| 5 | [Provider settings and window](05-settings-window.md) | 4 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1 to 5 | Not started |
+
+## Why these boundaries
+
+- **1 Transcription.** Session and adapter must change together: the session takes over holding audio and ordering sends at the same time as the xAI protocol moves out. It also introduces `ProviderError`, because the adapter is the first thing to throw it.
+- **2 Cleanup.** Changes the dictation operation's revision seam once. The cleanup adapter and removing the toggle go together, because "no cleanup service" replaces `cleanUp: false` as the path without revision.
+- **3 Read aloud.** Reading, playback and MCP `speak` form a separate path with its own Mac gate.
+- **4 Registry and credentials.** Composes the three services into `Provider` once they all exist, so no service contract is declared before it is implemented. It switches wiring, credentials and error wording to the selected provider.
+- **5 Settings and window.** Holds the user-visible settings: per-provider reading storage and its migration, and the Provider, Read Aloud and Keyterms tabs.
+
+Every intermediate state is a working xAI-only app. Workstreams 1 to 3 wire their xAI service directly at the app's composition points; 4 replaces only that wiring with registry lookup. Order is sequential, because 1, 2 and 4 all change the dictation composition in `DictationController.swift` and 2, 4 and 5 all change `Settings.swift` and `SettingsView.swift`.
+
+## Cross-workstream contracts
+
+These are frozen. A defect in one is raised as an escalation naming the owning workstream, not worked around downstream.
+
+- **Specification shapes.** `TranscriptionService`, `LiveTranscriber`, `TranscriptionEvent`, `VoiceService`, `SpeechStream`, `SpeechAudio`, `CleanupService`, `ProviderError` and `Provider` keep the responsibilities and guarantees given in the specification. Declaration details may differ. Each owner records its final declarations in its handoff.
+- **Dependency direction.** Code outside `Sources/EchoTypeCore/Providers/XAI/` reaches xAI only through a service value. From workstream 4, that service value comes only from the selected `Provider`. `Providers/XAI/` depends on the neutral contracts, never the reverse.
+- **Errors.** Every xAI endpoint maps HTTP statuses through one xAI mapping that builds on the shared default and adds 400 as `rejectedCredential`. `STTError` is not visible outside `Providers/XAI/` after workstream 1.
+- **Behaviour.** With xAI, dictation, read aloud, MCP `speak`, Test and Last Dictation behave as on the starting commit, apart from the specification's agreed changes. Existing protocol, transcript and revision fixtures stay authoritative; they move with their code rather than being rewritten.
+- **Storage.** The stored keys `provider` and `reading`, the migration of `voice` and `speechSpeed`, and ignoring `cleanUp` follow the specification exactly. Each field keeps decoding independently with its own fallback.
+
+## Ownership handoffs
+
+| File or area | Order and notes |
+|---|---|
+| `DictationController.swift` | 1 → 2 → 3 → 4 → 5. Each workstream changes only its own wiring, plus `describe(_:)` in 1 and 4. |
+| `DictationOperation.swift` | 1 changes the transcriber dependency; 2 changes the revision dependency; 4 changes key lookup. |
+| `Settings.swift` | 2 removes `cleanUp`; 4 adds `provider`; 5 adds `reading`, migrates and removes `voice`, `speechSpeed` and the speed range. |
+| `SettingsView.swift` | 1 changes the Keyterms count source; 2 removes the Clean up text toggle; 3 changes the voice list source; 4 changes Keychain calls and the key placeholder; 5 owns the Provider, Read Aloud and Keyterms tab layout. |
+| Shared network helpers in `Sources/EchoTypeCore/Providers/HTTP/` | 1 creates them (status mapping, WebSocket transport); 3 adds the streamed HTTP body. |
+| Error mapping lines in `RevisionRequest.swift` and `ReadingRequest.swift` | 1 may edit them to use the xAI status mapping; their files then belong to 2 and 3. |
+| Decision records | Each packet names its own. Workstream 4 creates the provider adapters record, and 5 completes its "Adding a provider" section. |
+
+## External validation gates
+
+| Gate | Owner and placement | Status | Candidate | Required evidence and resume condition |
+|---|---|---|---|---|
+| G1 Dictation | 1, after closure before acceptance | Pending | TBD | Aidan reports that a signed candidate with xAI passes: normal dictation, stopping mid-sentence keeps the final words, Escape during Transcribing inserts nothing, and the Settings Test button shows what it heard |
+| G2 Read aloud | 3, after closure before acceptance | Pending | TBD | Aidan reports that a signed candidate passes: reading a selection with each voice, Space to pause and resume, stopping with the hotkey, and an agent's MCP `speak` call |
+| G3 Whole feature | Final, after focused closure before acceptance | Pending | TBD | Aidan reports that a signed candidate passes the specification's Mac checks: the upgrade keeps the existing key, voice and speed; dictation shows cleanup requests in Last Dictation; read aloud, MCP `speak` and Test work; a wrong key shows "xAI rejected the API key", with the real key restored afterwards; the Provider tab is checked in both themes |
+
+Gate states are Pending, Testing, Troubleshooting or Passed, separate from workstream states.
+
+## Whole-feature acceptance
+
+- Rows 1 to 5 are Accepted.
+- The final review runs the complete deterministic suite and the release build once.
+- The specification's provider-name search is clean.
+- Gate G3 has passed.
+
+CI is not run by this workflow because nothing is pushed; the completion report says so.
+
+## Escalations
+
+None.
+
+## Decision and drift log
+
+| Date | Decision or drift | Reason | Approved by | Affected workstreams |
+|---|---|---|---|---|
+| — | None | — | — | — |
+
+## Completion summary
+
+Written by the final-review lead.
