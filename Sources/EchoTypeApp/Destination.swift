@@ -47,6 +47,13 @@ enum DestinationVerification: String {
     guard let frontmost = NSWorkspace.shared.frontmostApplication else { return nil }
     let pid = frontmost.processIdentifier
     let application = AXUIElementCreateApplication(pid)
+    // Electron can hide its focused web field until an assistive client enables its tree.
+    // Request that support where offered, then apply the same destination identity checks.
+    if let manualAccessibility = attribute("AXManualAccessibility", of: application),
+      CFEqual(manualAccessibility, kCFBooleanFalse)
+    {
+      _ = AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+    }
     guard let window = element(kAXFocusedWindowAttribute, of: application),
       let target = element(kAXFocusedUIElementAttribute, of: application),
       let role = attribute(kAXRoleAttribute, of: target) as? String,
