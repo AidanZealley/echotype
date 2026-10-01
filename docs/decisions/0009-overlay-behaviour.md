@@ -12,7 +12,7 @@ Aidan's 2026-09-30 addition shows "Select an input" while recording without a
 conservative focused destination text field. "Starting" remains until microphone audio
 flows. Focus readiness is advisory and updates during silence; recording and finishing-time
 destination capture keep their existing behavior. Dictation error text uses the transcript's
-1.5 line-height multiple. Select an input uses the existing near-limit timer semantic orange. Implementation is recorded in 0024. G4 passed under Aidan's approved reduced-core scope; alternate-theme and changed error/amber layout checks remain unverified.
+1.5 line-height multiple. Select an input and dictation's final minute show a fixed orange dot beside plain text, with the level glow turned orange; coloured text alone was illegible on light glass over dark windows (G7, 2026-10-01). Implementation is recorded in 0024. G4 passed under Aidan's approved reduced-core scope; alternate-theme and changed error/amber layout checks remain unverified.
 
 Reading's accepted lifecycle rewrite derives Starting, Reading and Paused from the
 operation, including remembered pause before audio arrives. Stop hides the reading pill

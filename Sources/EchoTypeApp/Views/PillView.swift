@@ -2,6 +2,20 @@ import SwiftUI
 
 private let supportingTextOpacity = 0.65
 private let indicatorOpacity = 0.4
+/// Marks "Select an input" and dictation's final minute as a dot beside plain text. Coloured
+/// text alone was illegible on light glass over dark windows; a fixed orange dot reads the
+/// same in both themes.
+private let warningOrange = Color(.sRGB, red: 0.91, green: 0.42, blue: 0)
+
+/// Seconds since the session started, excluding reading pauses.
+private func elapsedSeconds(_ pill: Pill, at date: Date) -> Int {
+  max(0, Int((pill.pausedAt ?? date).timeIntervalSince(pill.startedAt) - pill.pausedDuration))
+}
+
+/// The final minute before dictation's five minute cap.
+private func nearsCap(_ pill: Pill, at date: Date) -> Bool {
+  !pill.isReading && elapsedSeconds(pill, at: date) >= 4 * 60
+}
 
 /// The overlay pill: a growing transcript for dictation, or a compact reading status.
 struct PillView: View {
@@ -33,8 +47,11 @@ struct PillView: View {
   private var statusRow: some View {
     HStack(spacing: 8) {
       LevelMeter(pill: pill)
-      Text(pill.phase.name)
-        .foregroundStyle(pill.phase == .selectInput ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary.opacity(supportingTextOpacity)))
+      if pill.phase == .selectInput {
+        Warning(Text(pill.phase.name))
+      } else {
+        Text(pill.phase.name).foregroundStyle(.primary.opacity(supportingTextOpacity))
+      }
       Spacer()
       Elapsed(pill: pill)
     }
@@ -233,18 +250,33 @@ private struct LevelMeter: View {
   }
 }
 
-/// Minutes and seconds since the session started, excluding reading pauses. Amber from four
-/// minutes as dictation's five minute cap approaches, dimmed while paused.
+/// Plain text after an orange dot, for a state the user should act on.
+private struct Warning: View {
+  let text: Text
+  init(_ text: Text) { self.text = text }
+
+  var body: some View {
+    HStack(spacing: 5) {
+      Circle().fill(warningOrange).frame(width: 6, height: 6)
+      text.foregroundStyle(.primary)
+    }
+  }
+}
+
+/// Minutes and seconds since the session started, excluding reading pauses. Marked as a
+/// warning in dictation's final minute, dimmed while paused.
 private struct Elapsed: View {
   let pill: Pill
 
   var body: some View {
     TimelineView(.periodic(from: pill.startedAt, by: 1)) { context in
-      let seconds = max(0, Int(
-        (pill.pausedAt ?? context.date).timeIntervalSince(pill.startedAt) - pill.pausedDuration))
-      Text(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
-        .monospacedDigit()
-        .foregroundStyle(seconds >= 4 * 60 ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary.opacity(supportingTextOpacity)))
+      let time = Text(Duration.seconds(elapsedSeconds(pill, at: context.date))
+        .formatted(.time(pattern: .minuteSecond))).monospacedDigit()
+      if nearsCap(pill, at: context.date) {
+        Warning(time)
+      } else {
+        time.foregroundStyle(.primary.opacity(supportingTextOpacity))
+      }
     }
     .opacity(pill.phase == .paused ? 0.4 : pill.phase == .readingPaused ? 0.8 : 1)
   }
@@ -253,8 +285,8 @@ private struct Elapsed: View {
 /// A blurred blue wave hanging from the pill's top edge, as deep as the level. Its ripples roll
 /// while listening or reading, but it flattens to a faint line when the voice is quiet, so it
 /// moves only in proportion to the voice, the user's or the one reading. Faint and grey while
-/// the microphone opens, dimmed and still while paused, gone once the session is committed or
-/// fails.
+/// the microphone opens, orange while no input is selected or in dictation's final minute,
+/// dimmed and still while paused, gone once the session is committed or fails.
 private struct LevelGlow: View {
   let pill: Pill
   /// The approximate height of the pill with one transcript line.
@@ -267,7 +299,8 @@ private struct LevelGlow: View {
     TimelineView(.animation(paused: pill.phase != .listening && pill.phase != .selectInput && pill.phase != .reading)) { timeline in
       let time = timeline.date.timeIntervalSinceReferenceDate
       Canvas { context, size in
-        let colour: Color = pill.phase == .starting ? .gray : .blue
+        let colour: Color = pill.phase == .starting ? .gray
+          : pill.phase == .selectInput || nearsCap(pill, at: timeline.date) ? .orange : .blue
         drawWave(in: &context, size: size, colour: colour, time: time)
       }
     }
