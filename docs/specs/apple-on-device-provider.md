@@ -1,88 +1,156 @@
 # Apple on-device provider
 
-Status: measured-feasibility spike accepted, 2026-10-02. Aidan approved completing the investigation and its recorded policies, with further cleanup tuning deferred to feature implementation. The [provider adapter implementation](../decisions/0025-provider-adapters.md) is merged. Apple production implementation and its workflow are not authorized by this decision.
+Status: approved for implementation, 2026-10-02. Builds on the [provider adapters](../decisions/0025-provider-adapters.md). The [feasibility research](../research/apple-on-device-provider.md) holds the spike's measurements and reasoning; this spec owns the requirements.
 
 ## Goal and scope
 
 Add Apple as a second provider that runs entirely on the Mac with no key or account: `SpeechTranscriber` for live transcription, `AVSpeechSynthesizer` for read aloud and Foundation Models for cleanup. Selecting Apple makes EchoType free to run and keeps audio and text on the device.
 
-Apple is a feature-complete fallback. Lower transcription, voice and cleanup quality than xAI is acceptable; feature completeness and adapter containment are the shipping gate. xAI remains the default. On a supported Mac with the required assets and Apple Intelligence enabled, Apple must supply all three services and preserve the existing dictation, Test, read aloud, MCP speech, voice/speed selection and keyterm behavior. When system configuration makes a service unavailable, use the availability behavior below.
+Apple is a feature-complete fallback. Lower transcription, voice and cleanup quality than xAI is acceptable; feature completeness and adapter containment are the shipping gate. xAI remains the default. On a supported Mac with the required assets and Apple Intelligence enabled, Apple supplies all three services and preserves the existing dictation, Test, read aloud, MCP speech, voice/speed selection and keyterm behaviour. When system configuration makes a service unusable, the [readiness](#readiness) behaviour applies.
 
-This spec is also the test of the provider design. Apple must fit the existing operation contracts, plus the small shared capability described under [Availability](#availability). Production changes should be confined to `Providers/Apple/`, one registry line and the shared wiring for availability.
+This spec is also a test of the provider design. Shared changes are limited to:
 
-Apple's adapters own model installation and loading, locale matching, audio conversion, transcript assembly, voice fallback, rate mapping, bounded buffering, framework cancellation, cleanup sessions and context limits. Shared code consumes provider-neutral states, events and errors. Do not add Apple-specific branches to `SessionMachine`, `Reader`, `Reviser`, settings or UI code.
+- the [readiness](#readiness) capability and its wiring,
+- the [language picker](#language-picker),
+- one registry line in `Providers.swift`,
+- tests, any required bundle permission and documentation.
 
-Any further shared change needs a concrete justification and Aidan's decision before implementation. If Apple cannot supply all three services and meet the operation contracts without disproportionate complexity or missing behavior, return the concrete limitation to Aidan rather than silently dropping a feature. Being free does not justify making the rest of the app harder to maintain. Tests, required bundle permissions and documentation changes are expected outside the adapter folder and must be recorded in the extensibility report.
+Apple's adapters own model installation and loading, language resolution, audio conversion, transcript assembly, voice fallback, rate mapping, bounded buffering, framework cancellation, cleanup sessions and context limits. Shared code consumes provider-neutral states, events, errors and reason strings. Do not add Apple-specific branches or wording to `SessionMachine`, `Reader`, `Reviser`, `DictationOperation`, settings or UI code.
+
+Any further shared change needs a concrete justification and Aidan's decision before implementation. If Apple cannot supply a service within the contracts without disproportionate complexity or missing behaviour, return the concrete limitation to Aidan rather than silently dropping a feature. Being free does not justify making the rest of the app harder to maintain.
 
 Outside scope: batch transcription, mixing providers, other providers and iOS.
 
-## Accepted investigation and implementation policies
+## Readiness
 
-The measured-feasibility investigation completed on 2026-10-02. All three services fit the existing operation contracts on the supported, configured Mac. Measurements, experiment code, rationale, verification provenance and remaining evidence bounds are in [Apple provider research](../research/apple-on-device-provider.md). This specification owns product requirements; the research document supports them.
+The provider contract only checks credentials. Apple's services can exist and still be unusable on a given Mac, so `Provider` gains one optional member. Approximate shape for `Provider.swift`:
 
-Aidan approved completing the spike with these policies and deferred further cleanup investigation and tuning to feature implementation. No production implementation or workflow generation is authorized by that decision. The separate wrong-recipient and meaningful-content deletion failures remain quality risks. Passing faithfulness validation does not establish semantic safety. Excessive-repetition reduction is ambiguous stress evidence, not proof of an ordinary long-dictation failure.
+```swift
+public struct Provider {
+  …
+  /// Nil when the services are always usable once the credential is present.
+  public var readiness: Readiness?
+}
 
-- Transcription appends final segments to committed text, replaces volatile provisional text and leaves utterance empty. Nonempty recognition supplies speech evidence. Preserve monotonic committed prefixes and the final tail. Return promptly from `start()` and prepare before `.ready` within the existing five-second readiness timeout.
-- Use the app's 16 kHz mono Int16 input where supported; the Apple adapter owns any required conversion on other supported SDKs. Preserve Test's five-second finalization contract, quick stop and joined cancellation.
-- Pass built-in EchoType and saved keyterms to AnalysisContext. Keep a provisional cap of 100 including EchoType pending human jargon and recognition-limit verification.
-- Resolve bare language tags to a deliberate stable supported region; bare `en` maps to `en-GB`. Preserve explicit supported regional tags, use equivalent supported matching where possible and reject unsupported required-service language combinations with a clear reason.
-- Zoe Premium is the provisional Apple default at 1x. Daniel Enhanced and Samantha Compact are alternatives. Siri is unavailable through this API. Fall back to an installed compatible-language voice without overwriting the saved choice; report unavailable when none exists. Guide users to system Read & Speak settings for downloads and refresh inventory after changes.
-- Provide a practical speed slider. The measured .7...1.5 duration mapping is exploration; only 1x received listening acceptance. Tune the slider during implementation. Use the provisional 60,000-Unicode-scalar text limit. Keep synthesis bounded during paused pulls, deliver at most 100 ms per chunk and cancel pending pulls promptly. Prefer complete sentence boundaries within the bounded utterance size, with oversized-sentence prosody checked during implementation.
-- Required assets must be installed before capture. Follow the [availability and setup requirements](#availability) for hard gates, pill messaging, installation and retry.
-- Cleanup must perform real revision when available. Use a fresh LanguageModelSession per request, the exact neutral Reviser prompt, greedy generation and unchanged framework protections. Reviser owns windows, faithfulness validation and its existing three-second final cancellation budget. Individual failed, oversized or unfaithful requests preserve text through Reviser. Context overflow must fail safely without truncating dictation or adding shared chunking.
+/// Whether this Mac can use the provider's services now, for these settings.
+public struct Readiness: Sendable {
+  /// What each service can do now. Starts any setup it needs; the provider runs at most one
+  /// setup at a time, so calling again is cheap.
+  public var check: @Sendable (ReadinessRequest) async -> ServiceReadiness
+  /// Yields when an earlier answer may be out of date, such as setup finishing or failing.
+  public var changes: @Sendable () -> AsyncStream<Void>
+}
 
-Before shipping, account for the research document's [feature feasibility and remaining verification](../research/apple-on-device-provider.md#feature-feasibility-and-remaining-verification), including signed dictation/Test/Reader/MCP, integrated offline behavior, permissions, cold readiness, model/voice setup failure and refresh, room silence, human keyterm accuracy, multilingual and representative long-dictation cleanup quality. The accepted investigation does not claim those unobserved states were verified.
+public struct ReadinessRequest: Equatable, Sendable {
+  /// The app's BCP-47 tag; the provider resolves its own form.
+  public var language: String
+  public var voice: String
+}
 
-## Shared capability
+public struct ServiceReadiness: Equatable, Sendable {
+  public var transcription: ServiceState
+  public var voice: ServiceState
+  /// Nil when the provider has no cleanup.
+  public var cleanup: ServiceState?
+}
 
-### Availability
+public enum ServiceState: Equatable, Sendable {
+  case ready
+  /// Setup or loading is under way, such as "Downloading speech model".
+  case waiting(String)
+  /// The Mac or its settings rule the service out, such as "Needs Apple Intelligence".
+  case unavailable(String)
+}
+```
 
-The current provider contract only checks credentials. Apple's services can exist and still be unusable on a given Mac, so add the smallest availability check that covers the spike results:
+The provider writes every reason string. xAI's `readiness` is nil, so its behaviour, feature marks and missing-key handling are unchanged.
 
-- Each service can report that it is ready, needs setup with a short reason such as "Downloading speech model", or is unavailable with a short reason such as "Needs Apple Intelligence".
-- Feature marks in the Provider tab continue to indicate which services the provider supports. Readiness is separate: show a short reason beside a supported service that needs setup or is unavailable. Missing cleanup keeps its grey mark.
-- When transcription is not ready, dictation shows the reason in the error pill and does not start.
-- When read aloud is not ready, reading shows the reason in the error pill.
-- When cleanup is not ready, unsupported hardware, disabled Apple Intelligence and missing required models block Apple dictation with a short reason. Loading/downloading/not-ready states use pill messaging. Do not add unavailable-state fallback machinery. Individual request failures still preserve text through the existing Reviser.
-- Credentials remain a separate prerequisite. xAI needs no additional setup check; its feature marks and existing missing-key behavior stay unchanged.
+Behaviour:
 
-Start required model installation automatically when Apple is selected, including launch with Apple already selected. A short "Downloading speech model" state is sufficient; numeric progress and a shared download manager are unnecessary.
+- **Operation start.** Dictation and Test check readiness after the credential and before opening capture. Reading checks it before requesting speech. An operation starts only when every service it uses is `.ready`. Dictation uses transcription and cleanup, Test uses transcription, and reading and MCP speech use voice.
+- **Pill.** `.unavailable` uses the existing red error pill, as "No microphone found" does. `.waiting` uses a new amber or neutral pill phase that shows the reason and fades the same way. A waiting operation does not start.
+- **Provider tab.** Feature marks still show which services a provider supports, and missing cleanup keeps its grey mark. A supported service that is not ready shows its reason beside the mark.
+- **Refresh.** The controller checks readiness, and so starts any required setup, on:
+  - provider, language or voice changes,
+  - launch, including launch with Apple already selected,
+  - the app becoming active, which covers System Settings changes,
+  - each `changes` yield,
+  - operation start.
+- **Setup.** One installation runs at a time and may complete after switching providers. A failure reports a short reason and the next check retries it, so reselecting Apple or trying again retries. A short waiting reason is enough; numeric progress and a shared download manager are unnecessary.
+- **Mid-dictation loss.** If cleanup becomes unusable during a dictation, failed requests preserve the original text through the existing `Reviser`. No other fallback machinery.
 
-Check availability for the selected language and voice on selection, app launch, relevant settings changes and operation start. Refresh the feature list when setup completes or fails and when the app becomes active after system settings change. The Apple adapter owns setup and reports state through the shared contract; checks themselves should not repeatedly initiate downloads.
+This step is complete when readiness is part of the provider contract and these are covered with fake services: blocked dictation, Test and reading for waiting and unavailable states, and Settings refreshing on `changes`. xAI's existing tests must pass unchanged.
 
-Setup policy: one installation runs at a time, may complete after switching providers and reports a short failure reason if it fails. Retry on reselecting Apple or on the next operation attempt; that attempt reports setup status without starting capture. Verify failed-install retry during implementation; successful installation does not establish it. Recheck availability at operation start; if cleanup becomes unavailable during a dictation, failed requests preserve the original text through the existing reviser.
+## Language picker
 
-This step is complete when availability is part of the provider contract, focused tests cover blocked transcription, reading and cleanup prerequisites plus setup-state refresh, and xAI's existing tests pass unchanged. Use fake services for shared behavior tests.
+Replace the free-text Language field with a picker over a fixed, provider-neutral list. Each entry has a display name and a bare BCP-47 tag such as `en` or `fr`. `Settings.language` still stores the tag, so request types are unchanged. The list holds only English (`en`) for now, the default. More languages are added once someone can test them across both providers.
+
+A saved tag that is not in the list maps to the entry with the same language subtag, or to English if there is none.
+
+Each adapter resolves the app's tag to its own form. xAI passes it through. Apple resolves it to a supported regional locale per service and reports an unsupported language through readiness.
 
 ## Apple provider
 
-Implement `Providers/Apple/` against the contract, using the accepted policies and [supporting research](../research/apple-on-device-provider.md):
+Implement `Providers/Apple/` against the contracts:
 
-- Description: id `apple`, name `Apple`, summary "Free. Runs on this Mac.", and `Credential.none`.
-- Transcription adapter: translates results into `.ready`, `.transcript`, `.speech` and `.finished`, according to the accepted transcript mapping. `.ready` waits for the model to load. Use the provisional 100-term cap.
-- Voice adapter: the approved voice choices and tuned speed mapping, and a sample rate taken from the synthesizer's buffers.
-- Cleanup adapter: `LanguageModelSession` with the neutral prompt and the existing faithfulness validation.
-- Fixture tests for each adapter's translation, using recorded or constructed framework results. Live checks stay opt-in.
+- **Description.** Id `apple`, name `Apple`, summary "Free. Runs on this Mac." and `Credential.none`.
+- **Readiness.** As above. Transcription needs its speech assets installed for the resolved locale. Voice needs a usable voice for the language. Cleanup needs `SystemLanguageModel` to be available and to support the language:
+  - unsupported hardware, Apple Intelligence turned off and an unsupported language are `.unavailable`,
+  - a model that is still downloading or loading is `.waiting`.
 
-This step is complete when Apple appears in the Provider tab with no change to settings or UI code, beyond the availability capability.
+  Querying installation requests has side effects, because it reserves locales. Keep those queries inside `check`'s single-setup path.
+- **Language.** A bare tag maps to a deliberate, stable, supported region. Bare `en` maps to `en-GB`, since the framework's own bare-tag matching is unstable. Explicit supported regional tags are preserved.
+- **Transcription.**
+  - Final segments append to committed text, volatile results replace provisional text, and utterance stays empty. Committed text only grows, and the resolved tail arrives before `.finished`.
+  - Nonempty recognised text emits `.speech`. `SpeechDetector` produced nothing in the spike, so don't rely on it. Silence handling stays in `SessionMachine`: a dictation with no speech cancels quietly, and silence after speech pauses and keeps listening, as with xAI.
+  - Stopping a session that recognised nothing makes the framework throw `RecogRejected` (Speech error code 1) at finish. Treat that as an empty finish, not an error.
+  - `start()` returns promptly. `.ready` waits for the analyser to prepare, within the existing five-second readiness timeout.
+  - Feed the app's 16 kHz mono Int16 audio directly; the adapter owns any conversion another SDK requires.
+  - Preserve Test's five-second finalisation, quick stop before readiness and joined cancellation.
+  - Pass the built-in `EchoType` term and saved keyterms through `AnalysisContext`, with a provisional `keytermLimit` of 100.
+- **Voice.**
+  - Voices are Zoe Premium (`com.apple.voice.premium.en-US.Zoe`, the default) and Jamie Premium (`com.apple.voice.premium.en-GB.Malcolm`, shown as "Jamie"). Siri voices are not available through this API.
+  - If the saved voice is missing or does not suit the language, fall back to an installed voice for the language without overwriting the saved choice. If none exists, report `.unavailable` with guidance to download one in System Settings > Accessibility > Read & Speak. Refresh on the voices-changed notification.
+  - Map speed through fixed per-voice rate anchors. The spike measured Zoe's; Jamie needs his own. Tune the range by ear during implementation, keeping 1x.
+  - The text limit is 60,000 Unicode scalars. Submit one utterance of at most 250 scalars at a time, preferring the last complete sentence within the bound, and start the next only after the previous is consumed.
+  - Take the sample rate from the synthesiser's buffers, deliver at most 100 ms per chunk and cancel pending pulls promptly.
+- **Cleanup.**
+  - Use a fresh `LanguageModelSession` per request with the exact `Reviser` prompt, greedy generation and unchanged framework protections.
+  - `Reviser` still owns windows, faithfulness validation and the three-second final budget.
+  - Context overflow fails the request, and `Reviser` preserves the text. No truncation or shared chunking.
+- **Tests.** Fixture tests for each adapter's translation, using recorded or constructed framework results. Live checks stay opt-in.
+- **Permissions.** Determine on the signed build whether Speech needs authorisation or a usage description. If it does, follow the existing microphone pattern: request at operation start, word the denial in the pill and show it in the Settings system rows.
+
+Cleanup quality is tuned through real dictation after implementation rather than specified here. A change to the shared `Reviser` prompt or validation also affects xAI, so it needs Aidan's decision.
+
+This step is complete when Apple appears in the Provider tab and works with no settings or UI change beyond readiness and the language picker.
+
+## Spike code
+
+The spike experiments live in `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/`. Use them as reference while implementing, then delete the folder once the production adapters and their tests cover what is useful. Update the research document's links to describe the experiments as removed, with git history as their source.
 
 ## Verification
 
-Run these checks on a signed build on the Mac:
+Aidan runs these checks on a signed build at the end of implementation:
 
-- After required assets are installed and Apple Intelligence is available, with Apple selected and the network off, dictation with cleanup, read aloud, MCP `speak` and Test all work.
+- After required assets are installed and Apple Intelligence is available, with Apple selected and the network off: dictation with cleanup, read aloud, MCP `speak` and Test all work.
 - Switch xAI → Apple → xAI. Each provider keeps its voice and speed, and xAI works exactly as before.
-- With Apple Intelligence off where Aidan can toggle it: Cleanup retains its support mark, shows its unavailable reason, and Apple dictation is blocked. Re-enable it before verifying successful cleanup. Individual failed revisions still preserve original text.
-- Run the first dictation on a Mac without the speech model installed, or after removing it, to check the setup state and the readiness behaviour.
-- Check that setup completion and failure update Settings, launch with Apple selected starts required setup, and a language change rechecks the required assets.
-- Pause a long reading and resume it without missing audio or unbounded read-ahead. Cancel while synthesis or model loading is pending and check that the next operation works.
-- Check the Provider tab in both themes.
+- With Apple Intelligence off, Cleanup keeps its support mark, shows its reason, and Apple dictation is blocked with the red pill. Re-enable it before checking cleanup.
+- The first dictation without the speech model installed, or with a language whose model is missing, shows the amber waiting pill and does not start. Setup completion and failure update Settings. Launch with Apple selected starts required setup.
+- First dictation after a restart with assets installed is ready within five seconds.
+- Silence before speech cancels quietly. Silence after speech pauses and resumes in a real room. A tap-and-stop with nothing said shows no error.
+- Saved jargon keyterms on real speech.
+- Pause a long reading and resume it without missing audio or unbounded read-ahead. Cancel while synthesis or model loading is pending, and the next operation works. Listen to a sentence longer than 250 scalars.
+- A missing saved voice falls back without overwriting the choice. Downloading a voice in System Settings is picked up.
+- Speed slider range feels right for both voices.
+- Representative long dictation with cleanup.
+- The Provider tab and the waiting pill in both themes.
 
 ## Extensibility report
 
 Finish with a short section in the provider adapters decision record:
 
 - List every change outside `Providers/Apple/` and `Providers.swift`, with its reason.
-- Say whether each change belongs in the shared contract, and update the "Adding a provider" steps to match.
+- Say whether each change belongs in the shared contract, and update the "Adding a provider" steps to match, including readiness and language resolution.
 
 The report is complete when every shared change is accounted for.
