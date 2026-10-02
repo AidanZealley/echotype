@@ -1,6 +1,6 @@
 # Apple on-device provider
 
-Status: ready for spikes, 2026-10-01. The [provider adapter implementation](../decisions/0025-provider-adapters.md) is merged. Apple implementation has not started; production work waits for the decision gate below.
+Status: measured-feasibility spike accepted, 2026-10-02. Aidan approved completing the investigation and its recorded policies, with further cleanup tuning deferred to feature implementation. The [provider adapter implementation](../decisions/0025-provider-adapters.md) is merged. Apple production implementation and its workflow are not authorized by this decision.
 
 ## Goal and scope
 
@@ -115,7 +115,33 @@ Measured on 2026-10-02 with the accepted [S3 experiment](apple-on-device-provide
 
 Supported-path revision, cancellation and preservation fit the unchanged cleanup contract. The adapter needs no shared branches for these experiments. Quality includes accepted destructive deletions and slow windows that preserve text. Aidan's later policy accepts the named cold/unavailable-state evidence bounds where these measurements establish feasibility. It does not approve shipping or production implementation. Offline evidence remains user-reported. xAI remains unchanged and no comparison key was available.
 
-The final lead must reconcile the older cleanup-only fallback proposals in Step 2 and Verification with this policy before recording the final decision. Availability gates and pill messaging remain future app work. Individual failed, oversized or unfaithful revisions still preserve text through Reviser; that existing request behavior does not add unavailable-state fallback machinery.
+The Step 2 and Verification availability policy below reflects Aidan's 2026-10-02 hard-gate decision. Availability gates and pill messaging remain future app work. Individual failed, oversized or unfaithful revisions still preserve text through Reviser; that existing request behavior does not add unavailable-state fallback machinery.
+
+### Feature feasibility
+
+Combined assessment, 2026-10-02. The supported-path evidence comes from the accepted S1/S2/S3 results above and their handoffs. Apple is not registered and no production feature is implemented. Existing callers were read to check fit, not exercised with Apple in a signed app.
+
+| Requirement | Evidence | Supported-path feasibility | Limitation | Future verification |
+|---|---|---|---|---|
+| Dictation and transcript/speech mapping | S1 human WAV, real SessionMachine, monotonic committed prefix and resolved finish tail | Fits existing 16 kHz input/events; recognition text emits speech evidence | SpeechDetector emitted nothing; acoustic onset and room silence unmeasured | Signed microphone dictation, real room tone and silence/pause timing |
+| Test | Human five-second prefix preserves final text; DictationOperation Test commits at five seconds and bypasses cleanup/insertion | Same transcription service contract fits | Signed Apple Test is unimplemented | Run actual Settings Test with quick stop and complete tail |
+| Built-in and saved keyterms | TranscriptionRequest delivers EchoType plus saved terms to AnalysisContext; 1/100/1000 strings read back | Existing request and cap fit; provisional limit 100 including EchoType | No recognition improvement measured, no usable maximum or human jargon accuracy established | Human jargon/reference sample and cap validation |
+| Language | S1 regional matching, S2 French/zh-Hant voice synthesis, S3 runtime supported locales | Adapter can resolve supported BCP-47 tags and report unsupported language | Bare en/fr matching varied; English cleanup quality only; service locale sets differ | Stable bare-tag resolution, locale intersection and multilingual cleanup quality |
+| Read aloud and MCP speech | S2 pull stream and complete PCM; Reader/MCP use selected provider via controller | Existing SpeechRequest/SpeechStream and Float32 PCM fit both callers | Signed reading and Apple MCP wiring unimplemented; full 60,000-scalar drain deferred | Reader and MCP start/pause/cancel, limit and failure paths |
+| Voice and speed choices | Zoe/Daniel/Samantha synthesis, missing-id before/after download, locale fallback and measured rates | Zoe Premium default; installed compatible fallback; saved choices retained; rate control exists | Siri unavailable; only 1x listening accepted; slider tuning and long-sentence prosody deferred | Tune slider in real app, alternate locales, oversized sentences and missing saved voice |
+| Pause/resume and bounded audio | Paused 1,260-scalar run stops submissions; ~1.13 MB peak retained PCM; all 1,692,360 frames drain; <=100 ms chunks | One <=250-scalar utterance at a time fits pull backpressure | Framework-service memory unmeasured; longer sentences need splits | Long real Reader pause/resume, full-limit drain and service-memory observation |
+| Startup/finish/cancellation | S1 prompt start, preparation before ready, final tail, early finish and active/loading close; S2 pending-pull cancel; S3 live/final join | Contracts fit without shared lifecycle changes | Genuine unloaded cold start unmeasured; S3 final can complete ~0.21 s beyond 3 s budget | Cold readiness within five seconds, signed quick stop and repeated next operation |
+| Real cleanup and faithfulness/failure behavior | Real edits, 6/7 original and 8/11 overall final outcomes; unfaithful/context/timeout failures preserve text through Reviser; bounded prompt follow-up repeats twice | Fresh sessions and neutral prompt fit existing service; cleanup performs real revision | Validator accepts harmful preservation deletion and wrong corrected recipient; excessive-repetition reduction is ambiguous stress evidence | Representative real dictation and cleanup tuning during implementation before any shipping decision |
+| Cleanup context | 4,096 tokens; prompt 208; measured oversized/accumulated framework failure and preservation | Adapter handles bounded framework context with fresh session per request | Shared revision windows are unbounded; generated output can exhaust remaining budget | Long distinct/accumulated real dictation; preserve on overflow, no truncation or shared chunking |
+| Offline after setup | S2/S3 user-reported host-disconnected passes; S3 child process network denial; S1 local service run | Frameworks provide local operations; evidence supports proceeding to integrated verification | Child denial excludes model daemon; S1 host-disconnected and combined signed offline run unmeasured | Signed dictation + cleanup, Test, reading and MCP with host network disconnected |
+| Asset installation and availability | S1 installation completed despite cancel, installed readiness; Zoe appears after user install; S3 available and SDK failure states | Availability/setup is the justified shared capability; hard prerequisites and pill states | Failed download/retry, asset removal and unavailable transitions unmeasured and accepted as bounds | Setup completion/failure refresh; unsupported Mac, disabled Intelligence and language changes |
+| Per-provider settings and UI wiring | Settings.reading is keyed by provider id; SettingsView, controller and MCP read selected provider contracts | Existing saved voice/speed, feature marks, keyterms and credential-none wiring fit | Apple registration, availability UI, theme checks and signed permissions unimplemented | xAI→Apple→xAI retention, both themes, missing-key behavior unchanged and bundle permission audit |
+
+Recommended next direction is a separate production design. Aidan approved completing the measured-feasibility investigation and deferred further cleanup investigation or tuning to feature implementation. All three adapters are technically feasible on this configured Mac. No shared change beyond availability is justified by the measured contracts. The spike cannot establish safe semantic cleanup for every passage: accepted deletions can erase content or select the wrong recipient. The 840-word repeated fixture does not prove an ordinary long-dictation failure; substantial reduction may be intended cleanup. Cleanup remains required.
+
+The recorded policies are Zoe Premium first, Daniel Enhanced and Samantha Compact alternatives, user-managed voice installation with inventory refresh and compatible installed-language fallback without overwriting saved choices. Only 1x is accepted as a listening default; duration mapping supports a future slider that still needs tuning. Keep the transcription keyterm limit at 100 pending human jargon checks. Resolve bare language tags to a deliberate stable supported region rather than use the observed unstable equivalent-locale ordering; use bare `en` → `en-GB`, while preserving explicit supported regional tags. Reject unsupported required-service language combinations with a clear reason.
+
+Speech-model setup belongs before capture, runs one installation at a time and may finish after provider switching, since the measured download ignored cancellation. Refresh without repeatedly requesting installation; surface setup failure and allow retry on reselect or the next operation attempt. Voice downloads remain in system settings. Unsupported hardware and disabled Apple Intelligence are hard gates; all required models must be present, with pill messaging for loading/downloading/not-ready. Individual revision failures preserve text through Reviser. Keep cleanup's exact neutral prompt, fresh sessions and framework protections; context overflow must fail safely rather than truncate or introduce shared chunking. Signed permissions, integrated offline behavior and the named environment bounds remain production verification work.
 
 ### Decision gate
 
@@ -125,7 +151,9 @@ Record a feature-feasibility matrix covering all three services, built-in and sa
 
 If a required feature is impossible or needs a shared change beyond availability, present the limitation and options to Aidan. Do not weaken the contracts or make cleanup optional for quality reasons. Confirm the provisional setup, locale and voice policies here before production work, and record whether all three services are feasible within the containment boundary.
 
-The gate is complete when Aidan's decision is recorded here.
+The [bounded cleanup follow-up](apple-on-device-provider/spike/cleanup-quality-follow-up.md) on 2026-10-02 compared the current prompt with one clearer prompt and four examples, using fresh sessions and greedy decoding. Two identical runs gave identical outputs. The clearer prompt preserved the sentence containing `actually` and `sorry`, but retained both John and Jane instead of the corrected Jane, and both prompts reduced the repeated 840-word passage to 12 words on the first pass. Aidan judged this excessive repetition an ambiguous stress case whose reduction may be intended cleanup, so preservation of all repetitions is not a semantic-quality requirement. It does not establish an ordinary long-dictation failure. Current-prompt live plus finish matched direct first/second outputs: the second pass further removed Jane and reduced `Actually sorry` to `Sorry`. Moving overlap and the explicit final cleanup repeat recent revised text, but the first-pass errors already exist. This supports prompt sensitivity, not a demonstrated safe fix. Production prompt, validator and lifecycle remain unchanged.
+
+Aidan's final decision, 2026-10-02, completes the gate. Proceed with completing the measured-feasibility spike and existing recorded policies; defer further cleanup investigation and tuning until feature implementation. Retain the separate name-correction and preservation failures and their uncertainty without claiming production safety. Initial whole-spike review and focused closure, plus bounded cleanup follow-up independent review and fresh focused closure, passed within the accepted evidence bounds. No production implementation, workflow generation or further experiments are authorized by this decision.
 
 ## Step 2: shared capability
 
@@ -137,7 +165,7 @@ The current provider contract only checks credentials. Apple's services can exis
 - **Provider tab.** Feature marks continue to indicate which services the provider supports. Readiness is separate: show a short reason beside a supported service that needs setup or is unavailable. Missing cleanup keeps its grey mark.
 - **Transcription not ready.** Dictation shows the reason in the error pill and does not start.
 - **Read aloud not ready.** Reading shows the reason in the error pill.
-- **Cleanup not ready.** Dictation runs without a reviser, using the existing path for providers without cleanup.
+- **Cleanup not ready.** Unsupported hardware, disabled Apple Intelligence and missing required models block Apple dictation with a short reason. Loading/downloading/not-ready states use pill messaging. Do not add unavailable-state fallback machinery. Individual request failures still preserve text through the existing Reviser.
 - Credentials remain a separate prerequisite. xAI needs no additional setup check; its feature marks and existing missing-key behavior stay unchanged.
 
 S1 decides how model installation starts. The preference is to start it automatically when Apple is selected, including launch with Apple already selected. A short "Downloading speech model" state is sufficient; numeric progress and a shared download manager are unnecessary.
@@ -146,7 +174,7 @@ Check availability for the selected language and voice on selection, app launch,
 
 Provisional setup policy: one installation runs at a time, may complete after switching providers and reports a short failure reason if it fails. Retry on reselecting Apple or on the next operation attempt; that attempt reports setup status without starting capture. Confirm installation cancellation and retry behavior in S1. Recheck availability at operation start; if cleanup becomes unavailable during a dictation, failed requests preserve the original text through the existing reviser.
 
-This step is complete when availability is part of the provider contract, focused tests cover blocked transcription and reading, cleanup fallback and setup-state refresh, and xAI's existing tests pass unchanged. Use fake services for shared behavior tests.
+This step is complete when availability is part of the provider contract, focused tests cover blocked transcription, reading and cleanup prerequisites plus setup-state refresh, and xAI's existing tests pass unchanged. Use fake services for shared behavior tests.
 
 ## Step 3: Apple provider
 
@@ -166,7 +194,7 @@ Run these checks on a signed build on the Mac:
 
 - After required assets are installed and Apple Intelligence is available, with Apple selected and the network off, dictation with cleanup, read aloud, MCP `speak` and Test all work.
 - Switch xAI → Apple → xAI. Each provider keeps its voice and speed, and xAI works exactly as before.
-- With Apple Intelligence off where Aidan can toggle it: Cleanup retains its support mark, shows its unavailable reason, and dictation inserts uncleaned text.
+- With Apple Intelligence off where Aidan can toggle it: Cleanup retains its support mark, shows its unavailable reason, and Apple dictation is blocked. Re-enable it before verifying successful cleanup. Individual failed revisions still preserve original text.
 - Run the first dictation on a Mac without the speech model installed, or after removing it, to check the setup state and the readiness behaviour.
 - Check that setup completion and failure update Settings, launch with Apple selected starts required setup, and a language change rechecks the required assets.
 - Pause a long reading and resume it without missing audio or unbounded read-ahead. Cancel while synthesis or model loading is pending and check that the next operation works.
