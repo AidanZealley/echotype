@@ -1,6 +1,6 @@
 # Apple provider spike plan
 
-Status: approved for execution; service spikes in progress.
+Status: all service spikes and final measured-feasibility review accepted, 2026-10-02.
 
 ## Orchestration record
 
@@ -19,7 +19,7 @@ Status: approved for execution; service spikes in progress.
 | 1 | [Live transcription](01-transcription.md) | Approved spike spec and workflow | Accepted |
 | 2 | [Read aloud](02-voice.md) | 1 accepted | Accepted |
 | 3 | [Cleanup](03-cleanup.md) | 2 accepted | Accepted |
-| Final | [Combined feasibility and decision](final-review.md) | 1–3 accepted | Not started |
+| Final | [Combined feasibility and decision](final-review.md) | 1–3 accepted | Accepted |
 
 Allow only one active lead. Each lead updates its row at each transition. A non-terminal row without a live lead is interrupted; spawn a fresh lead using README recovery rules.
 
@@ -51,7 +51,7 @@ Each lead owns its numbered packet, its plan row/gate entry, and its explicitly 
 | Mac S1 | 1, before independent review | Passed | Supplied human WAV and fresh pause/prefix variants measured; approved limitations and later validation recorded in S1 handoff |
 | Mac S2 | 2, before independent review | Passed | Measured missing-id/post-install inventory, bounded paused PCM, complete drain/cancel and byte-identical paragraph; Zoe provisional default and 1x accepted, offline user-reported; evidence bounds retained |
 | Mac S3 | 3, before independent review | Passed | Supported-path measured; offline user-reported; cold/unavailable-state bounds accepted under Aidan's availability policy |
-| Aidan decision | Final, after closure before acceptance | Pending | Matrix and recommendation; resume with recorded user decision |
+| Aidan decision | Final, after closure before acceptance | Passed | Aidan's 2026-10-02 final decision recorded in specification and final handoff; investigation complete |
 
 Mac gate details belong in the owning packet. If tools can run them on Aidan's Mac, complete them autonomously within authorized scope. Otherwise block with actionable commands and required evidence. Diagnostic retries follow README rules.
 
@@ -62,6 +62,8 @@ S1-evidence was resolved by the supplied human recording and Aidan's accepted li
 S2-evidence and S2-limitations are resolved. Aidan chose Zoe as the provisional Apple default, accepted 1x for the spike and reported a passing network-disconnected command. No repeated listening or 1.1x sample is needed. The lasting decisions, measured completeness and explicit evidence bounds are in the [S2 handoff](02-voice.md#implementation-handoff), results and drift log. Independent review and fresh closure accepted the Mac gate triage and Required R1 documentation remedy; S2 is accepted.
 
 S3-evidence is resolved by Aidan's 2026-10-02 policy decision. Supported-path measurements suffice for this spike; genuinely unloaded cold timing and unavailable-state transitions remain explicit evidence bounds. Unsupported hardware and disabled Apple Intelligence are hard gates, required models must be present, and loading/not-ready states need pill messaging. Do not add unavailable-state fallback machinery. The lasting decision is in the [S3 handoff](03-cleanup.md#implementation-handoff), results and drift log. Final review must reconcile the older Step 2/Verification cleanup-only fallback proposals before its decision gate. Aidan's 42.127-second host-disconnected pass remains user-reported offline evidence.
+
+Final-decision is resolved. Aidan approved completing the measured-feasibility spike and existing policies on 2026-10-02, reclassified excessive repetition as ambiguous stress evidence and deferred further cleanup investigation or tuning to feature implementation. The lasting decision is in the specification and final handoff. No production implementation or workflow generation is authorized.
 
 ## Decision and drift log
 
@@ -75,3 +77,6 @@ S3-evidence is resolved by Aidan's 2026-10-02 policy decision. Supported-path me
 | 2026-10-02 | Alternate locales, full 60,000-scalar drain, signed Reader and formal xAI comparison are deferred. Actual Apple MCP wiring awaits production. Oversized-sentence prosody, failed/interrupted downloads/removal and isolated service memory remain evidence bounds with later checks in the handoff. | Aidan will explore reading lengths in real use, did not require signed Reader/formal xAI checks and requested MCP only if easy. Existing MCP checks use fake dependencies; Apple wiring needs production edits. Required availability/buffering evidence is measured nondestructively; optional states are not missing spike criteria or waived support. | Aidan's recorded scope decisions; lead triage confirmed by independent review, no authorization for destructive asset changes | S2 |
 | 2026-10-02 | S3 uses Swift 6.4 and SDK 27.0 rather than Swift 6.2. Offline execution is user-reported; genuine cold/unavailable-state bounds accepted under Aidan's later availability policy. | Available Mac toolchain; process-first and network-denied child results are bounded evidence. Recovery preserves the candidate and treats Aidan's 42.127-second reply as reported offline evidence, matching S2. | Measured environment; Aidan's reported pass and 2026-10-02 policy decision | S3 |
 | 2026-10-02 | Unsupported hardware/disabled Apple Intelligence are hard availability gates; required models must be present. Loading/downloading/not-ready states use pill messaging, with no unavailable-state fallback machinery. | Aidan delegates additional investigation to the lead. Supported-path real revision, preservation and cancellation provide feasibility evidence without forcing unavailable states. Final review must reconcile prior cleanup-only fallback proposals. | Aidan's 2026-10-02 policy decision; lead accepts the named S3 evidence bounds | S3 and final availability policy |
+| 2026-10-02 | Combined review reconciles cleanup-only unavailable fallback with the approved hard-gate policy; final feasible-path matrix and policies confirmed at the final decision. | All three service contracts fit without another shared change; separate cleanup correction/preservation failures and unmeasured integrated offline behavior remain evidence bounds. | Aidan's prior availability policy and 2026-10-02 final decision | Final |
+| 2026-10-02 | Bounded cleanup follow-up compares one clearer prompt and repeated direct/actual-Reviser passes; first-pass damage remains and overlap can compound it. Final technical review and fresh closure passed; final decision approves completing the spike and defers further tuning. | Aidan requested a small quality investigation before deciding. Repeated targeted measurements support prompt sensitivity, not general semantic safety. | Aidan's investigation scope and 2026-10-02 final decision | Final |
+| 2026-10-02 | Final investigation accepted with existing policies; excessive-repetition reduction is ambiguous stress evidence, not proof of ordinary long-dictation harm. Further cleanup investigation/tuning deferred to feature implementation. | Aidan judged the repetition fixture/expectation excessive; separate name-correction and preservation failures remain measured, without a production-safety claim. No production work or workflow generation authorized. | Aidan's recorded final decision | Final |
