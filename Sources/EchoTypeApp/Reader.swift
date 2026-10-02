@@ -16,6 +16,9 @@ import Observation
     var key: () async -> String?
     var voice: VoiceService
     var player: any ReadingPlayback
+    /// The provider's readiness for this reading's settings. Nil when the provider declares
+    /// none, so its voice is always usable.
+    var readiness: (() async -> ServiceReadiness)? = nil
   }
   private let source: Source
   private let settings: Settings
@@ -105,6 +108,11 @@ import Observation
     let apiKey = await dependencies.key()
     try checkStopped()
     guard dependencies.credential.isSatisfied(by: apiKey) else { throw Failure.noAPIKey }
+    if let readiness = dependencies.readiness {
+      let services = await readiness()
+      try checkStopped()
+      try services.voice.requireReady()
+    }
     let voice = dependencies.voice
     let stream = voice.speak(SpeechRequest(text: voice.capped(spoken), settings: settings, voice: voice, credential: apiKey))
     self.stream = stream

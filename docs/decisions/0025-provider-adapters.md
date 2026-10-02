@@ -36,6 +36,12 @@ meant editing each of them.
   bar shows "Add your <name> API key in Settings".
 - Failures reach the app as `ProviderError` and are worded with the provider's name, as
   [0006](0006-api-key-and-error-surface.md) describes.
+- `Provider.readiness` is optional. A provider whose services can exist and still be
+  unusable on a given Mac supplies a `Readiness`: `check(ReadinessRequest)` answers a
+  `ServiceReadiness` with a `ServiceState` per service (`ready`, `waiting(reason)` or
+  `unavailable(reason)`, with nil cleanup when the provider has none), and `changes()` yields
+  when an earlier answer may be out of date. A provider with nil readiness, such as xAI, is
+  always usable once its credential is present.
 
 ## Service responsibilities
 
@@ -54,6 +60,14 @@ meant editing each of them.
   product rules independent of the provider's model and request parameters. See
   [0021](0021-revise-committed-dictation.md) and
   [0024](0024-dictation-operation-lifetime.md).
+- An operation starts only when every service it uses is `.ready`: dictation needs
+  transcription and cleanup, Test needs transcription, and reading and MCP speech need the
+  voice. `DictationOperation` checks before opening capture, and `Reader` after the credential
+  and before requesting speech. `.waiting` ends the pill in its amber waiting phase and
+  `.unavailable` in the red error pill, each showing the provider's reason as is. The
+  controller follows the selected provider's readiness for Settings: it checks at launch, on
+  a change of provider, language or voice, when the app becomes active and on each `changes`
+  yield, and the Provider tab shows a not-ready service's reason beside its mark.
 - Legacy reading migration stays in the registry so `Settings` does not name xAI.
   The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
   credential status separate when the selection changes. Storage and validation are

@@ -18,10 +18,13 @@ public struct Provider: Identifiable, Sendable {
   public var voice: VoiceService
   /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
   public var cleanup: CleanupService?
+  /// Nil when the services are always usable once the credential is present.
+  public var readiness: Readiness?
 
   public init(
     id: ProviderID, name: String, summary: String, credential: Credential,
-    transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?
+    transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
+    readiness: Readiness? = nil
   ) {
     self.id = id
     self.name = name
@@ -30,6 +33,7 @@ public struct Provider: Identifiable, Sendable {
     self.transcription = transcription
     self.voice = voice
     self.cleanup = cleanup
+    self.readiness = readiness
   }
 }
 
@@ -72,6 +76,66 @@ public enum ProviderError: Error, Equatable, Sendable {
   case unavailable
   /// Anything else the provider reported, with its own description.
   case failed(String)
+}
+
+// MARK: Readiness
+
+/// Whether this Mac can use the provider's services now, for these settings. Dictation and Test
+/// check it before opening capture and reading before requesting speech; each starts only when
+/// every service it uses is `.ready`.
+public struct Readiness: Sendable {
+  /// What each service can do now. Starts any setup it needs; the provider runs at most one
+  /// setup at a time, so calling again is cheap.
+  public var check: @Sendable (ReadinessRequest) async -> ServiceReadiness
+  /// Yields when an earlier answer may be out of date, such as setup finishing or failing.
+  public var changes: @Sendable () -> AsyncStream<Void>
+
+  public init(
+    check: @escaping @Sendable (ReadinessRequest) async -> ServiceReadiness,
+    changes: @escaping @Sendable () -> AsyncStream<Void>
+  ) {
+    self.check = check
+    self.changes = changes
+  }
+}
+
+public struct ReadinessRequest: Equatable, Sendable {
+  /// The app's BCP-47 tag; the provider resolves its own form.
+  public var language: String
+  /// One of the voice service's voice ids.
+  public var voice: String
+
+  public init(language: String, voice: String) {
+    self.language = language
+    self.voice = voice
+  }
+
+  /// The request for the dictation language and the stored voice.
+  public init(settings: Settings, voice: VoiceService) {
+    self.init(language: settings.language, voice: settings.readingChoice(for: voice).voice)
+  }
+}
+
+public struct ServiceReadiness: Equatable, Sendable {
+  public var transcription: ServiceState
+  public var voice: ServiceState
+  /// Nil when the provider has no cleanup.
+  public var cleanup: ServiceState?
+
+  public init(transcription: ServiceState, voice: ServiceState, cleanup: ServiceState?) {
+    self.transcription = transcription
+    self.voice = voice
+    self.cleanup = cleanup
+  }
+}
+
+/// The provider writes each reason, which the app shows as is.
+public enum ServiceState: Equatable, Sendable {
+  case ready
+  /// Setup or loading is under way, such as "Downloading speech model".
+  case waiting(String)
+  /// The Mac or its settings rule the service out, such as "Needs Apple Intelligence".
+  case unavailable(String)
 }
 
 // MARK: Transcription

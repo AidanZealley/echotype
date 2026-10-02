@@ -114,9 +114,9 @@ struct PillView: View {
         Spacer()
         Elapsed(pill: pill)
       }
-      if case .error(let message) = pill.phase {
-        Text(message)
-          .foregroundStyle(.red)
+      if let message = pill.phase.message {
+        Text(message.text)
+          .foregroundStyle(message.colour)
           .frame(maxWidth: .infinity, alignment: .leading)
       } else {
         Text(verbatim: readingHint)
@@ -137,8 +137,8 @@ private struct Transcript: View {
 
   var body: some View {
     Group {
-      if case .error(let message) = pill.phase {
-        Text(message).foregroundStyle(.red).lineHeight(.multiple(factor: 1.5)).lineLimit(2)
+      if let message = pill.phase.message {
+        Text(message.text).foregroundStyle(message.colour).lineHeight(.multiple(factor: 1.5)).lineLimit(2)
       } else {
         TailLayout(maximumHeight: maximumHeight) {
           text.lineHeight(.multiple(factor: 1.5))
@@ -208,14 +208,24 @@ extension Pill.Phase {
     case .readingStarting: "Starting"
     case .reading: "Reading"
     case .readingPaused: "Paused"
+    case .waiting: "Not ready"
     case .error: "Error transcribing"
+    }
+  }
+
+  /// What a waiting or error pill says, in its colour.
+  fileprivate var message: (text: String, colour: Color)? {
+    switch self {
+    case .waiting(let message): (message, .primary)
+    case .error(let message): (message, .red)
+    default: nil
     }
   }
 }
 
 /// Small vertical bars that rise with the level, the microphone's or, while reading, the
 /// playback's. Flat and faint while the microphone opens, dimmed while paused, a spinner while
-/// transcribing.
+/// transcribing, an amber hourglass while waiting for a service.
 private struct LevelMeter: View {
   let pill: Pill
 
@@ -229,6 +239,10 @@ private struct LevelMeter: View {
         .controlSize(.mini)
         .tint(Color.primary.opacity(indicatorOpacity))
         .scaleEffect(1.15)
+        .frame(height: 14)
+    case .waiting:
+      Image(systemName: "hourglass")
+        .foregroundStyle(.orange)
         .frame(height: 14)
     case .error:
       Image(systemName: "exclamationmark.triangle.fill")
@@ -286,7 +300,7 @@ private struct Elapsed: View {
 /// while listening or reading, but it flattens to a faint line when the voice is quiet, so it
 /// moves only in proportion to the voice, the user's or the one reading. Faint and grey while
 /// the microphone opens, orange while no input is selected or in dictation's final minute,
-/// dimmed and still while paused, gone once the session is committed or fails.
+/// dimmed and still while paused, gone once the session is committed, fails or cannot start.
 private struct LevelGlow: View {
   let pill: Pill
   /// The approximate height of the pill with one transcript line.
@@ -317,7 +331,7 @@ private struct LevelGlow: View {
     case .starting: 0.25
     case .listening, .selectInput, .reading: 0.4
     case .paused, .readingPaused: 0.15
-    case .transcribing, .inserting, .readingStarting, .error: 0
+    case .transcribing, .inserting, .readingStarting, .waiting, .error: 0
     }
   }
 

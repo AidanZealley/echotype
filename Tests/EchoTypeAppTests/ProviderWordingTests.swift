@@ -20,6 +20,8 @@ private let acme = Provider(
     (ProviderError.failed("HTTP 418"), "Acme error: HTTP 418"),
     (DictationOperation.OperationError.noAPIKey, "Add your Acme API key in EchoType Settings"),
     (Reader.Failure.noAPIKey, "Add your Acme API key in EchoType Settings"),
+    (NotReady(state: .waiting("Downloading speech model")), "Downloading speech model"),
+    (NotReady(state: .unavailable("Not supported on this Mac")), "Not supported on this Mac"),
   ]
   for (error, message) in cases {
     #expect(DictationController.describe(error, provider: acme) == message)

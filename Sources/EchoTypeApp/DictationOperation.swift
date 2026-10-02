@@ -68,6 +68,9 @@ import Observation
     var testClock: any SessionClock
     /// Times the final revision budget.
     var revisionClock: any SessionClock
+    /// The provider's readiness for this operation's settings. Nil when the provider declares
+    /// none, so its services are always usable.
+    var readiness: (@Sendable () async -> ServiceReadiness)? = nil
   }
 
   let settings: Settings
@@ -174,6 +177,7 @@ import Observation
     let destinationReady = !isTest && dependencies.captureDestination() != nil
     if !isTest { lastDestinationProbe = dependencies.clock.now }
     publish(.starting(.init(destination: destinationReady)))
+    try await checkReadiness()
     let chunks = try await dependencies.startCapture(settings.inputDeviceID)
     try checkStartup()
     let key = await dependencies.key()
@@ -189,6 +193,16 @@ import Observation
       }
     }
     return await transcribe(session, chunks: chunks)
+  }
+
+  /// Dictation needs transcription and cleanup; Test needs transcription only. Checked before
+  /// capture opens, so a blocked operation opens nothing.
+  private func checkReadiness() async throws {
+    guard let readiness = dependencies.readiness else { return }
+    let services = await readiness()
+    try checkStartup()
+    try services.transcription.requireReady()
+    if !isTest { try services.cleanup?.requireReady() }
   }
 
   /// Starting may suspend, so Escape or a capture failure during it must still close what it
@@ -369,4 +383,24 @@ import Observation
   }
 
   enum OperationError: Error { case noAPIKey }
+}
+
+/// Dictation, Test or reading did not start because a service it uses is not ready.
+struct NotReady: Error {
+  /// `.waiting` or `.unavailable`, with the provider's reason.
+  let state: ServiceState
+}
+
+extension ServiceState {
+  /// The provider's reason, or nil when ready.
+  var reason: String? {
+    switch self {
+    case .ready: nil
+    case .waiting(let reason), .unavailable(let reason): reason
+    }
+  }
+
+  func requireReady() throws {
+    if self != .ready { throw NotReady(state: self) }
+  }
 }

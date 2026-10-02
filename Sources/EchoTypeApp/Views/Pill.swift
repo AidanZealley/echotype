@@ -22,6 +22,9 @@ struct Pill: Equatable {
     case reading
     /// Reading is paused by the user, with its place in the audio retained.
     case readingPaused
+    /// A service the session needs is not ready yet, so it did not start. Shown inline beside
+    /// an amber mark, with the provider's reason.
+    case waiting(String)
     /// Shown inline in red.
     case error(String)
   }

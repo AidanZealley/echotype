@@ -55,6 +55,15 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)
 
+      // A dictation that cannot start: waiting for a service's setup, then ruled out.
+      pill = Pill(phase: .waiting("Downloading speech model"), startedAt: .now, canCommit: false)
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
+
+      pill.phase = .error("Cleanup is not supported on this Mac")
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
+
       pill = Pill(phase: .reading, isReading: true, startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
@@ -63,6 +72,10 @@ import AppKit
       pill.pausedAt = .now
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)
+
+      pill = Pill(phase: .waiting("Downloading voice"), isReading: true, startedAt: .now)
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
 
       pill = Pill(phase: .error("Nothing selected"), isReading: true, startedAt: .now)
       if let screen = NSScreen.main { panel.show(pill, on: screen) }

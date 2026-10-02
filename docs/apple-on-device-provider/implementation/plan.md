@@ -1,20 +1,20 @@
 # Apple on-device provider implementation plan
 
-Status: draft; implementation has not started.
+Status: in progress; workstream 1 accepted.
 
 ## Orchestration record
 
-- Integration branch: `TBD`
-- Starting commit: `TBD`
+- Integration branch: `feature/apple-on-device-provider`
+- Starting commit: `e943484911c71384bf2d75fb4f7f13e68ff6f823`
 - Review command: `lead subagents`
-- Specification approved at commit: `TBD`
-- Started: `TBD`
+- Specification approved at commit: `e943484911c71384bf2d75fb4f7f13e68ff6f823`
+- Started: `2026-10-02`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Provider readiness](01-provider-readiness.md) | Approved spec | Not started |
+| 1 | [Provider readiness](01-provider-readiness.md) | Approved spec | Accepted |
 | 2 | [Language picker](02-language-picker.md) | 1 | Not started |
 | 3 | [Apple transcription](03-apple-transcription.md) | 1, 2 | Not started |
 | 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Not started |
@@ -58,19 +58,21 @@ Run strictly in this order, one workstream at a time.
 
 | Gate | Owning workstream | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
-| G1 Waiting pill look | 1 | After closure, before acceptance | Pending | `TBD` | Aidan approves the waiting and error pills in both themes, or his corrections are applied |
+| G1 Waiting pill look | 1 | After closure, before acceptance | Passed | Workstream 1 accepted tree | Aidan approves the waiting and error pills in both themes, or his corrections are applied |
 | G2 Signed-build verification | 6 | After closure, before acceptance | Pending | `TBD` | Aidan reports every verification item passing, with the speed range tuned |
 
 ## Escalations
 
-None.
+None open.
 
 ## Conventions learned
 
-None yet.
+- Readiness adapters (3-5): `check` returns the current state without awaiting setup. Run setup in a task the adapter owns, not the caller's, because the controller cancels its in-flight `check` on every provider switch and app activation, and an installation must be able to finish after a switch.
+- Readiness adapters (3-5): yield `changes` whenever setup starts, finishes or fails, including setup started by an operation's own `check`. Settings learns of operation-triggered state only through `changes`; `changes()` is called once per follow and must return a fresh stream each call, and `check` may be called concurrently.
 
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
-| — | None | — | — | — |
+| 2026-10-02 | `DictationOperation` checks readiness after the Starting pill and before capture opens, which is before the credential check rather than after it. `Reader` follows the specified order. | The key is read only after capture opens, so the specified order would open capture for a blocked dictation or change xAI startup. Not observable for any planned provider: xAI has no readiness and Apple no credential. | Workstream 1 lead | 1, 6 |
+| 2026-10-02 | Gate G1 passed: the waiting pill ("Not ready", amber hourglass, reason in primary text, no glow, three-second fade) and the unchanged error pill are approved in both themes. | Aidan approved as is. Later workstreams reuse `Pill.Phase.waiting(String)` for readiness messages without restyling. | Aidan | 1, 3-6 |

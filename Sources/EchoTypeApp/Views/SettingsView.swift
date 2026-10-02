@@ -233,9 +233,9 @@ private struct ProviderTab: View {
         .foregroundStyle(.secondary)
       VStack(alignment: .leading, spacing: 8) {
         // These two services are required by the Provider contract.
-        feature("Live transcription", available: true)
-        feature("Read aloud", available: true)
-        feature("Cleanup", available: provider.cleanup != nil)
+        feature("Live transcription", available: true, state: readiness?.transcription)
+        feature("Read aloud", available: true, state: readiness?.voice)
+        feature("Cleanup", available: provider.cleanup != nil, state: readiness?.cleanup)
       }
       ProviderControls(provider: provider, controller: controller)
         // Each provider gets its own key draft, reveal state and async results.
@@ -246,12 +246,23 @@ private struct ProviderTab: View {
     .fixedSize(horizontal: false, vertical: true)
   }
 
-  private func feature(_ title: String, available: Bool) -> some View {
-    Label {
-      Text(title)
-    } icon: {
-      Image(systemName: available ? "checkmark.circle.fill" : "minus.circle")
-        .foregroundStyle(available ? Color.green : Color.secondary)
+  /// Nil until the controller has checked, and for a provider that declares no readiness.
+  private var readiness: ServiceReadiness? { controller?.readiness }
+
+  /// A supported service that is not ready shows the provider's reason beside its mark.
+  private func feature(_ title: String, available: Bool, state: ServiceState?) -> some View {
+    HStack(alignment: .firstTextBaseline) {
+      Label {
+        Text(title)
+      } icon: {
+        Image(systemName: available ? "checkmark.circle.fill" : "minus.circle")
+          .foregroundStyle(available ? Color.green : Color.secondary)
+      }
+      if let state, let reason = state.reason {
+        Text(verbatim: reason)
+          .font(.caption)
+          .foregroundStyle(state == .unavailable(reason) ? Color.red : Color.secondary)
+      }
     }
   }
 }

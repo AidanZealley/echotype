@@ -27,6 +27,10 @@ import Observation
     }
   }
   private(set) var hasAPIKey: Bool?
+  /// The selected provider's readiness for the current settings, for Settings to show. Nil when
+  /// the provider declares none, and until its first check answers.
+  private(set) var readiness: ServiceReadiness?
+  @ObservationIgnored private var readinessTask: Task<Void, Never>?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
   /// The last dictation that reached `running`, whatever its outcome. Nil until one ends. Kept in
@@ -67,6 +71,7 @@ import Observation
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
   @ObservationIgnored private var speakObserver: (any NSObjectProtocol)?
+  @ObservationIgnored private var activeObserver: (any NSObjectProtocol)?
 
   /// The session's pill and the screen it stays on, from the press until the session ends.
   private var pill: Pill?
@@ -92,7 +97,8 @@ import Observation
         selection: { await clipboard.copySelection(cancelled: $0) },
         cleanup: { await clipboard.waitForCleanup() },
         credential: provider.credential, key: { await Self.storedKey(for: provider) },
-        voice: provider.voice, player: SpeechPlayer(onLevel: level)), onPresentation: present)
+        voice: provider.voice, player: SpeechPlayer(onLevel: level),
+        readiness: Self.readinessCheck(provider, settings)), onPresentation: present)
     }, focusedScreen: { NSScreen.forFocusedWindow() }, showPanel: { pill, screen in
       if let screen { panel.show(pill, on: screen) }
     }, hidePanel: { panel.hide() })
@@ -131,6 +137,57 @@ import Observation
         await self?.refreshAPIKeyStatus()
       }
     }
+    // Follows the selected provider's readiness from launch, and again whenever the provider,
+    // language or voice changes or the app becomes active, which covers System Settings changes.
+    Task { [weak self, store] in
+      var followed: (ProviderID, ReadinessRequest)?
+      for await selection in Observations({ () -> (ProviderID, ReadinessRequest) in
+        let provider = Providers[store.settings.provider]
+        return (provider.id, ReadinessRequest(settings: store.settings, voice: provider.voice))
+      }) {
+        if let followed, followed == selection { continue }
+        followed = selection
+        self?.followReadiness(of: Providers[selection.0])
+      }
+    }
+    activeObserver = NotificationCenter.default.addObserver(
+      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.followReadiness(of: Providers[self.store.settings.provider])
+      }
+    }
+  }
+
+  /// Checks `provider`'s readiness for the current settings now, which starts any setup it
+  /// needs, and again each time its `changes` yields. Replaces the provider followed before and
+  /// drops its stream, so a late answer from it is ignored.
+  func followReadiness(of provider: Provider) {
+    readinessTask?.cancel()
+    readiness = nil
+    guard let source = provider.readiness else { return }
+    let request = ReadinessRequest(settings: store.settings, voice: provider.voice)
+    readinessTask = Task { [weak self] in
+      let changes = source.changes()
+      await self?.checkReadiness(source, request)
+      for await _ in changes { await self?.checkReadiness(source, request) }
+    }
+  }
+
+  private func checkReadiness(_ source: Readiness, _ request: ReadinessRequest) async {
+    let answer = await source.check(request)
+    if !Task.isCancelled { readiness = answer }
+  }
+
+  /// The check an operation runs before it starts, or nil when the provider declares no
+  /// readiness.
+  nonisolated private static func readinessCheck(_ provider: Provider, _ settings: Settings)
+    -> (@Sendable () async -> ServiceReadiness)?
+  {
+    guard let readiness = provider.readiness else { return nil }
+    let request = ReadinessRequest(settings: settings, voice: provider.voice)
+    return { await readiness.check(request) }
   }
 
   /// Whether the selected provider has its credential.
@@ -223,7 +280,8 @@ import Observation
       let failure = await operation.run()
       guard isReading(operation) else { return }
       phase = .idle; readingTask = nil
-      end(showing: failure.map { Self.describe($0, provider: Providers[settings.provider]) })
+      end(showing: failure.map { Self.describe($0, provider: Providers[settings.provider]) },
+        waiting: Self.isWaiting(failure))
     }
   }
 
@@ -233,7 +291,8 @@ import Observation
     case .starting: phase = .readingStarting
     case .playing: phase = .reading
     case .paused: phase = .readingPaused
-    case .failed(let message): phase = .error(message)
+    // `end(showing:waiting:)` shows the worded failure once the run returns.
+    case .failed: return
     case .stopped: end(); return
     }
     pill = Pill(phase: phase, isReading: true, level: reader.level,
@@ -283,7 +342,8 @@ import Observation
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
         },
         cleanup: provider.cleanup,
-        clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()),
+        clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock(),
+        readiness: Self.readinessCheck(provider, settings)),
       onPresentation: { [weak self] presentation, settled, provisional in
         if presentation == .cancelled { self?.end(); return }
         if case .starting(let readiness) = presentation, !readiness.microphone { self?.showStarting() }
@@ -345,7 +405,7 @@ import Observation
       }
       phase = .idle
       operationTask = nil
-      end(showing: message)
+      end(showing: message, waiting: Self.isWaiting(result.startupFailure))
       return result
     }
   }
@@ -408,13 +468,14 @@ import Observation
     showPanel(pill, screen)
   }
 
-  /// Ends the session's pill: fades it, or shows `error` in red for three seconds first.
-  private func end(showing error: String? = nil) {
+  /// Ends the session's pill: fades it, or shows `error` for three seconds first, in red or, when
+  /// a service is still setting up, as waiting.
+  private func end(showing error: String? = nil, waiting: Bool = false) {
     lastError = error
     guard var pill else { return }
     self.pill = nil
     guard let error else { return hidePanel() }
-    pill.phase = .error(error)
+    pill.phase = waiting ? .waiting(error) : .error(error)
     showPanel(pill, screen)
     errorFade = Task {
       try? await Task.sleep(for: .seconds(3))
@@ -422,9 +483,16 @@ import Observation
     }
   }
 
+  /// Whether `error` is a service still setting up rather than a failure.
+  private static func isWaiting(_ error: (any Error)?) -> Bool {
+    if case .waiting? = (error as? NotReady)?.state { true } else { false }
+  }
+
   /// Words a dictation or reading failure for the pill, naming the provider it ran with.
   static func describe(_ error: any Error, provider: Provider) -> String {
     switch error {
+    case let error as NotReady:
+      error.state.reason ?? ""
     case Reader.Failure.nothingSelected:
       "Nothing selected"
     case Reader.Failure.noAPIKey, DictationOperation.OperationError.noAPIKey:
