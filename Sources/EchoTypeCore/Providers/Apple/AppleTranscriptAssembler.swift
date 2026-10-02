@@ -28,7 +28,9 @@ extension Apple {
     /// recognition, which is an empty transcript rather than a failure.
     func ending(after error: any Error, finishing: Bool) -> (any Error)? {
       if error is CancellationError { return error }
-      if finishing && transcript.committed.isEmpty && Self.isRejection(error) { return nil }
+      if finishing && transcript.committed.isEmpty && transcript.provisional.isEmpty
+        && Self.isRejection(error)
+      { return nil }
       return ProviderError.failed(error.localizedDescription)
     }
 

@@ -1,6 +1,6 @@
 # Apple on-device provider implementation plan
 
-Status: workstreams 1-6 accepted; whole-feature review next. Remaining G2 checks follow that review.
+Status: workstreams 1-6 and whole-feature review accepted. Eight G2 external checks remain pending.
 
 ## Orchestration record
 
@@ -20,7 +20,7 @@ Status: workstreams 1-6 accepted; whole-feature review next. Remaining G2 checks
 | 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Accepted |
 | 5 | [Apple cleanup](05-apple-cleanup.md) | 3 | Accepted |
 | 6 | [Register Apple and verify on the Mac](06-register-apple.md) | 4, 5 | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1-6 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1-6 | Accepted |
 | External | [Remaining signed-build checks](#g2-end-checklist) | Final | Pending external checks |
 
 Run strictly in this order, one workstream at a time.
@@ -75,7 +75,7 @@ After whole-feature review, use its final reviewed source candidate. Aidan runs 
 3. Pending external check after whole-feature review. Turn Apple Intelligence off. Cleanup keeps its support mark and shows its reason; dictation shows the red pill and does not start. Re-enable it and check cleanup again.
 4. Pending external check after whole-feature review. On a missing speech-model setup, verify the amber waiting pill blocks dictation, setup completion and failure refresh Settings, and launch with Apple selected starts setup. If no missing model is available, report that explicitly rather than removing assets to manufacture the state.
 5. Pending external check after whole-feature review. After a normal restart with assets installed, first dictation is ready within five seconds.
-6. Pending external check after whole-feature review. Silence before speech cancels quietly; silence after speech pauses and resumes in a real room; tap-and-stop without speech shows no error.
+6. Pending external check after whole-feature review. Silence before speech cancels quietly; silence after speech pauses and resumes in a real room; tap-and-stop without speech shows no error. Final R1 narrowed the finish-time rejection exception to empty committed and provisional text; this pending check covers that boundary. No previously passed G2 behavior changed.
 7. Pending external check after whole-feature review. Dictate real jargon with saved keyterms and check their spellings.
 8. Pending external check after whole-feature review. Pause/resume a long reading without missing audio or continuing to synthesize the rest while paused. Cancel during pending synthesis or model loading; the next operation works. Listen to a sentence longer than 250 Unicode scalars.
 9. Pending external check after whole-feature review. A missing saved voice falls back without overwriting the saved choice. A voice downloaded in System Settings is picked up. Report an unavailable test condition rather than deleting voices without a separate decision.
@@ -100,6 +100,8 @@ None. E6-G2 was resolved by Aidan's decision to move the remaining checks after 
 
 - Verification records, 6 and Final: distinguish SDK and unsigned tests from signed-app runtime evidence. Successful signing does not confirm permission prompt behavior. Keep stable G2 item numbers and update the end checklist if a correction requires repeating a passed item. Extensibility reports also account for changed workflow records as documentation outside the shared contract. A preferred speed does not change the provider's defaults.
 
+- Transcription error policy, Final: the empty-finish exception must check both committed and provisional text. Recognized provisional words must not turn a finish-time rejection into silent success. Extend the existing mapping fixture rather than introducing framework injection.
+
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
@@ -108,3 +110,4 @@ None. E6-G2 was resolved by Aidan's decision to move the remaining checks after 
 | 2026-10-02 | Gate G1 passed: the waiting pill ("Not ready", amber hourglass, reason in primary text, no glow, three-second fade) and the unchanged error pill are approved in both themes. | Aidan approved as is. Later workstreams reuse `Pill.Phase.waiting(String)` for readiness messages without restyling. | Aidan | 1, 3-6 |
 | 2026-10-02 | Workstream 6 recovery initially had no specification drift. Fresh independent review and focused closure passed before G2. | Reused the completed implementation and corrected two documentation findings in one pass. Gate placement changed later by the user decision below. | Workstream 6 recovery lead | 6 |
 | 2026-10-02 | G2 items 1, 2, 10, 11 and 12 passed. Retain the Apple `0.8...1.3` speed range and existing defaults; Aidan prefers 1.1x. Move unverified items 3, 4, 5, 6, 7, 8, 9 and 13 after whole-feature review, without blocking WS6 or Final acceptance. | Aidan cannot make environment changes or restart now and instructed, "Let's move anything unverified right to the end". This amends the frozen gate placement; it does not mark pending checks passed. | Aidan | 6, Final, External |
+| 2026-10-02 | Final whole-feature review accepted after narrowing the empty-finish rejection exception and synchronizing the accepted speed-range comment. No new specification drift. | Independent whole-feature review, one focused correction and fresh closure passed. All packet commands passed. G2 retains five reported passes and eight pending checks; the correction concerns pending item 6 and invalidates no reported pass. | Final-review lead | Final, External |

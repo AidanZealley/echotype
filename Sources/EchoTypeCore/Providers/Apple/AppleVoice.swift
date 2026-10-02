@@ -19,7 +19,7 @@ extension Apple {
       Voice(id: "com.apple.voice.premium.en-US.Zoe", name: "Zoe"),
       Voice(id: "com.apple.voice.premium.en-GB.Malcolm", name: "Jamie"),
     ]
-    /// Provisional, until the range is tuned by ear.
+    /// Accepted by ear for Zoe and Jamie.
     static let speedRange = 0.8...1.3
     static let maximumCharacters = 60_000
     /// The most text one utterance holds. Synthesis cannot be paused, so the next utterance

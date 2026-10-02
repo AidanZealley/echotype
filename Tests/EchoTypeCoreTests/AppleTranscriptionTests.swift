@@ -43,8 +43,10 @@ import Testing
     let rejection = NSError(domain: "SFSpeechErrorDomain", code: 1)
     var assembler = Apple.TranscriptAssembler()
     #expect(assembler.ending(after: rejection, finishing: true) == nil)
-    // Before finish, or after text was committed, it is a failure like any other.
+    // Before finish, or after provisional or committed text, it is a failure like any other.
     #expect(assembler.ending(after: rejection, finishing: false) is ProviderError)
+    _ = assembler.apply(text: "hello", isFinal: false)
+    #expect(assembler.ending(after: rejection, finishing: true) is ProviderError)
     _ = assembler.apply(text: "hello", isFinal: true)
     #expect(assembler.ending(after: rejection, finishing: true) is ProviderError)
   }

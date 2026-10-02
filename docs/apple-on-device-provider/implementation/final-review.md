@@ -1,6 +1,6 @@
 # Apple on-device provider whole-feature review
 
-Status: not started. Begin only after every workstream is accepted. G2's remaining external checks follow this review and do not block review acceptance.
+Status: accepted, 2026-10-02. Implementation and whole-feature review are complete. G2's remaining external checks follow this review and remain pending.
 
 ## Reviewer task packet
 
@@ -29,32 +29,59 @@ For any correction that touches behaviour Aidan verified at G2, mark the affecte
 
 ## Initial whole-feature review
 
-- Reviewer: `TBD`
-- Branch, base, and reviewed head: `TBD`
-- Verification run: `TBD`
-- Acceptance-criteria audit: `TBD`
-- Required findings by owner: `TBD`
-- Optional observations: `TBD`
-- Questions: `TBD`
-- Verdict: `TBD`
+- Reviewer: fresh independent Codex agent. Applied `unslop` and `writing-for-agents` to this record.
+- Branch, base, and reviewed head: `feature/apple-on-device-provider`, `e943484911c71384bf2d75fb4f7f13e68ff6f823`, `7f7cf7b`. Reviewed the combined feature diff, surrounding callers, approved specification, decision 0025, research and accepted workstream handoffs. The lead's uncommitted Final status update in `plan.md` is workflow state, outside this code comparison.
+- Verification run, 2026-10-02: all four packet commands passed. No live service run, app launch or stop, installation script, OS setting, permission or asset change.
+  - `swift test`, with `ECHOTYPE_APPLE_LIVE`, `ECHOTYPE_APPLE_SPIKE`, `XAI_API_KEY` and `ECHOTYPE_FIXTURE_WAV` unset: 126 core tests in 14 suites and 71 app tests in 10 suites passed; all Apple live suites and xAI live checks skipped. Log: `/tmp/echotype-final-initial-tests.log`.
+  - `swift build -c release --product EchoTypeApp`: passed. Log: `/tmp/echotype-final-initial-release.log`.
+  - `./scripts/build-app.sh debug .build/EchoType-final.app`: passed, scratch bundle only. Log: `/tmp/echotype-final-initial-bundle.log`. Additional `codesign --verify --strict .build/EchoType-final.app` passed; log: `/tmp/echotype-final-initial-signature.log`. Packaging establishes no runtime permission behavior.
+  - `git diff --check`: passed. Log: `/tmp/echotype-final-initial-diff-check.log`.
+  - Proportionate extra check: executed the actual `AppleTranscriptAssembler.swift` source with small neutral type declarations in `/tmp`, without any live framework. Probe: `/tmp/echotype-final-initial-rejection-probe.swift`; result log: `/tmp/echotype-final-initial-rejection-probe.log`. It printed `provisional=recognised words, rejection swallowed=true`.
+- Acceptance-criteria audit:
+  - Completeness: Apple is registered after xAI with the specified id, summary, no credential and all three services (`Apple.swift:6-18`, `Providers.swift:3`). Language migration and the fixed English picker match the spec (`Settings.swift:63-81,218-221`, `SettingsView.swift:152-156`). Transcription mapping, direct 16 kHz Int16 input, context terms, prompt-preserving cleanup, voice fallback, rate anchors, text cap and bounded utterance/audio delivery are implemented. R1 limits acceptance of the empty-finish policy.
+  - Containment and dependency direction: all provider behavior remains in `Providers/Apple/`; shared operations consume readiness states and provider-written reasons. No change to xAI adapters, `SessionMachine`, `Reviser` or bundle permissions. The sole Apple-name occurrence in the shared contract is the illustrative reason comment in `Provider.swift:137`, copied from the approved contract shape, with no runtime branch or wording. Decision 0025's extensibility table accounts for every changed file outside the provider folder and registry, including workflow documentation.
+  - Readiness seams: dictation checks transcription and cleanup, Test checks transcription alone, and the shared Reader used by reading and MCP speech checks voice (`DictationOperation.swift:198-204`, `Reader.swift:111-118`). The controller subscribes before checking, rechecks on settings/activation/changes, cancels the old follower and rejects cancelled answers (`DictationController.swift:140-190`). The before-credential dictation order is the existing recorded drift; xAI's nil readiness introduces no additional await.
+  - Lifecycle: the speech-assets actor keeps one installation through caller cancellation, reads setup state after its awaits, and sends setup changes (`AppleSpeechAssets.swift:44-72`). Transcription result failures reach events immediately and normal finishing drains the reader before `.finished` (`AppleTranscriber.swift:68-111`). Voice pulls start at most one bounded utterance, cancellation releases the pending continuation, and callbacks capture the stream weakly (`AppleVoice.swift:192-275`). Q1 records the existing explicit-join limitation without claiming a new runtime failure. Cleanup uses fresh sessions and task cancellation; Reviser retains its unchanged preservation and deadline policy.
+  - Simplicity and tests: no new shared download manager, provider-specific flags, duplicate settings or speculative fallback layer. Fixture tests cover translation, setup/retry, voice resolution, bounded chunks, language migration and operation blocking. Existing neutral session, reviser, reading and MCP tests still pass. Live tests skip by default before their framework setup. The live composition test's installed-assets/available-Intelligence assumption remains the previously deferred WS6 observation; it is not ordinary-suite coverage of a missing-model Mac.
+  - Documentation and history: README, spec, decision and current gate records agree on the provider and pending external validation, apart from O1. Literal removal of every spike reference would conflict with the research's historical reproduction section (`docs/research/apple-on-device-provider.md:184-186`) and approved spec's Spike code section. Remaining paths and old commands explicitly refer to removed experiments in git history or frozen review records. No current implementation, test import or executable instruction depends on the deleted folder. Retain that evidence.
+  - External validation: G2 items 3, 4, 5, 6, 7, 8, 9 and 13 remain pending after Final by Aidan's decision. Reported passes 1, 2, 10, 11 and 12 remain valid for their recorded candidate; this review supplies no evidence that they need repeating. R1 concerns the rejection-with-provisional-text edge in pending item 6. Full external verification and first-use permissions are not claimed.
+- Required findings by owner:
+  - R1, workstream 3, transcription. `Sources/EchoTypeCore/Providers/Apple/AppleTranscriptAssembler.swift:29-32` suppresses finish-time Speech code 1 whenever committed text is empty, even after a nonempty volatile result recognised speech. The source probe above demonstrates this state. `AppleTranscriber.swift:103-107` translates the suppressed error into `.finished`, while `SessionMachine.swift:347-355` uses only committed text and returns `.nothing`, silently discarding the recognised provisional words. The specification permits an empty finish only when nothing was recognised; the current guard is broader. `AppleTranscriptionTests.swift:43-53` covers empty and committed cases but misses provisional recognised text. Narrow the exception to its specified no-recognition case and protect that distinction with the existing pure fixture seam. No framework injection or live test is needed.
+- Optional observations:
+  - O1, Apple voice/documentation owner. `Sources/EchoTypeCore/Providers/Apple/AppleVoice.swift:22` still calls `speedRange` provisional until tuned by ear. The approved spec and `plan.md` G2 item 10 record Aidan's acceptance of `0.8...1.3`. Synchronise the comment with that decision; no rate or default change is indicated.
+- Questions:
+  - Q1, workstream 3/lead judgment. `AppleTranscriber.swift:133-135` explicitly joins the worker only; `stop()` cancels the reader and awaits framework teardown at `:146-151`. The successful worker joins its reader at `:80`, but the cancellation/error path does not explicitly join it. The accepted WS3 Resolution already records this as harmless. This review found no late observable mutation or failed teardown, so it is not promoted to Required. Confirm that accepted disposition remains appropriate for the specification's joined-cancellation requirement, or include an explicit reader join in the owner's focused correction if framework teardown alone does not establish it.
+- Verdict: changes required for R1. The automated packet checks pass. Pending G2 checks are external evidence, not review blockers.
 
 ## Lead triage
 
-- Accepted findings and owners: `TBD`
-- Rejected findings and reasons: `TBD`
-- Deferred optional observations: `TBD`
-- Drift requiring user decision: `TBD`
+- Accepted findings and owners: R1, transcription owner. Require both committed and provisional text to be empty before treating finish-time rejection as an empty finish, and extend the existing fixture test. O1, voice documentation owner, accepted for a comment correction only. One fresh implementation agent owns both small corrections sequentially.
+- Rejected findings and reasons: Q1 does not justify reopening the accepted lifecycle design. The worker is joined, framework teardown is awaited, and a cancelled reader can only update its own assembler or the finished stream. The prior closure found no observable leak, and this review supplied no contrary runtime evidence. No new framework seam or lifecycle machinery is needed.
+- Deferred optional observations: retain WS6's recorded live-composition-test assumption of installed assets and available Intelligence. It does not affect the ordinary test suite or pending missing-model validation.
+- Drift requiring user decision: none. Historical spike paths and commands remain explicit research history; deleting them would contradict the specification's history requirement. R1 tightens the existing rejection exception without changing supported normal dictation, so it requires pending G2 item 6 coverage but no repetition of passed items 1, 2, 10, 11 or 12.
+
+### Remediation handoff
+
+- Accepted corrections only: R1 requires both committed and provisional text to be empty for the finish-time rejection exception. The existing rejection fixture now checks nonempty provisional text produces `ProviderError`. O1 records the accepted voice range in its comment; rates and defaults are unchanged. Q1 was not changed.
+- Changed files: `AppleTranscriptAssembler.swift`, `AppleTranscriptionTests.swift`, `AppleVoice.swift` and this handoff. The implementation agent left these changes uncommitted for closure.
+- Deletion and simplification assessment: one additional condition and two fixture lines suffice. No new state, injection, helper, abstraction or lifecycle machinery was added, and the correction makes no existing code obsolete.
+- Verification, 2026-10-02: all commands passed with `ECHOTYPE_APPLE_LIVE`, `ECHOTYPE_APPLE_SPIKE`, `XAI_API_KEY` and `ECHOTYPE_FIXTURE_WAV` unset. Focused `swift test --filter AppleTranscriptionTests` passed 9 tests in 1 suite; `swift test` passed 126 core tests in 14 suites and 71 app tests in 10 suites, with live checks skipped. Release build and scratch debug bundle build passed. Logs: `/tmp/echotype-final-correction-transcription.log`, `/tmp/echotype-final-correction-tests.log`, `/tmp/echotype-final-correction-release.log`, `/tmp/echotype-final-correction-bundle.log` and `/tmp/echotype-final-correction-diff-check.log`.
+- Candidate: rebuilt `.build/EchoType-final.app` for focused closure. Strict signature verification passed, logged in `/tmp/echotype-final-correction-signature.log`; executable SHA-256 is `2e09807cf394da550807bcd6eabced98dc78b78536bca9c0eb58038d560d6d36`. No app launch or stop, installation script, OS setup, permissions or asset changes. Automated checks do not establish signed-app runtime behavior. Pending G2 item 6 still covers the rejection policy; no passed G2 item requires repeating. No specification drift.
 
 ## Focused closure
 
-- Reviewed head: `TBD`
-- Finding outcomes: `TBD`
-- Final simplification assessment: `TBD`
-- Remaining blockers: `TBD`
-- Verdict: `TBD`
+- Reviewer: fresh focused Codex closure agent. Applied `unslop` and `writing-for-agents` to this record. Reviewed only accepted corrections R1 and O1 and their immediate callers against the approved specification.
+- Reviewed head: `7f7cf7b6cff4a9208c844f710f676e5edceb0912` plus the uncommitted correction in `AppleTranscriptAssembler.swift`, `AppleTranscriptionTests.swift` and `AppleVoice.swift`. The lead's record and plan changes are workflow state.
+- Finding outcomes: R1 resolved. Finish-time Speech rejection now finishes silently only when both committed and provisional text are empty. The existing fixture verifies empty finish, rejection before finish, nonempty provisional text and committed text. The neighbouring error fixture verifies other framework errors retain their provider failure and cancellation passes through. `AppleTranscriber.fail` uses this result directly, so provisional recognised text now ends with an error rather than a false normal finish. O1 resolved by the accepted-by-ear comment; the diff changes no speed range, anchors, rate mapping or defaults. Q1 retains the accepted non-blocking disposition; no lifecycle code changed.
+- Verification, 2026-10-02: inspected all four correction packet logs. `swift test` passed 126 core tests in 14 suites and 71 app tests in 10 suites, with live checks skipped; release and scratch debug bundle builds completed; the correction diff-check log is empty. Logs are `/tmp/echotype-final-correction-tests.log`, `/tmp/echotype-final-correction-release.log`, `/tmp/echotype-final-correction-bundle.log` and `/tmp/echotype-final-correction-diff-check.log`. Independently reran `swift test --filter AppleTranscriptionTests` with all live-check variables unset, passing 9 tests in 1 suite, logged in `/tmp/echotype-final-closure-transcription.log`; `git diff --check` also passed. Full builds and the full suite were not repeated. No live frameworks, app launch or stop, installation scripts, OS settings, permissions or asset changes.
+- Final simplification assessment: the additional emptiness condition and extension of the existing fixture are the smallest complete correction. No duplicated state, new helper, configuration, abstraction or lifecycle machinery was added, and no code became obsolete. Historical research remains unchanged.
+- Remaining blockers: none for focused review acceptance. G2 items 3, 4, 5, 6, 7, 8, 9 and 13 remain pending external checks in the canonical end checklist. R1 concerns item 6, which was already pending; normal passed behavior is unchanged and no passed item requires repeating. Signed-app runtime behavior and full external verification remain unestablished.
+- Verdict: accepted. R1 and O1 are resolved, and their fixes introduce no release-blocking defect. No specification drift.
 
 ## Completion record
 
-- Final verification: `TBD`
-- External validation pending: `TBD`
-- Specification drift: `TBD`
+- Final verification: all four packet commands passed after correction. `swift test` passed 126 core tests and 71 app tests with live checks skipped; release build, scratch bundle build and `git diff --check` passed. Strict scratch-bundle signature verification also passed. Fresh closure reran the 9 transcription fixtures and diff check successfully. Logs and executable SHA-256 are in the Remediation handoff above. No pre-existing failure exception was needed.
+- External validation pending: the canonical [G2 end checklist](plan.md#g2-end-checklist) retains reported passes 1, 2, 10, 11 and 12 for the WS6 candidate. Items 3, 4, 5, 6, 7, 8, 9 and 13 remain pending on the final reviewed source candidate. Item 6 includes R1's corrected rejection boundary; no passed item requires re-checking because normal transcription, cleanup, voices, rates, switching and UI behavior are unchanged. Use the rebuilt `.build/EchoType-final.app`, executable SHA-256 `2e09807cf394da550807bcd6eabced98dc78b78536bca9c0eb58038d560d6d36`, or a development build from this reviewed source. Agents did not install or launch it. Aidan runs `./scripts/run.sh` when ready. Full external verification, including first-use permission behavior, is not complete.
+- Specification drift: none added by Final. The existing before-credential dictation readiness order and user-approved G2 relocation remain in the plan's decision and drift log. R1 restores the specified empty-finish boundary.
+- Delivered outcomes: Apple supplies on-device dictation, read aloud and cleanup with no key; shared readiness gates operations and refreshes Settings; the fixed English picker resolves to adapter-owned locales. xAI stays the default and its adapters are unchanged. The spike was removed and the extensibility report accounts for shared changes.
+- Deferred observations: explicit reader joining remains the accepted Q1 non-blocker, and the opt-in live composition test assumes installed assets and available Intelligence. Neither is evidence that the remaining real-Mac checks have passed.

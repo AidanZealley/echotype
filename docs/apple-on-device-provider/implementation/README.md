@@ -1,6 +1,6 @@
 # Apple on-device provider implementation workflow
 
-Status: active orchestration instructions. G2's remaining checks follow whole-feature review by Aidan's 2026-10-02 decision.
+Status: implementation and whole-feature review accepted. G2's remaining external checks are pending by Aidan's 2026-10-02 decision. This file retains the workflow used for the accepted work.
 
 This directory is the complete handoff for a fresh orchestration agent. It implements the approved [Apple on-device provider specification](../../specs/apple-on-device-provider.md).
 
