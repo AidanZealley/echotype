@@ -1,6 +1,6 @@
 # Apple on-device provider implementation plan
 
-Status: in progress; workstreams 1-3 accepted.
+Status: in progress; workstreams 1-4 accepted.
 
 ## Orchestration record
 
@@ -17,7 +17,7 @@ Status: in progress; workstreams 1-3 accepted.
 | 1 | [Provider readiness](01-provider-readiness.md) | Approved spec | Accepted |
 | 2 | [Language picker](02-language-picker.md) | 1 | Accepted |
 | 3 | [Apple transcription](03-apple-transcription.md) | 1, 2 | Accepted |
-| 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Not started |
+| 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Accepted |
 | 5 | [Apple cleanup](05-apple-cleanup.md) | 3 | Not started |
 | 6 | [Register Apple and verify on the Mac](06-register-apple.md) | 4, 5 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-6 | Not started |

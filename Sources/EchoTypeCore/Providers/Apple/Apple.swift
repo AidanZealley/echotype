@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Synchronization
 
@@ -15,8 +16,16 @@ enum Apple {
     return transcriber
   }
 
-  /// Yields whenever any Apple service's setup starts, finishes or fails.
-  static let changes = Changes()
+  /// Yields whenever any Apple service's setup starts, finishes or fails, and when the
+  /// installed voices change, such as after a download in System Settings.
+  static let changes: Changes = {
+    let changes = Changes()
+    // Observes for the life of the app, so the token is never removed.
+    _ = NotificationCenter.default.addObserver(
+      forName: AVSpeechSynthesizer.availableVoicesDidChangeNotification, object: nil, queue: nil
+    ) { _ in changes.send() }
+    return changes
+  }()
 
   /// The transcription readiness check is `speechAssets.check(language:)`.
   static let speechAssets = SpeechAssets(system: .live, changes: changes)
