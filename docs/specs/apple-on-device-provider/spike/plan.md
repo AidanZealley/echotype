@@ -17,7 +17,7 @@ Status: approved for execution; service spikes in progress.
 | # | Workstream | Depends on | Status |
 |---|---|---|---|
 | 1 | [Live transcription](01-transcription.md) | Approved spike spec and workflow | Accepted |
-| 2 | [Read aloud](02-voice.md) | 1 accepted | Not started |
+| 2 | [Read aloud](02-voice.md) | 1 accepted | Accepted |
 | 3 | [Cleanup](03-cleanup.md) | 2 accepted | Not started |
 | Final | [Combined feasibility and decision](final-review.md) | 1–3 accepted | Not started |
 
@@ -49,7 +49,7 @@ Each lead owns its numbered packet, its plan row/gate entry, and its explicitly 
 | Gate | Owner / placement | Status | Candidate / resume condition |
 |---|---|---|---|
 | Mac S1 | 1, before independent review | Passed | Supplied human WAV and fresh pause/prefix variants measured; approved limitations and later validation recorded in S1 handoff |
-| Mac S2 | 2, before independent review | Pending | Record runnable candidate in packet; resume with S2 measurements |
+| Mac S2 | 2, before independent review | Passed | Measured missing-id/post-install inventory, bounded paused PCM, complete drain/cancel and byte-identical paragraph; Zoe provisional default and 1x accepted, offline user-reported; evidence bounds retained |
 | Mac S3 | 3, before independent review | Pending | Record runnable candidate in packet; resume with S3 measurements |
 | Aidan decision | Final, after closure before acceptance | Pending | Matrix and recommendation; resume with recorded user decision |
 
@@ -57,7 +57,9 @@ Mac gate details belong in the owning packet. If tools can run them on Aidan's M
 
 ## Escalations
 
-None. S1-evidence was resolved by the supplied human recording and Aidan's accepted limitations; its lasting decision and later validation are in the S1 handoff.
+S1-evidence was resolved by the supplied human recording and Aidan's accepted limitations; its lasting decision and later validation are in the S1 handoff.
+
+S2-evidence and S2-limitations are resolved. Aidan chose Zoe as the provisional Apple default, accepted 1x for the spike and reported a passing network-disconnected command. No repeated listening or 1.1x sample is needed. The lasting decisions, measured completeness and explicit evidence bounds are in the [S2 handoff](02-voice.md#implementation-handoff), results and drift log. Independent review and fresh closure accepted the Mac gate triage and Required R1 documentation remedy; S2 is accepted.
 
 ## Decision and drift log
 
@@ -65,3 +67,7 @@ None. S1-evidence was resolved by the supplied human recording and Aidan's accep
 |---|---|---|---|---|
 | 2026-10-01 | Experiments used Swift 6.4 and SDK 27.0; packet names Swift 6.2. Human gate passed with supplied WAV and fresh pause/prefix variants; original historical fixture was not recovered. | Available toolchain on Aidan's Mac and supplied attachment. Synthetic evidence remained supplemental. | Measured environment; no requirement change approved | S1 |
 | 2026-10-01 | Named unobserved S1 cases accepted with concrete later validation; no waiver of human evidence. | Aidan supplied the WAV after recovery found no historical audio. Cold loading, failed-download retry, unsupported hardware, human jargon/context limits, room silence, signed microphone/Test and unavailable xAI comparison remain explicit. | Aidan, 2026-10-01, recorded S1-evidence answer; lasting record in S1 handoff | S1 |
+| 2026-10-02 | S2 used Swift 6.4 and SDK 27.0 rather than Swift 6.2. Offline execution is user-reported. | Available toolchain on Aidan's Mac; silent supported-path measurements succeeded. | Measured environment; Aidan's reported network-disconnected pass | S2 |
+| 2026-10-02 | Zoe Premium is the provisional Apple default; Siri is absent. Voice setup remains Settings guidance and inventory refresh. | Aidan installed Zoe, which now resolves and synthesizes, and chose it. He identified continuous truncation; delegate completion restores the PCM tail. | Aidan's recorded Zoe choice; measured inventory and synthesis | S2 |
+| 2026-10-02 | Sentence boundaries within 250 scalars replace the rejected mid-sentence break. Fixed voice-specific speed anchors are exploration, not a proven usable 0.7...1.5 range. Only offered 1x is accepted; no additional 1.1x sample. | Paragraph sentence-aware PCM equals continuous for all three voices. Aidan rejected 0.7x/1.5x and clarified: "I didn't necessarily need you to investigate 1.1x. If we're gonna have some sort of slider available in the UI eventually when we go to implement this, then I can just tweak that. I'm happy with 1x for the spike." | Aidan's 2026-10-02 clarification; future slider tuning deferred to implementation | S2 |
+| 2026-10-02 | Alternate locales, full 60,000-scalar drain, signed Reader and formal xAI comparison are deferred. Actual Apple MCP wiring awaits production. Oversized-sentence prosody, failed/interrupted downloads/removal and isolated service memory remain evidence bounds with later checks in the handoff. | Aidan will explore reading lengths in real use, did not require signed Reader/formal xAI checks and requested MCP only if easy. Existing MCP checks use fake dependencies; Apple wiring needs production edits. Required availability/buffering evidence is measured nondestructively; optional states are not missing spike criteria or waived support. | Aidan's recorded scope decisions; lead triage confirmed by independent review, no authorization for destructive asset changes | S2 |
