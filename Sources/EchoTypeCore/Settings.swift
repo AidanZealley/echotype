@@ -60,6 +60,26 @@ public struct Settings: Equatable, Sendable {
     public static let command = ModifierFlags(rawValue: 1 << 3)
   }
 
+  /// A language the settings window offers. The list is provider-neutral: each adapter resolves
+  /// the bare tag to its own form, so an entry is added only once it works with every provider.
+  public struct Language: Hashable, Sendable {
+    public var name: String
+    /// Bare BCP-47 language tag, such as `en`.
+    public var tag: String
+
+    public static let english = Language(name: "English", tag: "en")
+
+    /// The languages the settings window offers.
+    public static let all = [english]
+
+    /// The entry with a stored tag's language subtag, so `en-US` gives English, or English when
+    /// no entry matches.
+    public static func matching(_ tag: String) -> Language {
+      let subtag = tag.split(separator: "-").first.map { $0.lowercased() }
+      return all.first { $0.tag == subtag } ?? english
+    }
+  }
+
   public var hotkey: Hotkey
 
   /// The provider that supplies every service. Read it with `Providers[settings.provider]`.
@@ -72,7 +92,7 @@ public struct Settings: Equatable, Sendable {
   /// provider's adapter enforce the caps.
   public var keyterms: [String]
 
-  /// BCP-47 language tag passed to the transcription API.
+  /// The tag of a `Language.all` entry. Each provider's adapter resolves it to its own form.
   public var language: String
 
   /// Seconds without transcript activity before the session shows its paused state. Nothing is
@@ -140,7 +160,7 @@ public struct Settings: Equatable, Sendable {
     hotkey: Hotkey = .optionD,
     provider: ProviderID = Providers.all[0].id,
     keyterms: [String] = [],
-    language: String = "en",
+    language: String = Language.english.tag,
     silenceTimeout: TimeInterval = 10,
     hardCap: TimeInterval = 300,
     finalizeTimeout: TimeInterval = 8,
@@ -195,8 +215,10 @@ extension Settings: Codable {
     provider = Providers[storedProvider ?? defaults.provider].id
     keyterms =
       (try? container.decodeIfPresent([String].self, forKey: .keyterms)) ?? defaults.keyterms
-    language =
+    // A tag the picker no longer offers, such as free text from before it, maps to an entry.
+    language = Language.matching(
       (try? container.decodeIfPresent(String.self, forKey: .language)) ?? defaults.language
+    ).tag
     inputDeviceID = try? container.decodeIfPresent(String.self, forKey: .inputDeviceID)
     readAloudHotkey =
       (try? container.decodeIfPresent(Hotkey.self, forKey: .readAloudHotkey))

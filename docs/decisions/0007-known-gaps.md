@@ -20,10 +20,10 @@ Status: open. Remove each item as it is resolved.
   [0005](0005-microphone-per-session.md). The settings input picker lets the user choose
   another microphone, and the pill shows the active input with a headphones icon when
   it is Bluetooth. It does not measure audio quality.
-- **Every 400 is worded as a key problem.** Language is free text, saved on every
-  keystroke. If `api.x.ai` answers an unsupported language tag (say "english") with 400,
-  every dictation and Test blames the key; a read-aloud 400 does too. Unverified
-  against the live endpoint. Other unexpected TTS statuses show Swift case names.
+- **Every 400 is worded as a key problem.** Any 400 from `api.x.ai` makes every
+  dictation and Test blame the key; a read-aloud 400 does too. The language now comes
+  from a fixed list, so an unsupported tag no longer causes one. Other unexpected TTS
+  statuses show Swift case names.
 - **Long readings can queue substantial audio.** The REST response arrived about
   five times faster than playback in the read-aloud spike. Each decoded buffer is
   scheduled as it arrives, with no limit on audio held ahead of playback. At the

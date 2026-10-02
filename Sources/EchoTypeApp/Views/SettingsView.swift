@@ -149,7 +149,11 @@ private struct GeneralTab: View {
         }
       }
       InputRow(store: store)
-      LanguageRow(store: store)
+      Picker("Language", selection: $store.settings.language) {
+        ForEach(EchoTypeCore.Settings.Language.all, id: \.self) { language in
+          Text(verbatim: language.name).tag(language.tag)
+        }
+      }
       VStack(alignment: .leading) {
         Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
         Text("Ending with a request like “reply with EchoType” sends the message")
@@ -459,30 +463,6 @@ private struct ProviderControls: View {
     writeError = succeeded ? nil : failure
     if succeeded { testOutcome = nil }
     return succeeded
-  }
-}
-
-/// Holds its own text so clearing the field to type a new tag does not snap back to the
-/// default. A blank field stores the default.
-private struct LanguageRow: View {
-  let store: SettingsStore
-  @State private var text: String
-
-  init(store: SettingsStore) {
-    self.store = store
-    _text = State(initialValue: store.settings.language)
-  }
-
-  var body: some View {
-    LabeledContent("Language") {
-      TextField("Language", text: $text, prompt: Text(verbatim: EchoTypeCore.Settings().language))
-        .labelsHidden()
-        .frame(width: 80)
-        .onChange(of: text) {
-          let tag = text.trimmingCharacters(in: .whitespaces)
-          store.settings.language = tag.isEmpty ? EchoTypeCore.Settings().language : tag
-        }
-    }
   }
 }
 

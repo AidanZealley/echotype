@@ -9,7 +9,7 @@ import Testing
       {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["EchoType"],"language":"en-GB","inputDeviceID":"mic","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":\(speed),"sendReplyRequests":false}
       """.utf8)
     #expect(Settings(decoding: stored) == Settings(
-      hotkey: .controlOptionD, keyterms: ["EchoType"], language: "en-GB",
+      hotkey: .controlOptionD, keyterms: ["EchoType"],
       inputDeviceID: "mic", readAloudHotkey: .controlOptionS,
       reading: ["xai": .init(voice: "altair")], sendReplyRequests: false))
   }
@@ -72,7 +72,6 @@ extension SettingsValidationTests {
   @Test func readingFieldsAndEntriesDecodeIndependently() {
     let stored = Data(#"{"language":"en-GB","voice":"altair","speechSpeed":1.5,"reading":{"xai":{"voice":42,"speed":1.25},"other":{"voice":"remembered","speed":"bad"},"broken":false}}"#.utf8)
     let settings = Settings(decoding: stored)
-    #expect(settings.language == "en-GB")
     #expect(settings.readingChoice(for: Providers.all[0].voice) == .init(voice: "ara", speed: 1.25))
     #expect(settings.reading["other"] == .init(voice: "remembered", speed: 1))
     #expect(settings.reading["broken"] == nil)
@@ -80,7 +79,7 @@ extension SettingsValidationTests {
     #expect(retiredVoice.readingChoice(for: Providers.all[0].voice) == .init(voice: "ara", speed: 1.2))
     let badSpeed = Settings(reading: ["xai": .init(voice: "altair", speed: 2)])
     #expect(badSpeed.readingChoice(for: Providers.all[0].voice) == .init(voice: "altair", speed: 1))
-    let malformed = Settings(decoding: Data(#"{"reading":false,"voice":"altair","speechSpeed":1.5,"language":"fr"}"#.utf8))
-    #expect(malformed.reading.isEmpty && malformed.language == "fr")
+    let malformed = Settings(decoding: Data(#"{"reading":false,"voice":"altair","speechSpeed":1.5}"#.utf8))
+    #expect(malformed.reading.isEmpty)
   }
 }

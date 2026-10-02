@@ -8,7 +8,6 @@ func settingsRoundTrip() {
     hotkey: .controlOptionD,
     provider: "xai",
     keyterms: ["shadcn", "TanStack Start"],
-    language: "en-GB",
     inputDeviceID: "BuiltInMicrophoneDevice",
     readAloudHotkey: .controlOptionS,
     reading: ["xai": .init(voice: "altair", speed: 1.25)],
@@ -28,7 +27,7 @@ func settingsRoundTrip() {
 func storedValueDecodes() {
   let stored = Data(
     #"""
-    {"hotkey":{"keyCode":2,"modifiers":6},"provider":"xai","keyterms":["shadcn","TanStack Start"],"language":"en-GB","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"reading":{"xai":{"voice":"altair","speed":1.25}}}
+    {"hotkey":{"keyCode":2,"modifiers":6},"provider":"xai","keyterms":["shadcn","TanStack Start"],"language":"en","inputDeviceID":"BuiltInMicrophoneDevice","readAloudHotkey":{"keyCode":1,"modifiers":6},"reading":{"xai":{"voice":"altair","speed":1.25}}}
     """#.utf8)
 
   #expect(
@@ -37,7 +36,6 @@ func storedValueDecodes() {
         hotkey: .controlOptionD,
         provider: "xai",
         keyterms: ["shadcn", "TanStack Start"],
-        language: "en-GB",
         inputDeviceID: "BuiltInMicrophoneDevice",
         readAloudHotkey: .controlOptionS,
         reading: ["xai": .init(voice: "altair", speed: 1.25)]
@@ -85,9 +83,16 @@ func retiredKeysIgnored() {
   #expect(
     settings
       == Settings(
-        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB",
-        sendReplyRequests: false))
+        hotkey: .controlOptionD, keyterms: ["shadcn"], sendReplyRequests: false))
   #expect(!String(decoding: settings.encoded(), as: UTF8.self).contains("cleanUp"))
+}
+
+/// The language was free text before the picker, so a stored tag may be any string.
+@Test("A stored language loads as the picker entry with its language subtag, or English", arguments: ["en", "en-US", "EN-gb", "fr", "english", ""])
+func storedLanguageMapsToPickerEntry(tag: String) {
+  let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6},"language":"\#(tag)"}"#.utf8)
+
+  #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD, language: "en"))
 }
 
 @Test("Unreadable data decodes to the defaults")

@@ -1,6 +1,6 @@
 # Apple on-device provider implementation plan
 
-Status: in progress; workstream 1 accepted.
+Status: in progress; workstreams 1-2 accepted.
 
 ## Orchestration record
 
@@ -15,7 +15,7 @@ Status: in progress; workstream 1 accepted.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Provider readiness](01-provider-readiness.md) | Approved spec | Accepted |
-| 2 | [Language picker](02-language-picker.md) | 1 | Not started |
+| 2 | [Language picker](02-language-picker.md) | 1 | Accepted |
 | 3 | [Apple transcription](03-apple-transcription.md) | 1, 2 | Not started |
 | 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Not started |
 | 5 | [Apple cleanup](05-apple-cleanup.md) | 3 | Not started |
@@ -69,6 +69,9 @@ None open.
 
 - Readiness adapters (3-5): `check` returns the current state without awaiting setup. Run setup in a task the adapter owns, not the caller's, because the controller cancels its in-flight `check` on every provider switch and app activation, and an installation must be able to finish after a switch.
 - Readiness adapters (3-5): yield `changes` whenever setup starts, finishes or fails, including setup started by an operation's own `check`. Settings learns of operation-triggered state only through `changes`; `changes()` is called once per follow and must return a fresh stream each call, and `check` may be called concurrently.
+
+- Language (3-5): the picker's list is `Settings.Language.all` in `Sources/EchoTypeCore/Settings.swift`, entries `Language(name:tag:)` with bare tags, currently only `.english` (`en`). Stored settings map through `Language.matching` on load, but `Settings(language:)` built in code keeps any tag, so adapters still resolve whatever tag they receive.
+- Verification: `swift test --filter` matches suite or function names, and `Tests/EchoTypeCoreTests/SettingsTests.swift` holds free functions in no `SettingsTests` suite. Filter by test function name, or run the target, when a packet's filter names a file.
 
 ## Decision and drift log
 
