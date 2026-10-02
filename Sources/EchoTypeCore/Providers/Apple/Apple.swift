@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import FoundationModels
 import Synchronization
 
 /// The Apple provider's services, which run on this Mac through Apple's frameworks. Each service
@@ -16,14 +17,18 @@ enum Apple {
     return transcriber
   }
 
-  /// Yields whenever any Apple service's setup starts, finishes or fails, and when the
-  /// installed voices change, such as after a download in System Settings.
+  /// Yields whenever any Apple service's setup starts, finishes or fails, when the installed
+  /// voices change, such as after a download in System Settings, and when Apple Intelligence's
+  /// availability changes.
   static let changes: Changes = {
     let changes = Changes()
-    // Observes for the life of the app, so the token is never removed.
+    // Both observe for the life of the app, so the token and task are never ended.
     _ = NotificationCenter.default.addObserver(
       forName: AVSpeechSynthesizer.availableVoicesDidChangeNotification, object: nil, queue: nil
     ) { _ in changes.send() }
+    Task {
+      for await _ in Observations({ SystemLanguageModel.default.availability }) { changes.send() }
+    }
     return changes
   }()
 

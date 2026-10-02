@@ -1,6 +1,6 @@
 # Apple on-device provider implementation plan
 
-Status: in progress; workstreams 1-4 accepted.
+Status: in progress; workstreams 1-5 accepted.
 
 ## Orchestration record
 
@@ -18,7 +18,7 @@ Status: in progress; workstreams 1-4 accepted.
 | 2 | [Language picker](02-language-picker.md) | 1 | Accepted |
 | 3 | [Apple transcription](03-apple-transcription.md) | 1, 2 | Accepted |
 | 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Accepted |
-| 5 | [Apple cleanup](05-apple-cleanup.md) | 3 | Not started |
+| 5 | [Apple cleanup](05-apple-cleanup.md) | 3 | Accepted |
 | 6 | [Register Apple and verify on the Mac](06-register-apple.md) | 4, 5 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-6 | Not started |
 
@@ -72,6 +72,7 @@ None open.
 
 - Apple adapters (4-5): surface a framework result stream's error the moment it throws, not at `finish()`. Workstream 3's first transcriber only observed its results task after finishing, so a mid-session failure went silent. In actor readiness checks, read cached setup state after the framework awaits, so a setup that ended meanwhile is not started again.
 - Language (3-5): the picker's list is `Settings.Language.all` in `Sources/EchoTypeCore/Settings.swift`, entries `Language(name:tag:)` with bare tags, currently only `.english` (`en`). Stored settings map through `Language.matching` on load, but `Settings(language:)` built in code keeps any tag, so adapters still resolve whatever tag they receive.
+- Seams (3-6): do not add injection parameters, such as a defaulted framework object, that no caller passes. Inject fixtures through a pure mapping function instead. Workstream 5's only Required finding was an unused `model:` parameter on its readiness check.
 - Verification: `swift test --filter` matches suite or function names, and `Tests/EchoTypeCoreTests/SettingsTests.swift` holds free functions in no `SettingsTests` suite. Filter by test function name, or run the target, when a packet's filter names a file.
 
 ## Decision and drift log
