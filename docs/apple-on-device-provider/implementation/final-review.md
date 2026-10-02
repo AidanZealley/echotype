@@ -1,6 +1,6 @@
 # Apple on-device provider whole-feature review
 
-Status: not started. Begin only after every workstream is accepted.
+Status: not started. Begin only after every workstream is accepted. G2's remaining external checks follow this review and do not block review acceptance.
 
 ## Reviewer task packet
 
@@ -25,7 +25,7 @@ swift build -c release --product EchoTypeApp
 git diff --check
 ```
 
-For any correction that touches behaviour Aidan verified at gate G2, list the affected verification items under Completion record so the orchestrator reports them for re-checking.
+For any correction that touches behaviour Aidan verified at G2, mark the affected item numbers for re-checking in the plan's [G2 end checklist](plan.md#g2-end-checklist) and link them under Completion record. The checklist is the canonical record for the remaining external checks after this review; keep them pending until Aidan supplies evidence. Review acceptance does not claim full external verification.
 
 ## Initial whole-feature review
 

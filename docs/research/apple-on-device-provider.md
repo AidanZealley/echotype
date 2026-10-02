@@ -60,7 +60,7 @@ Aidan rejected a pause after "We are comparing the". Foundation sentence enumera
 
 Continuous and sentence-aware paragraph audio match byte-for-byte for Daniel, Samantha and Zoe. Their frame counts/durations are 566,698/25.700590 s, 544,745/24.704989 s and 529,736/24.024308 s. This establishes completeness and removal of the rejected boundary for this paragraph, not general word accuracy or prosody. `afinfo` confirms Zoe's mono Float32 22,050 Hz output. PCM hashes were recorded in `/tmp/echotype-s2-sentence-final-pcm.log`.
 
-A temporary raw-rate grid measured `[0.1, 0.15, 0.2, 0.3, 0.4, 0.45, 0.5, 0.52, 0.54, 0.56, 0.58, 0.6]` against one 104-scalar sentence. The retained test uses fixed anchors and interpolation, with no runtime calibration system. The following table records those anchors. The duration ratios below record the eight-value short-sentence comparison.
+A temporary raw-rate grid measured `[0.1, 0.15, 0.2, 0.3, 0.4, 0.45, 0.5, 0.52, 0.54, 0.56, 0.58, 0.6]` against one 104-scalar sentence. The spike test used fixed anchors and interpolation, with no runtime calibration system. The following table records those anchors. The duration ratios below record the eight-value short-sentence comparison.
 
 | Voice | AV rate at 0.7x | 0.85x | 1x | 1.25x | 1.5x |
 |---|---|---|---|---|---|
@@ -143,7 +143,7 @@ An accepted reply replaces the window and marks the original committed character
 
 The model already makes the wrong Jane correction and deletes meaningful content from the preservation sentence on the first pass. The extra pass compounds the Jane and preservation failures with the current prompt. Windowing does not cause the first wrong output, and removing a second pass alone would not fix the original Jane error or the preservation-sentence deletion. These runs waited for live completion; a quick finish that cancels live before acceptance can instead revise the unrevised original. No lifecycle behavior changed.
 
-The fixed clearer candidate is retained in `AppleCleanupSpike.qualityFollowUp`, with four examples and 317 instruction tokens versus the current prompt's 208. It fixes the preservation sentence in this sample, but retains abandoned John alongside Jane. Two synthetic runs establish consistency on these inputs, not general cleanup safety or a prompt-specific latency advantage. No human dictation, alternate locale, broader prompt search or xAI comparison was attempted. The production prompt, validator and lifecycle remain unchanged.
+The fixed clearer candidate was kept in `AppleCleanupSpike.qualityFollowUp`, now in git history, with four examples and 317 instruction tokens versus the current prompt's 208. It fixes the preservation sentence in this sample, but retains abandoned John alongside Jane. Two synthetic runs establish consistency on these inputs, not general cleanup safety or a prompt-specific latency advantage. No human dictation, alternate locale, broader prompt search or xAI comparison was attempted. The production prompt, validator and lifecycle remain unchanged.
 
 The check asserts subsequence faithfulness only. Printed Jane/preservation expected-output comparisons are observations; successful test exit does not mean semantic quality passed. After Aidan's decision, `repetitionStress` has no required preservation expectation and prints `expected=not-assessed`. Historical logs still contain `case=long` and `expected=false`; those labels precede the classification correction. The measured reduction remains valid ambiguous stress evidence.
 
@@ -171,17 +171,17 @@ Additional targeted checks: first installed-model dictation after a normal resta
 
 ## Experiment code and inspected contracts
 
-All six experiments live under `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/`, with their existing spike names and opt-in gates:
+The six experiments lived under `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/`, with opt-in gates. They were removed once the production adapters in `Sources/EchoTypeCore/Providers/Apple/` and their fixture and live tests covered what was useful; git history holds them (`git log --diff-filter=D -- Tests/EchoTypeCoreTests/Integration/AppleProviderSpike`).
 
-- [Transcription suite](../../Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/Transcription/AppleTranscriptionSpike.swift) and [transcriber](../../Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/Transcription/SpikeTranscriber.swift) contain inventory, context transport, installation, real SessionMachine finish/pause/cancellation measurements.
-- [Voice suite](../../Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/Voice/AppleVoiceSpike.swift) and [speech stream](../../Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/Voice/AppleSpikeSpeechStream.swift) contain installed selection/fallback, PCM, fixed rate anchors, bounded drain and cancellation checks.
-- [Cleanup suite](../../Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/Cleanup/AppleCleanupSpike.swift) and [cleanup helper](../../Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/Cleanup/SpikeCleanup.swift) contain synthetic inputs, the fixed clearer prompt, context accounting and real Reviser checks.
+- The transcription suite and transcriber covered inventory, context transport, installation, and real SessionMachine finish/pause/cancellation measurements.
+- The voice suite and speech stream covered installed selection/fallback, PCM, fixed rate anchors, bounded drain and cancellation checks.
+- The cleanup suite and helper covered synthetic inputs, the fixed clearer prompt, context accounting and real Reviser checks.
 
 Inspected production contracts and callers: [Provider](../../Sources/EchoTypeCore/Providers/Provider.swift), [SessionMachine](../../Sources/EchoTypeCore/SessionMachine.swift), [Reviser](../../Sources/EchoTypeCore/Reviser.swift), [DictationOperation](../../Sources/EchoTypeApp/DictationOperation.swift), [Reader](../../Sources/EchoTypeApp/Reader.swift), [SpeechPlayer](../../Sources/EchoTypeApp/SpeechPlayer.swift), [DictationController](../../Sources/EchoTypeApp/DictationController.swift), [Settings](../../Sources/EchoTypeCore/Settings.swift) and [SettingsView](../../Sources/EchoTypeApp/Views/SettingsView.swift). The [provider adapter decision](../decisions/0025-provider-adapters.md) governs containment. No production implementation is hidden in the experiments.
 
 ## Reproduction
 
-Run commands from the repository root. Ordinary tests skip before service initialization or asset requests. Live opt-in commands below reproduce retained experiments; this completed investigation requires no new live run. Record environment again when comparing another machine. Cleanup token-count diagnostics run only on macOS 26.4 or later, following the tests' runtime guards. Keep audio, logs and keys outside git.
+The spike commands below are the historical record. They name suites that were removed, so running them needs the experiments restored from git history (see [experiment code](#experiment-code-and-inspected-contracts)). The production adapters' live checks run with `ECHOTYPE_APPLE_LIVE=1 swift test --disable-xctest --filter Apple`. Run commands from the repository root. Ordinary tests skip before service initialization or asset requests; this completed investigation requires no new live run. Record environment again when comparing another machine. Cleanup token-count diagnostics run only on macOS 26.4 or later, following the tests' runtime guards. Keep audio, logs and keys outside git.
 
 ```bash
 sw_vers
@@ -286,7 +286,7 @@ git diff --check
 
 The first two quality commands test the primary and additional gates. The third runs the bounded comparison. S3's network-denied first attempt without `--disable-sandbox` failed with `sandbox_apply: Operation not permitted` during manifest compilation. Disabling SwiftPM's nested sandbox permits the outer network denial; Foundation Models protections remain unchanged. Its system daemon remains outside the child sandbox. Aidan's host-disconnected command was `ECHOTYPE_APPLE_SPIKE=1 swift test --skip-build --disable-xctest --filter AppleCleanupSpike`, reported passing in 42.127 s. S2's earlier five-test 15.547 s host-disconnected pass is also user-reported. No host-wide networking state was agent-observed.
 
-The historical raw-grid command was `ECHOTYPE_APPLE_SPIKE=1 swift test --disable-xctest --filter calibrationAppleVoiceSpike`, logged to `/tmp/echotype-s2-rate-grid.log`. It ran a temporary version before the fixed anchors; retained code reproduces the final mapping rather than that removed grid. Old options-repeat exports omitted content and content-final exports contained the rejected boundary; sentence-final exports hold the corrected paragraph.
+The historical raw-grid command was `ECHOTYPE_APPLE_SPIKE=1 swift test --disable-xctest --filter calibrationAppleVoiceSpike`, logged to `/tmp/echotype-s2-rate-grid.log`. It ran a temporary version before the fixed anchors; the later spike code reproduced the final mapping rather than that removed grid. Old options-repeat exports omitted content and content-final exports contained the rejected boundary; sentence-final exports hold the corrected paragraph.
 
 ## Verification provenance
 

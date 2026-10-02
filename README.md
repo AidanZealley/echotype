@@ -5,7 +5,7 @@
 <h1 align="center">EchoType</h1>
 
 <p align="center">
-  Dictation and read aloud for macOS, powered by xAI.
+  Dictation and read aloud for macOS, powered by xAI or on-device by Apple.
 </p>
 
 EchoType lives in the menu bar. Press a hotkey in any app and start talking. Your words
@@ -26,11 +26,13 @@ when you stop. Select some text and press a second hotkey to hear it read back.
   dropped while you talk. Cleanup runs whenever the selected provider supports it. Your
   words are never swapped for different ones.
 - **Keyterms.** Add names and bits of jargon so they're spelled correctly. The selected
-  provider sets the limit, currently 100 saved terms with xAI.
+  provider sets the limit, currently 99 saved terms with either provider.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
   pauses. Voice and speed are remembered for each provider.
 - **Provider.** Choose a provider in Settings, see its supported features and manage its
-  API key. xAI supplies transcription, read aloud and cleanup.
+  API key. Both supply transcription, read aloud and cleanup. xAI is the default and needs
+  an API key. Apple is free and keeps audio and text on your Mac; Settings shows anything
+  it still needs, such as a speech model download, a voice or Apple Intelligence.
 - **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
   and copies it as JSON.
 - **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
@@ -48,7 +50,8 @@ when you stop. Select some text and press a second hotkey to hear it read back.
 
 ## Install
 
-You need macOS 26 or later and an [xAI API key](https://console.x.ai).
+You need macOS 26 or later, and an [xAI API key](https://console.x.ai) unless you choose
+Apple.
 
 1. Download the latest `EchoType-<version>.dmg` from
    [Releases](https://github.com/AidanZealley/echotype/releases/latest).
@@ -58,8 +61,8 @@ You need macOS 26 or later and an [xAI API key](https://console.x.ai).
 4. Allow **Device Control and Data Access** (Accessibility on older versions of macOS)
    when asked. EchoType needs it for the hotkeys and to paste text.
 5. Click the waveform icon in the menu bar, choose **Settings…**, and paste your key into
-   the **Provider** tab with xAI selected. **Save** keeps it in the Keychain. **Test**
-   records five seconds and shows what it heard.
+   the **Provider** tab with xAI selected. **Save** keeps it in the Keychain. Or select
+   Apple, which needs no key. **Test** records five seconds and shows what it heard.
 6. Press <kbd>⌥</kbd><kbd>D</kbd> in any text field and start talking. macOS asks for
    microphone access the first time.
 
@@ -107,7 +110,8 @@ with Xcode 26.6. Making it a required merge check needs a separate repository se
 
 Integration tests that call xAI are skipped unless `XAI_API_KEY` is set. The live
 protocol test also needs `ECHOTYPE_FIXTURE_WAV` pointing at a recording; see
-`Tests/EchoTypeCoreTests/Integration/LiveProtocolTests.swift`.
+`Tests/EchoTypeCoreTests/Integration/LiveProtocolTests.swift`. Checks that run Apple's
+frameworks are skipped unless `ECHOTYPE_APPLE_LIVE=1` is set.
 
 The code is split into `EchoTypeCore`, which holds the session, protocol and settings
 logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.
@@ -115,6 +119,7 @@ logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell a
 [`docs/releasing.md`](docs/releasing.md) covers packaging a DMG for release.
 
 To add a provider, create `Sources/EchoTypeCore/Providers/<Name>/` with its description
-and service adapters, add it to `Providers.all`, and add fixture tests. Settings and
-operation wiring use the registry. The [provider adapter decision](docs/decisions/0025-provider-adapters.md)
+and service adapters, give it a readiness check if a Mac's setup can rule its services
+out, add it to `Providers.all`, and add fixture tests. Settings and operation wiring use
+the registry. The [provider adapter decision](docs/decisions/0025-provider-adapters.md)
 sets out the contracts and required defaults.

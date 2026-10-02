@@ -1,6 +1,6 @@
 # Apple on-device provider implementation plan
 
-Status: in progress; workstreams 1-5 accepted.
+Status: workstreams 1-6 accepted; whole-feature review next. Remaining G2 checks follow that review.
 
 ## Orchestration record
 
@@ -19,8 +19,9 @@ Status: in progress; workstreams 1-5 accepted.
 | 3 | [Apple transcription](03-apple-transcription.md) | 1, 2 | Accepted |
 | 4 | [Apple read aloud](04-apple-read-aloud.md) | 3 | Accepted |
 | 5 | [Apple cleanup](05-apple-cleanup.md) | 3 | Accepted |
-| 6 | [Register Apple and verify on the Mac](06-register-apple.md) | 4, 5 | Not started |
+| 6 | [Register Apple and verify on the Mac](06-register-apple.md) | 4, 5 | Accepted |
 | Final | [Whole-feature review](final-review.md) | 1-6 | Not started |
+| External | [Remaining signed-build checks](#g2-end-checklist) | Final | Pending external checks |
 
 Run strictly in this order, one workstream at a time.
 
@@ -29,7 +30,7 @@ Run strictly in this order, one workstream at a time.
 - **1 Provider readiness** is the only new shared contract. It lands first, with fake services, so every Apple adapter targets a settled contract and xAI is shown to be unchanged before Apple exists. It includes the amber pill and Provider tab reasons because the contract has no other consumer.
 - **2 Language picker** is an independent shared settings change. It comes before the Apple adapters so their language resolution starts from the picker's fixed tags. It follows 1 because both edit `SettingsView.swift`.
 - **3–5 Apple adapters** are one service each, with that service's readiness check. Each is reviewable on its own with fixture tests and opt-in live checks. None is registered, so no intermediate state shows a half-built provider. 3 goes first because it owns the shared Apple pieces: the namespace, language resolution and the change signal.
-- **6 Register Apple** composes the description and readiness, adds the registry line, settles permissions, deletes the spike, writes the documentation, and holds Aidan's signed-build verification. Those checks can only run once all three services are registered.
+- **6 Register Apple** composes the description and readiness, adds the registry line, settles permissions, deletes the spike, writes the documentation, and records Aidan's signed-build verification. Those checks can only run once all three services are registered. Aidan moved the remaining checks after whole-feature review.
 
 ## Cross-workstream contracts
 
@@ -49,21 +50,43 @@ Run strictly in this order, one workstream at a time.
 
 ## Whole-feature acceptance
 
-- Workstreams 1–6 accepted, including workstream 6's signed-build gate.
+- Workstreams 1–6 and whole-feature review accepted. Remaining external checks do not block those acceptances.
 - `swift test` and the release build pass with live checks unset.
 - The extensibility report accounts for every change outside `Providers/Apple/` and `Providers.swift`.
-- Anything the final review corrects after Aidan's gate is listed for him to re-check in the completion report.
+- All G2 items pass before reporting the feature fully verified. Any final-review correction affecting a passed item adds it to the end checklist for re-checking.
 
 ## External validation gates
 
 | Gate | Owning workstream | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
 | G1 Waiting pill look | 1 | After closure, before acceptance | Passed | Workstream 1 accepted tree | Aidan approves the waiting and error pills in both themes, or his corrections are applied |
-| G2 Signed-build verification | 6 | After closure, before acceptance | Pending | `TBD` | Aidan reports every verification item passing, with the speed range tuned |
+| G2 Signed-build verification | External, after Final | After whole-feature review | Partially passed; eight checks pending | Signed WS6 candidate for reported passes; use the final reviewed candidate for remaining checks | Record all checklist items passing before claiming full external verification |
+
+### G2 end checklist
+
+Aidan approved moving anything unverified after whole-feature review on 2026-10-02. Items 1, 2, 10, 11 and 12 passed by his report. Items 3, 4, 5, 6, 7, 8, 9 and 13 remain pending external checks. They block full external verification, not workstream 6 acceptance or whole-feature review.
+
+The reported passes refer to the WS6 source candidate over base `53c563bea5aab0fe43a3e0ee9f9b96d87d21b670`. Its scratch bundle was `/Users/aidanzealley/code/echotype/.build/EchoType-ws6.app`, signed with Apple Development team `LJHNNE925Q`, hardened runtime and the audio-input entitlement. Strict signature verification passed; executable SHA-256 was `a9bd2cabb5b28d58db014d95b86e5ff6be94cb78d0d2ff78becbe45bfa53e227`. A signed bundle and automated/live tests are separate evidence from Aidan's runtime checks.
+
+After whole-feature review, use its final reviewed source candidate. Aidan runs `./scripts/run.sh` from the repository root when ready to replace his development copy. Agents do not run it. Record results here with the candidate identity and any unavailable test condition. Keep the item numbers stable. Do not remove assets or voices to manufacture a test condition without a separate decision.
+
+1. Passed, Aidan reported 2026-10-02. With assets installed, Apple Intelligence available and Apple selected, turn networking off and verify dictation with cleanup, read aloud, MCP `speak` and Settings Test. Restore networking afterward.
+2. Passed, Aidan reported 2026-10-02. Switch xAI → Apple → xAI. Each keeps its voice and speed; xAI still works as before.
+3. Pending external check after whole-feature review. Turn Apple Intelligence off. Cleanup keeps its support mark and shows its reason; dictation shows the red pill and does not start. Re-enable it and check cleanup again.
+4. Pending external check after whole-feature review. On a missing speech-model setup, verify the amber waiting pill blocks dictation, setup completion and failure refresh Settings, and launch with Apple selected starts setup. If no missing model is available, report that explicitly rather than removing assets to manufacture the state.
+5. Pending external check after whole-feature review. After a normal restart with assets installed, first dictation is ready within five seconds.
+6. Pending external check after whole-feature review. Silence before speech cancels quietly; silence after speech pauses and resumes in a real room; tap-and-stop without speech shows no error.
+7. Pending external check after whole-feature review. Dictate real jargon with saved keyterms and check their spellings.
+8. Pending external check after whole-feature review. Pause/resume a long reading without missing audio or continuing to synthesize the rest while paused. Cancel during pending synthesis or model loading; the next operation works. Listen to a sentence longer than 250 Unicode scalars.
+9. Pending external check after whole-feature review. A missing saved voice falls back without overwriting the saved choice. A voice downloaded in System Settings is picked up. Report an unavailable test condition rather than deleting voices without a separate decision.
+10. Passed, Aidan reported 2026-10-02. Listen to Zoe and Jamie at 0.8x, 1x and 1.3x. Aidan accepts the existing `0.8...1.3` range as usable and sensible. His preferred speed is 1.1x; defaults remain unchanged.
+11. Passed, Aidan reported 2026-10-02. Run a representative long dictation with cleanup and report text loss or cleanup failures.
+12. Passed, Aidan reported 2026-10-02. Check Apple in the Provider tab, its three support marks and readiness reasons, and the waiting pill in both themes.
+13. Pending external check after whole-feature review. Report first Apple dictation permission behavior on the signed app: microphone prompt if not already granted, any Speech Recognition prompt or denial, and whether transcription succeeds. Existing grants may mean no prompt appears; state that explicitly. Item 1's successful dictation does not establish first-use permission behavior.
 
 ## Escalations
 
-None open.
+None. E6-G2 was resolved by Aidan's decision to move the remaining checks after whole-feature review. Their pending status remains in the end checklist.
 
 ## Conventions learned
 
@@ -75,9 +98,13 @@ None open.
 - Seams (3-6): do not add injection parameters, such as a defaulted framework object, that no caller passes. Inject fixtures through a pure mapping function instead. Workstream 5's only Required finding was an unused `model:` parameter on its readiness check.
 - Verification: `swift test --filter` matches suite or function names, and `Tests/EchoTypeCoreTests/SettingsTests.swift` holds free functions in no `SettingsTests` suite. Filter by test function name, or run the target, when a packet's filter names a file.
 
+- Verification records, 6 and Final: distinguish SDK and unsigned tests from signed-app runtime evidence. Successful signing does not confirm permission prompt behavior. Keep stable G2 item numbers and update the end checklist if a correction requires repeating a passed item. Extensibility reports also account for changed workflow records as documentation outside the shared contract. A preferred speed does not change the provider's defaults.
+
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
 |---|---|---|---|---|
 | 2026-10-02 | `DictationOperation` checks readiness after the Starting pill and before capture opens, which is before the credential check rather than after it. `Reader` follows the specified order. | The key is read only after capture opens, so the specified order would open capture for a blocked dictation or change xAI startup. Not observable for any planned provider: xAI has no readiness and Apple no credential. | Workstream 1 lead | 1, 6 |
 | 2026-10-02 | Gate G1 passed: the waiting pill ("Not ready", amber hourglass, reason in primary text, no glow, three-second fade) and the unchanged error pill are approved in both themes. | Aidan approved as is. Later workstreams reuse `Pill.Phase.waiting(String)` for readiness messages without restyling. | Aidan | 1, 3-6 |
+| 2026-10-02 | Workstream 6 recovery initially had no specification drift. Fresh independent review and focused closure passed before G2. | Reused the completed implementation and corrected two documentation findings in one pass. Gate placement changed later by the user decision below. | Workstream 6 recovery lead | 6 |
+| 2026-10-02 | G2 items 1, 2, 10, 11 and 12 passed. Retain the Apple `0.8...1.3` speed range and existing defaults; Aidan prefers 1.1x. Move unverified items 3, 4, 5, 6, 7, 8, 9 and 13 after whole-feature review, without blocking WS6 or Final acceptance. | Aidan cannot make environment changes or restart now and instructed, "Let's move anything unverified right to the end". This amends the frozen gate placement; it does not mark pending checks passed. | Aidan | 6, Final, External |

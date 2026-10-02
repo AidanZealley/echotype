@@ -1,6 +1,6 @@
 # Apple on-device provider implementation workflow
 
-Status: draft orchestration instructions.
+Status: active orchestration instructions. G2's remaining checks follow whole-feature review by Aidan's 2026-10-02 decision.
 
 This directory is the complete handoff for a fresh orchestration agent. It implements the approved [Apple on-device provider specification](../../specs/apple-on-device-provider.md).
 
@@ -14,7 +14,7 @@ In order of precedence:
 4. [plan.md](plan.md): status, contracts, escalations, conventions learned and drift.
 5. The workstream's numbered file: its frozen task packet and record.
 
-The spike experiments in `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/` are working reference code for the Apple adapters until workstream 6 deletes them.
+Workstream 6 deleted the spike experiments after the production adapters and tests replaced them. Git history retains the reference code.
 
 ## Roles
 
@@ -45,7 +45,7 @@ Agents never edit the shared worktree concurrently.
 3. Read the return only to decide whether to continue or stop. The lead has already recorded it.
 4. On `Blocked`, read only the named escalation entry in `plan.md`, put it to the user, record the answer in that entry, and spawn a fresh lead for the same workstream.
 5. Repeat until every workstream is accepted, then spawn the final-review lead with the [final-review lead prompt](#final-review-lead-prompt).
-6. Write the [completion report](#completion-report).
+6. Report whole-feature review results and pending external checks. Complete the remaining [G2 end checklist](plan.md#g2-end-checklist) after that review when Aidan is ready, then write the [completion report](#completion-report).
 
 A row in a non-terminal state with no live lead is interrupted. Start a fresh lead for that workstream; it recovers the uncommitted work using [interrupted work recovery](#interrupted-work-recovery).
 
@@ -79,7 +79,7 @@ No agent busy-polls another: no repeated short waits, no output checks on a runn
 - Implementation, review and remediation stay uncommitted so reviewers see one coherent diff.
 - At acceptance the lead makes one commit containing the code, its record and its `plan.md` updates. Subject: a plain-language description followed by `(workstream N)`, or `(final review)`, for example `Gate operations on provider readiness (workstream 1)`.
 - No document records an accepted workstream's commit hash.
-- End each commit message with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
+- End each commit message with the actual contributing model. Codex commits in this workflow use `Co-Authored-By: GPT-6.1-Sol <noreply@openai.com>`.
 - Respect unrelated dirty state: do not claim it or start a workstream over it. Escalate when ownership overlaps.
 
 ## Per-workstream loop
@@ -91,7 +91,7 @@ The lead runs these phases, updating its row in `plan.md` at each transition.
 3. **Independent review.** Set `Review`. Spawn a different fresh agent with the review prompt. It writes the Independent review section.
 4. **Remediation.** If any finding is accepted as Required, set `Remediation` and spawn one implementation agent to address exactly those findings. There is at most one remediation pass.
 5. **Closure.** Set `Closure review`. Spawn a fresh reviewer with the same brief, limited to verifying accepted findings and checking their fixes for release-blocking defects. It does not restart open-ended review or promote optional items.
-6. **External validation**, only where the packet has a gate. See [external validation gates](#external-validation-gates).
+6. **External validation**, only where the packet has a pre-acceptance gate. See [external validation gates](#external-validation-gates). G2's remaining items follow whole-feature review and do not block workstream 6 acceptance.
 7. **Accept and commit.** Write the Resolution and, where relevant, External validation sections. Set the row to `Accepted`, add drift and conventions learned, and make the one commit.
 
 Every targeted verification command in the packet must pass before acceptance. A failure that reproduces on the base commit is pre-existing: record it in the handoff and continue. If a command still fails after closure, block.
@@ -155,13 +155,15 @@ Abandon partial work only when it cannot be safely attributed, uses the wrong ba
 
 Aidan is the only one who can judge visual taste, listen to voices and drive signed-app dictation on a real microphone. Gates and their placement are in [plan.md](plan.md#external-validation-gates).
 
-A gate that needs Aidan stops the lead:
+A pre-acceptance gate that needs Aidan stops the lead:
 
 1. After closure, record the candidate, instructions and required evidence in the packet's External validation section.
 2. Add an escalation entry in `plan.md` naming the gate, set the row and gate status, leave the work uncommitted, and return `Blocked`.
 3. A fresh lead inherits the work and Aidan's answer. If he reports problems, it runs a troubleshooting loop inside the workstream: record the failure, make the smallest correction, run proportionate checks, and publish another candidate through a new escalation. This does not change the workstream status or rerun implementation and review.
 4. Reopen the normal loop only when a correction changes approved behaviour, architecture, ownership, a public contract or another accepted workstream.
 5. After the gate passes, review meaningful unreviewed corrections once, record the final evidence and lasting decisions, remove the resolved escalation, and accept.
+
+For G2, Aidan explicitly moved remaining items after whole-feature review. Record the existing passes and pending items in the plan's canonical end checklist. Accept WS6 on its reviewed implementation and recorded decision; accept Final on whole-feature review and closure. Neither acceptance claims full external verification. Complete the remaining checks afterward, using the final reviewed candidate.
 
 Collapse superseded troubleshooting attempts once they no longer explain a decision.
 
@@ -185,7 +187,8 @@ The orchestrator reports:
 Lead workstream <N> of the Apple on-device provider.
 
 Read docs/apple-on-device-provider/implementation/README.md and <NN-name.md>, then the
-source-of-truth documents the README identifies. The task packet in that file is frozen.
+source-of-truth documents the README identifies. The task packet is frozen except for recorded
+user-authorized amendments, including G2's remaining checks moving after whole-feature review.
 
 Run the documented loop yourself: spawn a fresh implementation agent, spawn a different fresh
 agent for independent review, triage the findings, order at most one remediation pass, then run
@@ -203,7 +206,8 @@ return fields, so anything worth keeping must be in that commit.
 
 You cannot reach the user. Block if a decision materially changes approved behavior or
 architecture, if disagreement persists after closure, or if an external validation gate needs the
-user. To block, add an escalation entry to plan.md giving the decision needed, the options, your
+user at its recorded placement. G2's pending end checks do not block acceptance. To block, add
+an escalation entry to plan.md giving the decision needed, the options, your
 recommendation, the evidence and what it unblocks, set your row to Blocked, leave the work
 uncommitted, and return its id. Summarise; do not paste findings or diffs.
 
@@ -228,7 +232,7 @@ Lead the whole-feature review of the Apple on-device provider.
 
 Read docs/apple-on-device-provider/implementation/README.md and final-review.md, then the
 source-of-truth documents the README identifies. Every workstream is accepted; the branch is
-complete.
+ready for code review; the plan's G2 end checklist still has pending external checks.
 
 Spawn a fresh reviewer to review the full branch against the starting commit recorded in the
 plan. Triage its findings, send each accepted correction to a fresh implementation agent owning

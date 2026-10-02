@@ -3,8 +3,24 @@ import Foundation
 import FoundationModels
 import Synchronization
 
-/// The Apple provider's services, which run on this Mac through Apple's frameworks. Each service
-/// has a readiness check, since the Mac, its settings or a missing download can rule it out.
+extension Provider {
+  /// The app reaches Apple only through this description and its services.
+  public static let apple = Provider(
+    id: "apple", name: "Apple", summary: "Free. Runs on this Mac.", credential: .none,
+    transcription: Apple.transcription, voice: Apple.voice, cleanup: Apple.cleanup,
+    readiness: Readiness(
+      check: { request in
+        ServiceReadiness(
+          transcription: await Apple.speechAssets.check(language: request.language),
+          voice: Apple.Speech.check(language: request.language, voice: request.voice),
+          cleanup: Apple.Intelligence.check(language: request.language))
+      },
+      changes: { Apple.changes.stream() }))
+}
+
+/// The Apple provider's services, composed into `Provider.apple`, which run on this Mac through
+/// Apple's frameworks. Each service has a readiness check, since the Mac, its settings or a
+/// missing download can rule it out.
 enum Apple {
   /// Live transcription through `SpeechTranscriber`. The framework takes any number of
   /// contextual strings; 100 matches xAI until real dictation shows a better limit.

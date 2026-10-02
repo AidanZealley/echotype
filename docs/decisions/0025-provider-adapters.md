@@ -20,15 +20,15 @@ meant editing each of them.
   [0019](0019-native-macos-app-and-core-boundary.md).
 - `Providers.all` in `Providers/Providers.swift` lists every provider in Settings order; the
   first is the default. `Providers[id]` gives the provider with that id, or the default for
-  an unknown one. xAI is the only entry.
+  an unknown one. It lists xAI, the default, then Apple.
 - `Settings.provider` stores the selected id. The app reads the selected provider with
   `Providers[settings.provider]` from the settings snapshot each dictation, Test or reading
   takes, and wires that provider's services. Errors are worded with the provider the
   operation ran with.
 - Each provider's adapters and description live in `Providers/<Name>/`. Outside that
-  folder and the registry, code names no provider. The `XAI` namespace is internal to
-  `EchoTypeCore`, so the app can only reach xAI through `Provider.xAI`. Shared HTTP and
-  WebSocket helpers are in `Providers/HTTP/`.
+  folder and the registry, code names no provider. The `XAI` and `Apple` namespaces are
+  internal to `EchoTypeCore`, so the app can only reach them through `Provider.xAI` and
+  `Provider.apple`. Shared HTTP and WebSocket helpers are in `Providers/HTTP/`.
 - `Credential` is `.none` or `.apiKey(placeholder:)`. A provider with `.none` always counts
   as having its credential; one with `.apiKey` needs its Keychain item, whose account is the
   provider id (see [0010](0010-settings-storage-and-api-key.md)). Dictation and reading
@@ -80,13 +80,24 @@ meant editing each of them.
    aloud, with a non-empty voice list whose first voice is the default and a speed range
    that includes 1. Set cleanup to `nil` if the provider has no cleanup service. Follow the
    neutral contracts in `Provider.swift` for events, cancellation and audio delivery.
-2. Add it to `Providers.all`.
-3. Add fixture tests for its adapters.
+2. Resolve the language in each adapter. Requests carry `Settings.language`, a bare tag
+   from `Settings.Language.all` such as `en`; map it to the provider's own form. xAI passes
+   it through, and Apple maps a bare tag to a fixed region. Adding a language to the list
+   means checking every provider resolves it.
+3. If the Mac, its settings or a download can rule a service out, supply `readiness`. Its
+   `check` returns each service's state without waiting for setup, starts any setup in a
+   task the adapter owns so it survives a provider switch, tolerates concurrent calls and
+   reports an unsupported language. Its `changes` returns a fresh stream per call and yields
+   whenever setup starts, finishes or fails, or the system's state changes. The provider
+   writes every reason the app shows. Leave it `nil` when the services are always usable
+   once the credential is present.
+4. Add it to `Providers.all`.
+5. Add fixture tests for its adapters, and keep checks that call real services opt-in.
 
-Settings, the Provider picker and feature list, Read Aloud voices and speed, Keyterms
-limit, dictation and reading wiring, error messages, menu bar status and Keychain pick it
-up with no further change. Reading choices use the provider id as their storage key.
-Cleanup is always on when its service is present; no capability flags or cleanup toggle
+Settings, the Provider picker and feature list with readiness reasons, Read Aloud voices
+and speed, Keyterms limit, dictation and reading wiring, the waiting and error pills,
+error messages, menu bar status and Keychain pick it up with no further change. Reading
+choices use the provider id as their storage key. Cleanup is always on when its service is present; no capability flags or cleanup toggle
 are needed.
 
 ## Consequences
@@ -98,3 +109,32 @@ are needed.
   Keychain. The signed build's Mac validation confirmed retained key, voice and speed,
   dictation with cleanup, read aloud, MCP speech, Test transcription, wrong-key rejection
   and recovery, and the Provider tab in both themes on 2026-10-01.
+
+## Extensibility report
+
+Adding Apple, the second provider, tested this design. Its adapters, description and language
+regions sit in `Providers/Apple/`, and the registry gained one entry. Everything else the
+branch changed is below. Each shared change is provider-neutral and part of the contract
+above; none names Apple.
+
+| Change | Reason | Shared contract |
+|---|---|---|
+| `Provider.swift`: `Provider.readiness`, `Readiness`, `ReadinessRequest`, `ServiceReadiness`, `ServiceState` | Apple's services can exist and still be unusable on a Mac. The credential was the only usability check. | Yes. Optional, so xAI declares none and is unchanged. |
+| `DictationOperation.swift` and `Reader.swift`: check readiness before capture or speech, and the app-internal `NotReady` error | An operation must not start with a service that is not ready. Dictation checks before the credential, which is read after capture opens, so xAI startup is unchanged. | Yes, the operation side of readiness. |
+| `DictationController.swift`: follows the selected provider's readiness for Settings, wires each operation's check, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress and starts setup at launch, on a change of provider, language or voice, on app activation and on each `changes` yield. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
+| `Pill.swift`, `PillView.swift`, `PillDemo.swift`: `Pill.Phase.waiting` and its demo steps | A service still setting up is not an error, so it gets an amber pill. | Yes, generic UI for `.waiting`. |
+| `SettingsView.swift`: readiness reasons beside the Provider tab's marks | Shows why a supported service cannot be used yet. | Yes. |
+| `Settings.swift` and `SettingsView.swift`: `Settings.Language`, a fixed list, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each adapter now resolves a known bare tag. | Yes. Stored tags map to a list entry on load. |
+| Tests: readiness in `DictationOperationTests`, `ReadingOperationTests`, `ProviderWordingTests`, `ProviderReadinessTests`; the language list in `SettingsTests` and `SettingsValidationTests`; Apple fixture tests in `Apple*Tests.swift` and opt-in live checks in `Integration/Apple*LiveTests.swift` | Cover the shared changes with fake services, and Apple's adapters with fixtures. Live checks run only with `ECHOTYPE_APPLE_LIVE=1`. | Shared tests cover the contract; Apple tests are the provider's own. |
+| `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/` deleted | The production adapters and their tests replaced the experiments; git history keeps them. | No. |
+| `README.md`, this record, [0007](0007-known-gaps.md), the [specification](../specs/apple-on-device-provider.md) and the [research](../research/apple-on-device-provider.md) | Document Apple, readiness and the language list, mark the experiments removed, and record the user-approved external-check placement. | No. |
+| `docs/apple-on-device-provider/implementation/01-provider-readiness.md` through `06-register-apple.md`, `plan.md`, `README.md` and `final-review.md` | Record implementation handoffs, reviews, verification and workflow status. | No. Workflow documentation. |
+
+No bundle permission changed. The SDK documents Speech authorisation and its usage
+description only for `SFSpeechRecognizer`, and the adapters transcribed under `swift test`
+with Speech authorisation `notDetermined` throughout. The existing microphone permission
+covers capture. Aidan reported signed-build offline dictation and cleanup passing at G2 item 1.
+First-use permission prompt behavior remains pending at item 13 in the
+[G2 end checklist](../apple-on-device-provider/implementation/plan.md#g2-end-checklist), after
+whole-feature review by his decision. Successful signing and unsigned tests do not establish
+that behavior.

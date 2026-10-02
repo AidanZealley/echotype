@@ -65,6 +65,14 @@ func unknownProvider() {
   #expect(Settings(decoding: stored).provider == Providers.all[0].id)
 }
 
+@Test("xAI stays the default, and a stored Apple selection loads as Apple")
+func registeredProviders() {
+  let stored = Data(#"{"provider":"apple"}"#.utf8)
+
+  #expect(Providers.all.map(\.id) == ["xai", "apple"])
+  #expect(Settings(decoding: stored).provider == Provider.apple.id)
+}
+
 @Test("A malformed sendReplyRequests falls back to on without discarding other settings")
 func malformedSendReplyRequests() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6},"sendReplyRequests":"no"}"#.utf8)

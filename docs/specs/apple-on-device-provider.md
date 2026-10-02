@@ -1,6 +1,6 @@
 # Apple on-device provider
 
-Status: approved for implementation, 2026-10-02. Builds on the [provider adapters](../decisions/0025-provider-adapters.md). The [feasibility research](../research/apple-on-device-provider.md) holds the spike's measurements and reasoning; this spec owns the requirements.
+Status: approved for implementation, 2026-10-02. Aidan amended external-check placement on the same date; remaining checks follow whole-feature review. Builds on the [provider adapters](../decisions/0025-provider-adapters.md). The [feasibility research](../research/apple-on-device-provider.md) holds the spike's measurements and reasoning; this spec owns the requirements.
 
 ## Goal and scope
 
@@ -111,7 +111,7 @@ Implement `Providers/Apple/` against the contracts:
 - **Voice.**
   - Voices are Zoe Premium (`com.apple.voice.premium.en-US.Zoe`, the default) and Jamie Premium (`com.apple.voice.premium.en-GB.Malcolm`, shown as "Jamie"). Siri voices are not available through this API.
   - If the saved voice is missing or does not suit the language, fall back to an installed voice for the language without overwriting the saved choice. If none exists, report `.unavailable` with guidance to download one in System Settings > Accessibility > Read & Speak. Refresh on the voices-changed notification.
-  - Map speed through fixed per-voice rate anchors. The spike measured Zoe's; Jamie needs his own. Tune the range by ear during implementation, keeping 1x.
+  - Map speed through fixed per-voice rate anchors. The spike measured Zoe's; Jamie needs his own. Confirm the range by ear, keeping 1x. Aidan accepted the implemented `0.8...1.3` range on 2026-10-02; his preferred speed of 1.1x does not change the defaults.
   - The text limit is 60,000 Unicode scalars. Submit one utterance of at most 250 scalars at a time, preferring the last complete sentence within the bound, and start the next only after the previous is consumed.
   - Take the sample rate from the synthesiser's buffers, deliver at most 100 ms per chunk and cancel pending pulls promptly.
 - **Cleanup.**
@@ -127,24 +127,13 @@ This step is complete when Apple appears in the Provider tab and works with no s
 
 ## Spike code
 
-The spike experiments live in `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/`. Use them as reference while implementing, then delete the folder once the production adapters and their tests cover what is useful. Update the research document's links to describe the experiments as removed, with git history as their source.
+The spike experiments formerly lived in `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/`. Workstream 6 deleted them after the production adapters and tests covered what was useful. The research document describes their removal, with git history as their source.
 
 ## Verification
 
-Aidan runs these checks on a signed build at the end of implementation:
+Aidan runs the required checks on a signed build. The [G2 end checklist](../apple-on-device-provider/implementation/plan.md#g2-end-checklist) owns the stable item numbers, required evidence and current results, including first-use permission behavior.
 
-- After required assets are installed and Apple Intelligence is available, with Apple selected and the network off: dictation with cleanup, read aloud, MCP `speak` and Test all work.
-- Switch xAI → Apple → xAI. Each provider keeps its voice and speed, and xAI works exactly as before.
-- With Apple Intelligence off, Cleanup keeps its support mark, shows its reason, and Apple dictation is blocked with the red pill. Re-enable it before checking cleanup.
-- The first dictation without the speech model installed, or with a language whose model is missing, shows the amber waiting pill and does not start. Setup completion and failure update Settings. Launch with Apple selected starts required setup.
-- First dictation after a restart with assets installed is ready within five seconds.
-- Silence before speech cancels quietly. Silence after speech pauses and resumes in a real room. A tap-and-stop with nothing said shows no error.
-- Saved jargon keyterms on real speech.
-- Pause a long reading and resume it without missing audio or unbounded read-ahead. Cancel while synthesis or model loading is pending, and the next operation works. Listen to a sentence longer than 250 scalars.
-- A missing saved voice falls back without overwriting the choice. Downloading a voice in System Settings is picked up.
-- Speed slider range feels right for both voices.
-- Representative long dictation with cleanup.
-- The Provider tab and the waiting pill in both themes.
+On 2026-10-02 he reported items 1, 2, 10, 11 and 12 passing and instructed, "Let's move anything unverified right to the end". Remaining items 3, 4, 5, 6, 7, 8, 9 and 13 follow whole-feature review and do not block workstream 6 or review acceptance. This amends the original gate placement. Full external verification remains pending until those checks pass. Automated and unsigned live evidence remains separate from signed-app validation. Any final-review correction affecting a passed item requires a re-check in the end checklist.
 
 ## Extensibility report
 

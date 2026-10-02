@@ -1,6 +1,6 @@
 /// Every provider, in the order Settings lists them. The first is the default.
 public enum Providers {
-  public static let all: [Provider] = [.xAI]
+  public static let all: [Provider] = [.xAI, .apple]
 
   /// The registered provider with `id`, or the default for an id no provider has.
   public static subscript(id: ProviderID) -> Provider {
