@@ -23,7 +23,8 @@ extension Provider {
 /// missing download can rule it out.
 enum Apple {
   /// Live transcription through `SpeechTranscriber`. The framework takes any number of
-  /// contextual strings; 100 matches xAI until real dictation shows a better limit.
+  /// contextual strings; 100 is a provisional cap, since 1,000 were accepted but no recognition
+  /// benefit or usable maximum has been measured.
   static let transcription = TranscriptionService(keytermLimit: 100) { request in
     guard let locale = await Transcriber.supportedLocale(for: request.language) else {
       throw ProviderError.failed("Transcription does not support this language")

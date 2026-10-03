@@ -18,7 +18,8 @@ extension Apple {
       } else {
         transcript.provisional = text.trimmingCharacters(in: .whitespacesAndNewlines)
       }
-      // `SpeechDetector` reported nothing in the spike, so recognised text is the evidence.
+      // A paired `SpeechDetector` reported nothing in the research runs, so recognised text is
+      // the evidence.
       let heard = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       return [.transcript(transcript)] + (heard ? [.speech] : [])
     }
