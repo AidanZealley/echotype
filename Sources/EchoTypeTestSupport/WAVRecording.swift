@@ -8,7 +8,7 @@ public struct WAVRecording: Sendable {
   public let sampleRate: Double
   public let channelCount: Int
   /// Interleaved samples in [-1, 1], the shape `AudioConverter` consumes.
-  let samples: [Float]
+  public let samples: [Float]
 
   public init(contentsOf url: URL) throws {
     let bytes = [UInt8](try Data(contentsOf: url))
