@@ -86,7 +86,7 @@ file to make spoken replies more reliable without shortening written answers.
 
 ## Development
 
-You need macOS 26, Xcode with Swift 6.2, and an Apple Development signing certificate in
+You need macOS 26 or later, Xcode 27, and an Apple Development signing certificate in
 your keychain. EchoType has to run as a signed app bundle so macOS can keep its
 microphone and accessibility permissions between builds.
 
@@ -105,8 +105,8 @@ lists them.
 
 Deterministic tests and `swift build -c release --product EchoTypeApp` need no signing
 certificate. App tests import the executable target without running its entry point.
-The `macOS tests and release build` Actions job defines these checks on macOS 26
-with Xcode 26.6. Making it a required merge check needs a separate repository setting.
+The `macOS tests and release build` Actions job defines these checks on GitHub's
+Xcode 27 image, currently a preview. Making it a required merge check needs a separate repository setting.
 
 Integration tests that call xAI are skipped unless `XAI_API_KEY` is set. The live
 protocol test also needs `ECHOTYPE_FIXTURE_WAV` pointing at a recording; see

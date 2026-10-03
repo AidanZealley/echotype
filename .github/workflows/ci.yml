@@ -11,11 +11,12 @@ permissions:
 jobs:
   test-and-build:
     name: macOS tests and release build
-    runs-on: macos-26
+    # The Xcode 27 image, matching the toolchain the app is developed and deployed with.
+    runs-on: xcode-27
     timeout-minutes: 15
     env:
-      # Installed in the macOS 26 arm64 image. Keep this explicit when updating Xcode.
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # Installed in the Xcode 27 image. Keep this explicit when updating Xcode.
+      DEVELOPER_DIR: /Applications/Xcode_27.app/Contents/Developer
       XAI_API_KEY: ""
       ECHOTYPE_FIXTURE_WAV: ""
     steps:
