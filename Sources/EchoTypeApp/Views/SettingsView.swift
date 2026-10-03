@@ -228,16 +228,15 @@ private struct ProviderTab: View {
 
   private var provider: Provider { Providers[store.settings.provider] }
 
-  /// Changes when the provider, language or voice does, which restarts the following.
-  private struct ReadinessID: Hashable {
+  /// What the tab follows. Changes when the provider, language or voice does, which restarts
+  /// the following.
+  private struct Followed: Hashable {
     var provider: ProviderID
-    var language: String
-    var voice: String
+    var request: ReadinessRequest
   }
 
-  private var readinessID: ReadinessID {
-    let request = ReadinessRequest(settings: store.settings, voice: provider.voice)
-    return ReadinessID(provider: provider.id, language: request.language, voice: request.voice)
+  private var followed: Followed {
+    Followed(provider: provider.id, request: ReadinessRequest(settings: store.settings, voice: provider.voice))
   }
 
   var body: some View {
@@ -263,12 +262,10 @@ private struct ProviderTab: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
-    .task(id: readinessID) {
+    .task(id: followed) {
       readiness = nil
-      guard let source = provider.readiness else { return }
-      await source.follow(ReadinessRequest(settings: store.settings, voice: provider.voice)) {
-        readiness = $0
-      }
+      guard let source = Providers[followed.provider].readiness else { return }
+      await source.follow(followed.request) { readiness = $0 }
     }
   }
 

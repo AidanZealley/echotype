@@ -99,7 +99,7 @@ public struct Readiness: Sendable {
   }
 }
 
-public struct ReadinessRequest: Equatable, Sendable {
+public struct ReadinessRequest: Hashable, Sendable {
   /// The app's BCP-47 tag; the provider resolves its own form.
   public var language: String
   /// One of the voice service's voice ids.
