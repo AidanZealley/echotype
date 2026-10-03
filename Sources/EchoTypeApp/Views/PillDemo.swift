@@ -50,7 +50,12 @@ import AppKit
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(3)
 
+      pill.cleanupSkipped = true
+      if let screen = NSScreen.main { panel.show(pill, on: screen) }
+      await pause(3)
+
       pill.phase = .transcribing
+      pill.cleanupSkipped = false
       pill.level = 0
       if let screen = NSScreen.main { panel.show(pill, on: screen) }
       await pause(2)

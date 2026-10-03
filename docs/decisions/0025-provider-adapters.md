@@ -60,9 +60,10 @@ meant editing each of them.
   product rules independent of the provider's model and request parameters. See
   [0021](0021-revise-committed-dictation.md) and
   [0024](0024-dictation-operation-lifetime.md).
-- An operation starts only when every service it uses is `.ready`: dictation needs
-  transcription and cleanup, Test needs transcription, and reading and MCP speech need the
-  voice. `DictationOperation` checks before opening capture, and `Reader` after the credential
+- An operation starts only when the service it needs is `.ready`: dictation and Test need
+  transcription, and reading and MCP speech need the voice. Dictation uses cleanup only when
+  it is `.ready` at start; otherwise the dictation inserts unrevised text and the pill says
+  "No cleanup". `DictationOperation` checks before opening capture, and `Reader` after the credential
   and before requesting speech. `.waiting` ends the pill in its amber waiting phase and
   `.unavailable` in the red error pill, each showing the provider's reason as is. The
   Provider tab follows the selected provider's readiness while it is open: it checks on a

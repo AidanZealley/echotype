@@ -65,6 +65,7 @@ struct PillView: View {
           .accessibilityHidden(true)
         deviceName(device.name)
       }
+      if pill.cleanupSkipped { Text(verbatim: "No cleanup").fixedSize() }
       Spacer(minLength: 8)
       switch pill.phase {
       case .listening, .paused, .starting, .selectInput:

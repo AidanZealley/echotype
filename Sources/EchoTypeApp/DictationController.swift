@@ -311,6 +311,7 @@ import Observation
           $0.settled = settled
           $0.provisional = provisional
           if let phase = presentation.pillPhase { $0.phase = phase }
+          if let readiness = presentation.readiness { $0.cleanupSkipped = readiness.cleanupSkipped }
           if presentation == .finishing { $0.level = 0 }
         }
       })

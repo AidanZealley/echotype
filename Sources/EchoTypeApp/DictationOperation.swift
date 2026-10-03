@@ -8,6 +8,8 @@ import Observation
   struct Readiness: Equatable {
     var microphone = false
     var destination = false
+    /// The provider has cleanup that was not ready at start, so this dictation inserts unrevised.
+    var cleanupSkipped = false
   }
 
   enum Presentation: Equatable {
@@ -76,6 +78,8 @@ import Observation
   let settings: Settings
   let isTest: Bool
   private let dependencies: Dependencies
+  /// The provider's cleanup, or nil when it has none or was not ready at start.
+  private var cleanup: CleanupService?
   private let onPresentation: @MainActor (Presentation, String, String) -> Void
   private(set) var presentation: Presentation = .starting(.init())
   var cancelled: Bool { presentation == .cancelled }
@@ -104,6 +108,7 @@ import Observation
     self.settings = settings
     self.isTest = isTest
     self.dependencies = dependencies
+    self.cleanup = dependencies.cleanup
     self.onPresentation = onPresentation
   }
 
@@ -188,21 +193,26 @@ import Observation
     self.session = session
     if !isTest {
       trace = DictationTrace(startedAt: .now)
-      if let cleanup = dependencies.cleanup {
+      if let cleanup {
         reviser = Reviser(cleanup: cleanup, credential: key, finalClock: dependencies.revisionClock)
       }
     }
     return await transcribe(session, chunks: chunks)
   }
 
-  /// Dictation needs transcription and cleanup; Test needs transcription only. Checked before
-  /// capture opens, so a blocked operation opens nothing.
+  /// Dictation and Test need transcription. Cleanup is used only if ready now; otherwise this
+  /// dictation inserts unrevised text and the pill says so. Checked before capture opens, so a
+  /// blocked operation opens nothing.
   private func checkReadiness() async throws {
     guard let readiness = dependencies.readiness else { return }
     let services = await readiness()
     try checkStartup()
     try services.transcription.requireReady()
-    if !isTest { try services.cleanup?.requireReady() }
+    guard !isTest, let state = services.cleanup, state != .ready else { return }
+    cleanup = nil
+    var hints = presentation.readiness ?? .init()
+    hints.cleanupSkipped = true
+    publish(presentation.with(hints))
   }
 
   /// Starting may suspend, so Escape or a capture failure during it must still close what it

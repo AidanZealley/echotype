@@ -417,20 +417,30 @@ struct DictationOperationTests {
 
   // MARK: Provider readiness
 
-  @Test("Dictation waits for transcription and cleanup, opening no capture or transcriber",
+  @Test("Dictation waits for transcription, opening no capture or transcriber",
     arguments: [ServiceState.waiting("Downloading speech model"), .unavailable("Not supported")])
   func blockedDictation(_ state: ServiceState) async {
-    for services in [
-      ServiceReadiness(transcription: state, voice: .ready, cleanup: .ready),
-      ServiceReadiness(transcription: .ready, voice: .ready, cleanup: state),
-    ] {
-      let h = Harness()
-      h.readiness = services
-      let result = await h.operation(cleanup: true).run()
-      #expect((result.startupFailure as? NotReady)?.state == state && result.trace == nil)
-      #expect(h.points.count(.captureStart) == 0 && h.points.count(.transcriberStart) == 0)
-      #expect(h.insertions.isEmpty)
-    }
+    let h = Harness()
+    h.readiness = ServiceReadiness(transcription: state, voice: .ready, cleanup: .ready)
+    let result = await h.operation(cleanup: true).run()
+    #expect((result.startupFailure as? NotReady)?.state == state && result.trace == nil)
+    #expect(h.points.count(.captureStart) == 0 && h.points.count(.transcriberStart) == 0)
+    #expect(h.insertions.isEmpty)
+  }
+
+  @Test("Cleanup is used only if ready at start; otherwise the dictation inserts unrevised and reports it",
+    arguments: [ServiceState.ready, .waiting("Loading"), .unavailable("Not supported")])
+  func cleanupReadiness(_ state: ServiceState) async {
+    let h = Harness()
+    h.readiness = ServiceReadiness(transcription: .ready, voice: .ready, cleanup: state)
+    let operation = h.operation(cleanup: true)
+    let task = await h.start(operation)
+    let skipped = state != .ready
+    #expect(h.presented.contains { $0.readiness?.cleanupSkipped == true } == skipped)
+    operation.commit()
+    let result = await task.value
+    #expect(result.startupFailure == nil && result.outcome == .insert("spoken words"))
+    #expect(h.points.count(.revision) == (skipped ? 0 : 1))
   }
 
   @Test("Test waits for transcription only")
