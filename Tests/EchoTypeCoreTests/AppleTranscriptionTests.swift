@@ -62,8 +62,8 @@ import Testing
   // MARK: Language
 
   @Test(
-    "Bare English resolves to British English and explicit regions are kept",
-    arguments: [("en", "en-GB"), ("en-GB", "en-GB"), ("en-US", "en-US"), ("fr-CA", "fr-CA")])
+    "English resolves to British English and an unlisted tag passes through",
+    arguments: [("en", "en-GB"), ("fr", "fr")])
   func languageResolution(tag: String, expected: String) {
     #expect(Apple.locale(for: tag).identifier(.bcp47) == expected)
   }

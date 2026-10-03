@@ -53,18 +53,14 @@ enum Apple {
   /// The transcription readiness check is `speechAssets.check(language:)`.
   static let speechAssets = SpeechAssets(system: .live, changes: changes)
 
-  /// The region each bare tag in `Provider.apple.languages` resolves to. The frameworks' own
+  /// The regional locale for each tag in `Provider.apple.languages`. The frameworks' own
   /// matching of a bare tag varies between processes, so it is chosen here once.
-  private static let regions = ["en": "GB"]
+  private static let locales = ["en": "en-GB"]
 
-  /// The regional locale every Apple service uses for the app's language tag. A tag with a
-  /// region keeps it; each service then checks it supports the result.
+  /// The locale every Apple service uses for the app's language tag; each service then checks it
+  /// supports the result.
   static func locale(for tag: String) -> Locale {
-    let language = Locale.Language(identifier: tag)
-    guard language.region == nil, let code = language.languageCode?.identifier,
-      let region = regions[code]
-    else { return Locale(identifier: tag) }
-    return Locale(identifier: "\(code)-\(region)")
+    Locale(identifier: locales[tag] ?? tag)
   }
 
   /// Tells every follower of `Readiness.changes` that an earlier answer may be out of date.

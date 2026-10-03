@@ -94,7 +94,7 @@ Implement `Providers/Apple/` against the contracts:
   - a model that is still downloading or loading is `.waiting`.
 
   Querying installation requests has side effects, because it reserves locales. Keep those queries inside `check`'s single-setup path.
-- **Language.** A bare tag maps to a deliberate, stable, supported region. Bare `en` maps to `en-GB`, since the framework's own bare-tag matching is unstable. Explicit supported regional tags are preserved.
+- **Language.** A bare tag maps to a deliberate, stable, supported region. Bare `en` maps to `en-GB`, since the framework's own bare-tag matching is unstable.
 - **Transcription.**
   - Final segments append to committed text, volatile results replace provisional text, and utterance stays empty. Committed text only grows, and the resolved tail arrives before `.finished`.
   - Nonempty recognised text emits `.speech`. `SpeechDetector` produced nothing in the spike, so don't rely on it. Silence handling stays in `SessionMachine`: a dictation with no speech cancels quietly, and silence after speech pauses and keeps listening, as with xAI.
