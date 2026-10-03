@@ -9,14 +9,20 @@ extension Apple {
   ) { request in
     Speech.Stream(
       text: request.text,
-      voice: Speech.resolve(request.voice, language: request.language, among: Speech.installedVoices()),
+      voice: Speech.resolve(
+        request.voice, language: request.language, among: Speech.installedVoices(),
+        systemDefault: Speech.systemDefaultVoice(for: request.language)),
       speed: request.speed)
   }
 
   enum Speech {
+    /// The saved choice that follows the system's default voice for the language.
+    static let systemVoiceID = "system"
+    static let zoeID = "com.apple.voice.premium.en-US.Zoe"
     /// Siri voices are not available through this API. Jamie is the framework's Malcolm.
     static let voices = [
-      Voice(id: "com.apple.voice.premium.en-US.Zoe", name: "Zoe"),
+      Voice(id: systemVoiceID, name: "System voice"),
+      Voice(id: zoeID, name: "Zoe"),
       Voice(id: "com.apple.voice.premium.en-GB.Malcolm", name: "Jamie"),
     ]
     /// Accepted by ear for Zoe and Jamie.
@@ -33,58 +39,55 @@ extension Apple {
     /// The parts of an installed voice that resolution looks at.
     struct InstalledVoice: Equatable {
       var id: String
-      /// Shown when it stands in for the saved voice.
-      var name: String
       /// BCP-47, such as `en-GB`.
       var language: String
-      var quality: AVSpeechSynthesisVoiceQuality
     }
 
     static func installedVoices() -> [InstalledVoice] {
-      AVSpeechSynthesisVoice.speechVoices().map {
-        InstalledVoice(id: $0.identifier, name: $0.name, language: $0.language, quality: $0.quality)
-      }
+      AVSpeechSynthesisVoice.speechVoices().map { InstalledVoice(id: $0.identifier, language: $0.language) }
     }
 
-    /// Voice readiness, which needs only an installed voice for the language. Another voice
-    /// standing in for the saved one is ready, with a note saying so. Downloading one is up to the
+    /// The voice the system reads the language with, if it has one.
+    static func systemDefaultVoice(for language: String) -> InstalledVoice? {
+      AVSpeechSynthesisVoice(language: Apple.locale(for: language).identifier(.bcp47))
+        .map { InstalledVoice(id: $0.identifier, language: $0.language) }
+    }
+
+    /// Voice readiness, which needs only a voice for the language. The system voice standing in
+    /// for a named one is ready, with a note saying so. Downloading the named voice is up to the
     /// user; `Apple.changes` yields when the installed voices change.
-    static func check(language: String, voice: String, installed: [InstalledVoice] = installedVoices())
-      -> ServiceState
-    {
-      guard let used = resolve(voice, language: language, among: installed) else {
+    static func check(language: String, voice: String) -> ServiceState {
+      check(
+        language: language, voice: voice, installed: installedVoices(),
+        systemDefault: systemDefaultVoice(for: language))
+    }
+
+    static func check(
+      language: String, voice: String, installed: [InstalledVoice], systemDefault: InstalledVoice?
+    ) -> ServiceState {
+      guard let used = resolve(voice, language: language, among: installed, systemDefault: systemDefault) else {
         return .unavailable(missingVoice, fix: SystemSettings.readAndSpeak)
       }
-      guard used != voice, let saved = voices.first(where: { $0.id == voice }),
-        let standIn = installed.first(where: { $0.id == used })
+      guard used != voice, let named = voices.first(where: { $0.id == voice && $0.id != systemVoiceID })
       else { return .ready }
       if installed.contains(where: { $0.id == voice }) {
-        return .ready("\(saved.name) doesn't speak this language, so \(standIn.name) reads instead.")
+        return .ready("\(named.name) doesn't speak this language, so the system voice reads instead.")
       }
       return .ready(
-        "\(saved.name) isn't downloaded, so \(standIn.name) reads instead. Download \(saved.name) in Accessibility > Read & Speak.",
+        "\(named.name) isn't downloaded, so the system voice reads instead. Download \(named.name) in Accessibility > Read & Speak.",
         fix: SystemSettings.readAndSpeak)
     }
 
-    /// The saved voice when it is installed and speaks the language, otherwise the best installed
-    /// voice that does: one of `voices` in order, then by quality. The saved choice is left as
-    /// it is, so it comes back once it is installed or suits the language again.
-    static func resolve(_ saved: String, language: String, among installed: [InstalledVoice]) -> String? {
+    /// The saved voice when it is a named voice that is installed and speaks the language,
+    /// otherwise the system's default voice for the language, otherwise nil. The saved choice is
+    /// left as it is, so it comes back once it is installed or suits the language again.
+    static func resolve(
+      _ saved: String, language: String, among installed: [InstalledVoice], systemDefault: InstalledVoice?
+    ) -> String? {
       let code = Locale.Language(identifier: language).languageCode
-      let suitable = installed.filter { Locale.Language(identifier: $0.language).languageCode == code }
-      if suitable.contains(where: { $0.id == saved }) { return saved }
-      let offered = voices.map(\.id)
-      return suitable.min {
-        let left = offered.firstIndex(of: $0.id) ?? offered.count
-        let right = offered.firstIndex(of: $1.id) ?? offered.count
-        if left != right { return left < right }
-        if $0.quality != $1.quality { return $0.quality.rawValue > $1.quality.rawValue }
-        // Apple's natural voices before the novelty and Eloquence ones of the same quality.
-        let leftNatural = $0.id.hasPrefix("com.apple.voice.")
-        let rightNatural = $1.id.hasPrefix("com.apple.voice.")
-        if leftNatural != rightNatural { return leftNatural }
-        return $0.id < $1.id
-      }?.id
+      func speaks(_ voice: InstalledVoice) -> Bool { Locale.Language(identifier: voice.language).languageCode == code }
+      if saved != systemVoiceID, installed.contains(where: { $0.id == saved && speaks($0) }) { return saved }
+      return systemDefault.flatMap { speaks($0) ? $0.id : nil }
     }
 
     // MARK: Speed
@@ -94,15 +97,15 @@ extension Apple {
     /// `AVSpeechUtterance.rate` values that make each voice speak at `anchorSpeeds`. Measured
     /// silently by rendering one sentence over a grid of rates and interpolating where its
     /// duration, relative to the default rate's, meets each speed. A voice without its own
-    /// anchors uses Zoe's.
+    /// anchors, including the system voice and whichever voice it resolves to, uses Zoe's.
     private static let anchorRates: [String: [Double]] = [
-      "com.apple.voice.premium.en-US.Zoe": [0.1626, 0.3426, 0.5, 0.5414, 0.5849],
+      zoeID: [0.1626, 0.3426, 0.5, 0.5414, 0.5849],
       "com.apple.voice.premium.en-GB.Malcolm": [0.1571, 0.3259, 0.5, 0.5418, 0.5837],
     ]
 
     /// The utterance rate for a speed multiplier, interpolated between the voice's anchors.
     static func rate(speed: Double, voice: String) -> Float {
-      let rates = anchorRates[voice] ?? anchorRates[voices[0].id]!
+      let rates = anchorRates[voice] ?? anchorRates[zoeID]!
       let speeds = anchorSpeeds
       let value = min(max(speed, speeds[0]), speeds[speeds.count - 1])
       let upper = speeds.indices.dropFirst().first { value <= speeds[$0] }!

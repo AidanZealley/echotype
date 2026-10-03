@@ -177,6 +177,9 @@ private struct GeneralTab: View {
 
 private struct ReadAloudTab: View {
   @Bindable var store: SettingsStore
+  /// The voice service's state for the current settings, followed while this tab is open. Nil
+  /// until the first check answers.
+  @State private var voiceState: ServiceState?
 
   private var provider: Provider { Providers[store.settings.provider] }
   private var reading: Binding<EchoTypeCore.Settings.Reading> {
@@ -197,6 +200,7 @@ private struct ReadAloudTab: View {
           Text(verbatim: voice.name).tag(voice.id)
         }
       }
+      if let voiceState { ServiceNote(state: voiceState) }
       LabeledContent("Speed") {
         HStack {
           Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
@@ -209,6 +213,44 @@ private struct ReadAloudTab: View {
     .formStyle(.columns)
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
+    .task(id: Followed(settings: store.settings, provider: provider)) {
+      voiceState = nil
+      let followed = Followed(settings: store.settings, provider: provider)
+      await provider.readiness.follow(followed.request) { voiceState = $0.voice }
+    }
+  }
+}
+
+/// What a tab follows. Changes when the provider, language or voice does, which restarts the
+/// following.
+private struct Followed: Hashable {
+  var provider: ProviderID
+  var request: ReadinessRequest
+
+  init(settings: EchoTypeCore.Settings, provider: Provider) {
+    self.provider = provider.id
+    request = ReadinessRequest(settings: settings, provider: provider)
+  }
+}
+
+/// A service's message, red when unavailable, with an Open button when the provider says where
+/// to fix it. Nothing for a state without a message.
+private struct ServiceNote: View {
+  let state: ServiceState
+
+  var body: some View {
+    if let message = state.message {
+      HStack(alignment: .firstTextBaseline) {
+        Text(verbatim: message)
+          .font(.caption)
+          .foregroundStyle(state.status == .unavailable ? Color.red : Color.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: 8)
+        if let fix = state.fix {
+          Button("Open") { NSWorkspace.shared.open(fix) }
+        }
+      }
+    }
   }
 }
 
@@ -233,16 +275,7 @@ private struct ProviderTab: View {
 
   private var provider: Provider { Providers[store.settings.provider] }
 
-  /// What the tab follows. Changes when the provider, language or voice does, which restarts
-  /// the following.
-  private struct Followed: Hashable {
-    var provider: ProviderID
-    var request: ReadinessRequest
-  }
-
-  private var followed: Followed {
-    Followed(provider: provider.id, request: ReadinessRequest(settings: store.settings, provider: provider))
-  }
+  private var followed: Followed { Followed(settings: store.settings, provider: provider) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -273,24 +306,14 @@ private struct ProviderTab: View {
     }
   }
 
-  /// One service: its status mark, its name with the provider's message below, and an Open
-  /// button when the provider says where to fix it. A service the provider does not offer is
-  /// marked grey, and one not yet checked shows progress.
+  /// One service: its status mark and its name with the provider's message below. A service the
+  /// provider does not offer is marked grey, and one not yet checked shows progress.
   private func feature(_ title: String, offered: Bool = true, state: ServiceState?) -> some View {
     HStack(alignment: .top) {
       StatusMark(status: state?.status, offered: offered)
       VStack(alignment: .leading, spacing: 2) {
         Text(verbatim: title)
-        if offered, let state, let message = state.message {
-          Text(verbatim: message)
-            .font(.caption)
-            .foregroundStyle(state.status == .unavailable ? Color.red : Color.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-      Spacer(minLength: 8)
-      if offered, let fix = state?.fix {
-        Button("Open") { NSWorkspace.shared.open(fix) }
+        if offered, let state { ServiceNote(state: state) }
       }
     }
   }

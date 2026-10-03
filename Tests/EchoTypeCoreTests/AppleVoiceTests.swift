@@ -73,55 +73,60 @@ import Testing
   @Test("1x is the default rate for every voice, and the range includes it")
   func normalSpeedIsDefaultRate() {
     #expect(Apple.Speech.speedRange.contains(1))
-    for voice in Apple.Speech.voices.map(\.id) + ["com.apple.voice.enhanced.en-GB.Daniel"] {
+    for voice in Apple.Speech.voices.map(\.id) + ["com.apple.voice.compact.en-GB.Daniel"] {
       #expect(Apple.Speech.rate(speed: 1, voice: voice) == AVSpeechUtteranceDefaultSpeechRate)
     }
-    let zoe = Apple.Speech.voices[0].id
-    #expect(abs(Apple.Speech.rate(speed: 1.25, voice: zoe) - 0.5414) < 0.0001)
-    #expect(abs(Apple.Speech.rate(speed: 1.125, voice: zoe) - 0.5207) < 0.0001)
+    // The system voice, and the voice it resolves to, use Zoe's anchors.
+    for voice in [Apple.Speech.systemVoiceID, "com.apple.voice.compact.en-GB.Daniel", Apple.Speech.zoeID] {
+      #expect(abs(Apple.Speech.rate(speed: 1.25, voice: voice) - 0.5414) < 0.0001)
+      #expect(abs(Apple.Speech.rate(speed: 1.125, voice: voice) - 0.5207) < 0.0001)
+    }
   }
 
   // MARK: Voices
 
-  private let zoe = Apple.Speech.InstalledVoice(id: "com.apple.voice.premium.en-US.Zoe", name: "Zoe", language: "en-US", quality: .premium)
-  private let jamie = Apple.Speech.InstalledVoice(id: "com.apple.voice.premium.en-GB.Malcolm", name: "Jamie", language: "en-GB", quality: .premium)
-  private let daniel = Apple.Speech.InstalledVoice(id: "com.apple.voice.enhanced.en-GB.Daniel", name: "Daniel", language: "en-GB", quality: .enhanced)
-  private let albert = Apple.Speech.InstalledVoice(id: "com.apple.speech.synthesis.voice.Albert", name: "Albert", language: "en-US", quality: .default)
-  private let samantha = Apple.Speech.InstalledVoice(id: "com.apple.voice.compact.en-US.Samantha", name: "Samantha", language: "en-US", quality: .default)
-  private let thomas = Apple.Speech.InstalledVoice(id: "com.apple.voice.compact.fr-FR.Thomas", name: "Thomas", language: "fr-FR", quality: .default)
+  private let zoe = Apple.Speech.InstalledVoice(id: Apple.Speech.zoeID, language: "en-US")
+  private let jamie = Apple.Speech.InstalledVoice(id: "com.apple.voice.premium.en-GB.Malcolm", language: "en-GB")
+  private let daniel = Apple.Speech.InstalledVoice(id: "com.apple.voice.compact.en-GB.Daniel", language: "en-GB")
+  private let thomas = Apple.Speech.InstalledVoice(id: "com.apple.voice.compact.fr-FR.Thomas", language: "fr-FR")
+  private let system = Apple.Speech.systemVoiceID
+
+  private func check(
+    _ voice: String, language: String = "en", installed: [Apple.Speech.InstalledVoice],
+    systemDefault: Apple.Speech.InstalledVoice?
+  ) -> ServiceState {
+    Apple.Speech.check(language: language, voice: voice, installed: installed, systemDefault: systemDefault)
+  }
 
   @Test("The saved voice is used when it is installed and speaks the language")
   func savedVoiceIsUsed() {
-    #expect(Apple.Speech.resolve(jamie.id, language: "en", among: [zoe, jamie]) == jamie.id)
-    #expect(Apple.Speech.resolve(jamie.id, language: "en-US", among: [zoe, jamie]) == jamie.id)
+    #expect(Apple.Speech.resolve(jamie.id, language: "en", among: [zoe, jamie], systemDefault: daniel) == jamie.id)
+    #expect(check(jamie.id, installed: [jamie], systemDefault: daniel) == .ready)
   }
 
-  @Test("Fallback picks an installed voice for the language and the saved choice comes back")
-  func fallbackKeepsSavedChoice() {
-    let saved = zoe.id
-    // Offered voices first, then by quality, then Apple's natural voices.
-    #expect(Apple.Speech.resolve(saved, language: "en", among: [daniel, jamie, albert]) == jamie.id)
-    #expect(Apple.Speech.resolve(saved, language: "en", among: [samantha, daniel, albert]) == daniel.id)
-    #expect(Apple.Speech.resolve(saved, language: "en", among: [albert, samantha]) == samantha.id)
-    #expect(Apple.Speech.resolve(saved, language: "fr", among: [zoe, thomas]) == thomas.id)
-    // Nothing was written over the saved id, so installing it again restores it.
-    #expect(Apple.Speech.resolve(saved, language: "en", among: [daniel, zoe]) == saved)
-  }
-
-  @Test("No installed voice for the language is unavailable, with a link to download one")
-  func noVoiceIsUnavailable() {
-    let state = Apple.Speech.check(language: "de", voice: zoe.id, installed: [zoe, thomas])
-    #expect(state.status == .unavailable && state.fix == Apple.SystemSettings.readAndSpeak)
-    #expect(Apple.Speech.check(language: "en", voice: jamie.id, installed: [jamie]) == .ready)
-  }
-
-  @Test("A voice standing in for the saved one is ready, saying which and how to get it back")
-  func standInIsNoted() {
-    let missing = Apple.Speech.check(language: "en", voice: zoe.id, installed: [samantha])
-    #expect(missing == .ready(
-      "Zoe isn't downloaded, so Samantha reads instead. Download Zoe in Accessibility > Read & Speak.",
+  @Test("A named voice that is missing or unsuited falls back to the system default, with a note")
+  func namedVoiceFallsBack() {
+    #expect(Apple.Speech.resolve(zoe.id, language: "en", among: [jamie], systemDefault: daniel) == daniel.id)
+    #expect(check(zoe.id, installed: [jamie, daniel], systemDefault: daniel) == .ready(
+      "Zoe isn't downloaded, so the system voice reads instead. Download Zoe in Accessibility > Read & Speak.",
       fix: Apple.SystemSettings.readAndSpeak))
-    let unsuited = Apple.Speech.check(language: "fr", voice: zoe.id, installed: [zoe, thomas])
-    #expect(unsuited == .ready("Zoe doesn't speak this language, so Thomas reads instead."))
+    #expect(check(zoe.id, language: "fr", installed: [zoe, thomas], systemDefault: thomas) == .ready(
+      "Zoe doesn't speak this language, so the system voice reads instead."))
+  }
+
+  @Test("The system voice is ready without a note when the system has a default")
+  func systemVoiceIsReady() {
+    #expect(Apple.Speech.resolve(system, language: "en", among: [zoe, daniel], systemDefault: daniel) == daniel.id)
+    #expect(check(system, installed: [zoe, daniel], systemDefault: daniel) == .ready)
+  }
+
+  @Test("No voice for the language is unavailable, with a link to download one")
+  func noVoiceIsUnavailable() {
+    for state in [
+      check(system, installed: [], systemDefault: nil),
+      check(system, language: "de", installed: [thomas], systemDefault: thomas),
+    ] {
+      #expect(state.status == .unavailable && state.fix == Apple.SystemSettings.readAndSpeak)
+    }
   }
 }
