@@ -60,26 +60,6 @@ public struct Settings: Equatable, Sendable {
     public static let command = ModifierFlags(rawValue: 1 << 3)
   }
 
-  /// A language the settings window offers. The list is provider-neutral: each adapter resolves
-  /// the bare tag to its own form, so an entry is added only once it works with every provider.
-  public struct Language: Hashable, Sendable {
-    public var name: String
-    /// Bare BCP-47 language tag, such as `en`.
-    public var tag: String
-
-    public static let english = Language(name: "English", tag: "en")
-
-    /// The languages the settings window offers.
-    public static let all = [english]
-
-    /// The entry with a stored tag's language subtag, so `en-US` gives English, or English when
-    /// no entry matches.
-    public static func matching(_ tag: String) -> Language {
-      let subtag = tag.split(separator: "-").first.map { $0.lowercased() }
-      return all.first { $0.tag == subtag } ?? english
-    }
-  }
-
   public var hotkey: Hotkey
 
   /// The provider that supplies every service. Read it with `Providers[settings.provider]`.
@@ -92,8 +72,16 @@ public struct Settings: Equatable, Sendable {
   /// provider's adapter enforce the caps.
   public var keyterms: [String]
 
-  /// The tag of a `Language.all` entry. Each provider's adapter resolves it to its own form.
+  /// The user's preferred language tag, kept even when the selected provider does not list it.
+  /// Read it with `language(for:)`, which gives the tag a provider uses.
   public var language: String
+
+  /// The tag of the provider's language that matches the stored one by language subtag, so
+  /// `en-US` gives `en`, or its first language's tag when none matches.
+  public func language(for provider: Provider) -> String {
+    let subtag = language.split(separator: "-").first.map { $0.lowercased() }
+    return (provider.languages.first { $0.tag == subtag } ?? provider.languages[0]).tag
+  }
 
   /// Seconds without transcript activity before the session shows its paused state. Nothing is
   /// ever inserted on this timeout; it only changes what the overlay renders.
@@ -215,10 +203,8 @@ extension Settings: Codable {
     provider = Providers[storedProvider ?? defaults.provider].id
     keyterms =
       (try? container.decodeIfPresent([String].self, forKey: .keyterms)) ?? defaults.keyterms
-    // A tag the picker no longer offers, such as free text from before it, maps to an entry.
-    language = Language.matching(
+    language =
       (try? container.decodeIfPresent(String.self, forKey: .language)) ?? defaults.language
-    ).tag
     inputDeviceID = try? container.decodeIfPresent(String.self, forKey: .inputDeviceID)
     readAloudHotkey =
       (try? container.decodeIfPresent(Hotkey.self, forKey: .readAloudHotkey))

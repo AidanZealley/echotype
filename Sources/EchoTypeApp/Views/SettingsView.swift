@@ -141,6 +141,8 @@ private struct UpdatesTab: View {
 private struct GeneralTab: View {
   @Bindable var store: SettingsStore
 
+  private var provider: Provider { Providers[store.settings.provider] }
+
   var body: some View {
     Form {
       Picker("Hotkey", selection: $store.settings.hotkey) {
@@ -149,8 +151,11 @@ private struct GeneralTab: View {
         }
       }
       InputRow(store: store)
-      Picker("Language", selection: $store.settings.language) {
-        ForEach(EchoTypeCore.Settings.Language.all, id: \.self) { language in
+      Picker("Language", selection: Binding(
+        get: { store.settings.language(for: provider) },
+        set: { store.settings.language = $0 }
+      )) {
+        ForEach(provider.languages, id: \.self) { language in
           Text(verbatim: language.name).tag(language.tag)
         }
       }

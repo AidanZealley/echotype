@@ -14,6 +14,8 @@ public struct Provider: Identifiable, Sendable {
   /// One line for Settings, such as what it costs and what it needs.
   public var summary: String
   public var credential: Credential
+  /// The languages the provider supports, never empty. The first is its default.
+  public var languages: [Language]
   public var transcription: TranscriptionService
   public var voice: VoiceService
   /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
@@ -23,18 +25,28 @@ public struct Provider: Identifiable, Sendable {
 
   public init(
     id: ProviderID, name: String, summary: String, credential: Credential,
-    transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
+    languages: [Language], transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
     readiness: Readiness? = nil
   ) {
     self.id = id
     self.name = name
     self.summary = summary
     self.credential = credential
+    self.languages = languages
     self.transcription = transcription
     self.voice = voice
     self.cleanup = cleanup
     self.readiness = readiness
   }
+}
+
+/// A language a provider supports.
+public struct Language: Hashable, Sendable {
+  public var name: String
+  /// Bare BCP-47 language tag, such as `en`. The provider's adapter maps it to its own form.
+  public var tag: String
+
+  public static let english = Language(name: "English", tag: "en")
 }
 
 /// A provider's stable identifier. Renaming one would reset the choice and lose the stored key
@@ -110,9 +122,10 @@ public struct ReadinessRequest: Hashable, Sendable {
     self.voice = voice
   }
 
-  /// The request for the dictation language and the stored voice.
+  /// The request for the selected provider's dictation language and the stored voice.
   public init(settings: Settings, voice: VoiceService) {
-    self.init(language: settings.language, voice: settings.readingChoice(for: voice).voice)
+    self.init(
+      language: settings.language(for: Providers[settings.provider]), voice: settings.readingChoice(for: voice).voice)
   }
 }
 
@@ -175,7 +188,7 @@ public struct TranscriptionRequest: Equatable, Sendable {
     let builtIn = "EchoType"
     let saved = settings.keyterms.filter { $0.caseInsensitiveCompare(builtIn) != .orderedSame }
     self.init(
-      language: settings.language,
+      language: settings.language(for: Providers[settings.provider]),
       keyterms: Array(([builtIn] + saved).prefix(keytermLimit)),
       credential: credential)
   }
@@ -297,7 +310,7 @@ public struct SpeechRequest: Equatable, Sendable {
     let choice = settings.readingChoice(for: voice)
     self.init(
       text: text, voice: choice.voice, speed: choice.speed,
-      language: settings.language, credential: credential)
+      language: settings.language(for: Providers[settings.provider]), credential: credential)
   }
 }
 

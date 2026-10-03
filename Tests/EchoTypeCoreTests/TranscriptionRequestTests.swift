@@ -13,6 +13,6 @@ import Testing
     #expect(request.keyterms.first == "EchoType")
     #expect(request.keyterms[1] == "term0")
     #expect(request.keyterms.last == "term98")
-    #expect(request.language == "en-GB" && request.credential == "key")
+    #expect(request.language == "en" && request.credential == "key")
   }
 }

@@ -7,6 +7,7 @@ extension Provider {
   /// The app reaches Apple only through this description and its services.
   public static let apple = Provider(
     id: "apple", name: "Apple", summary: "Free. Runs on this Mac.", credential: .none,
+    languages: [.english],
     transcription: Apple.transcription, voice: Apple.voice, cleanup: Apple.cleanup,
     readiness: Readiness(
       check: { request in
@@ -52,7 +53,7 @@ enum Apple {
   /// The transcription readiness check is `speechAssets.check(language:)`.
   static let speechAssets = SpeechAssets(system: .live, changes: changes)
 
-  /// The region each bare tag in `Settings.Language.all` resolves to. The frameworks' own
+  /// The region each bare tag in `Provider.apple.languages` resolves to. The frameworks' own
   /// matching of a bare tag varies between processes, so it is chosen here once.
   private static let regions = ["en": "GB"]
 

@@ -91,16 +91,21 @@ func retiredKeysIgnored() {
   #expect(
     settings
       == Settings(
-        hotkey: .controlOptionD, keyterms: ["shadcn"], sendReplyRequests: false))
+        hotkey: .controlOptionD, keyterms: ["shadcn"], language: "en-GB", sendReplyRequests: false))
   #expect(!String(decoding: settings.encoded(), as: UTF8.self).contains("cleanUp"))
 }
 
-/// The language was free text before the picker, so a stored tag may be any string.
-@Test("A stored language loads as the picker entry with its language subtag, or English", arguments: ["en", "en-US", "EN-gb", "fr", "english", ""])
-func storedLanguageMapsToPickerEntry(tag: String) {
-  let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6},"language":"\#(tag)"}"#.utf8)
+@Test("A saved language the provider does not list is kept, and resolves to its default")
+func savedLanguageOutsideProviderList() {
+  let settings = Settings(language: "fr")
 
-  #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD, language: "en"))
+  #expect(Settings(decoding: settings.encoded()).language == "fr")
+  #expect(settings.language(for: .xAI) == "en")
+}
+
+@Test("A regional tag resolves to the provider's language with the same subtag", arguments: ["en-US", "EN-gb"])
+func regionalLanguageResolves(tag: String) {
+  #expect(Settings(language: tag).language(for: .apple) == "en")
 }
 
 @Test("Unreadable data decodes to the defaults")

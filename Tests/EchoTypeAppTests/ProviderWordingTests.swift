@@ -5,6 +5,7 @@ import Testing
 /// Defined here rather than registered, so the wording is shown to come from the provider.
 private let acme = Provider(
   id: "acme", name: "Acme", summary: "", credential: .apiKey(placeholder: "acme-…"),
+  languages: [.english],
   transcription: TranscriptionService(keytermLimit: 1) { _ in fatalError("Not started") },
   voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 1) { _ in
     fatalError("Not spoken")

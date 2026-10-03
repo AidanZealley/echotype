@@ -299,7 +299,7 @@ extension ReadingOperationTests {
     let fixture = ReadingFixture(FakeSpeechStream(finished: true))
     let reader = fixture.reader(.text("Hello there"), settings: Settings(provider: "fixture", language: "en-GB", reading: ["fixture": .init(voice: "chosen", speed: 1.2), "other": .init(voice: "other", speed: 0.8)]))
     #expect(await reader.run() == nil)
-    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "chosen", speed: 1.2, language: "en-GB", credential: "fake")])
+    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "chosen", speed: 1.2, language: "en", credential: "fake")])
   }
 
   @Test func streamFailureReachesReadingOutcome() async {

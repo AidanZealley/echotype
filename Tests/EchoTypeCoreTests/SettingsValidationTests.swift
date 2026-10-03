@@ -9,7 +9,7 @@ import Testing
       {"hotkey":{"keyCode":2,"modifiers":6},"keyterms":["EchoType"],"language":"en-GB","inputDeviceID":"mic","readAloudHotkey":{"keyCode":1,"modifiers":6},"voice":"altair","speechSpeed":\(speed),"sendReplyRequests":false}
       """.utf8)
     #expect(Settings(decoding: stored) == Settings(
-      hotkey: .controlOptionD, keyterms: ["EchoType"],
+      hotkey: .controlOptionD, keyterms: ["EchoType"], language: "en-GB",
       inputDeviceID: "mic", readAloudHotkey: .controlOptionS,
       reading: ["xai": .init(voice: "altair")], sendReplyRequests: false))
   }

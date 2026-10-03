@@ -83,10 +83,11 @@ meant editing each of them.
    aloud, with a non-empty voice list whose first voice is the default and a speed range
    that includes 1. Set cleanup to `nil` if the provider has no cleanup service. Follow the
    neutral contracts in `Provider.swift` for events, cancellation and audio delivery.
-2. Resolve the language in each adapter. Requests carry `Settings.language`, a bare tag
-   from `Settings.Language.all` such as `en`; map it to the provider's own form. xAI passes
-   it through, and Apple maps a bare tag to a fixed region. Adding a language to the list
-   means checking every provider resolves it.
+2. List the provider's languages in `languages`, with its default first, and resolve them in
+   the adapter. Requests carry the tag `Settings.language(for:)` resolves from the stored
+   preference, a bare tag such as `en`; map it to the provider's own form. xAI passes it
+   through, and Apple maps a bare tag to a fixed region. Adding a language means adding it to
+   that provider's list and checking its adapter resolves it.
 3. If the Mac, its settings or a download can rule a service out, supply `readiness`. Its
    `check` returns each service's state without waiting for setup, starts any setup in a
    task the adapter owns so it survives a provider switch, tolerates concurrent calls and
@@ -127,7 +128,7 @@ above; none names Apple.
 | `DictationController.swift`: wires each operation's check and makes one check at launch to start setup, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress while the Provider tab is open, on a change of provider, language or voice and on each `changes` yield. One check at launch starts setup. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
 | `Pill.swift`, `PillView.swift`, `PillDemo.swift`: `Pill.Phase.waiting` and its demo steps | A service still setting up is not an error, so it gets an amber pill. | Yes, generic UI for `.waiting`. |
 | `SettingsView.swift`: readiness reasons beside the Provider tab's marks | Shows why a supported service cannot be used yet. | Yes. |
-| `Settings.swift` and `SettingsView.swift`: `Settings.Language`, a fixed list, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each adapter now resolves a known bare tag. | Yes. Stored tags map to a list entry on load. |
+| `Settings.swift` and `SettingsView.swift`: `Provider.languages`, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each provider lists its languages and its adapter resolves a known bare tag. | Yes. The stored tag is kept and resolved per provider. |
 | Tests: readiness in `DictationOperationTests`, `ReadingOperationTests`, `ProviderWordingTests`, `ProviderReadinessTests`; the language list in `SettingsTests` and `SettingsValidationTests`; Apple fixture tests in `Apple*Tests.swift` and opt-in live checks in `Integration/Apple*LiveTests.swift` | Cover the shared changes with fake services, and Apple's adapters with fixtures. Live checks run only with `ECHOTYPE_APPLE_LIVE=1`. | Shared tests cover the contract; Apple tests are the provider's own. |
 | `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/` deleted | The production adapters and their tests replaced the experiments; git history keeps them. | No. |
 | `README.md`, this record, [0007](0007-known-gaps.md), the [specification](../specs/apple-on-device-provider.md) and the [research](../research/apple-on-device-provider.md) | Document Apple, readiness and the language list, mark the experiments removed, and record the user-approved external-check placement. | No. |
