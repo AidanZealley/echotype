@@ -53,6 +53,8 @@ private final class FakeSpeechStream: SpeechStream {
   var keys = 0
   var credential = Credential.apiKey(placeholder: "")
   var storedKey: String? = "fake"
+  /// Nil for a provider with the default, always-ready readiness.
+  var readiness: ServiceReadiness?
   init(_ request: FakeSpeechStream = FakeSpeechStream()) { self.request = request }
   func reader(_ source: Reader.Source = .text("Hello"), id: UUID = UUID(),
     settings: Settings = Settings(), onPresentation: @escaping @MainActor (Reader) -> Void = { _ in }
@@ -66,13 +68,21 @@ private final class FakeSpeechStream: SpeechStream {
       }, cleanup: {
         self.cleanup += 1; self.cleanupEntered.open()
         if self.suspendCleanup { await self.cleanupRelease.wait() }
-      }, credential: credential, key: {
+      }, provider: Provider(
+        id: "fixture", name: "Fixture", summary: "", credential: credential, languages: [.english],
+        transcription: TranscriptionService(keytermLimit: 1) { _ in fatalError("Not started") },
+        voice: VoiceService(voices: [Voice(id: "default", name: "Default"), Voice(id: "chosen", name: "Chosen")], speedRange: 0.5...2, maximumCharacters: 5) {
+          request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
+        },
+        cleanup: nil,
+        readiness: readiness.map { answer in
+          Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
+        } ?? .always), key: {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return self.storedKey
-      }, voice: VoiceService(voices: [Voice(id: "default", name: "Default"), Voice(id: "chosen", name: "Chosen")], speedRange: 0.5...2, maximumCharacters: 5) {
-          request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
-        }, player: playback.player), onPresentation: onPresentation)
+      }, player: playback.player),
+      onPresentation: onPresentation)
   }
 }
 
@@ -140,8 +150,23 @@ private final class FakeSpeechStream: SpeechStream {
   func missingKey() async {
     let fixture = ReadingFixture(); fixture.storedKey = nil
     let reader = fixture.reader()
-    guard case Reader.Failure.noAPIKey? = await reader.run() else { Issue.record("Expected noAPIKey"); return }
+    guard await reader.run() is MissingCredential else { Issue.record("Expected MissingCredential"); return }
     #expect(fixture.requests.isEmpty)
+  }
+
+  @Test("Reading waits for the voice only")
+  func voiceReadiness() async {
+    let blocked = ReadingFixture()
+    blocked.readiness = ServiceReadiness(transcription: .ready, voice: .waiting("Downloading voice"), cleanup: .ready)
+    #expect((await blocked.reader().run() as? NotReady)?.state == .waiting("Downloading voice"))
+    #expect(blocked.requests.isEmpty)
+
+    let fixture = ReadingFixture()
+    fixture.readiness = ServiceReadiness(
+      transcription: .unavailable("Not supported"), voice: .ready, cleanup: .waiting("Loading"))
+    let reader = fixture.reader(); let task = Task { await reader.run() }
+    await fixture.request.entered.wait(); reader.stop()
+    #expect(await task.value == nil && fixture.requests.count == 1)
   }
 
   @Test func fasterThanPlaybackResponseStopsAtQueueLimit() async {
@@ -281,7 +306,7 @@ extension ReadingOperationTests {
     let fixture = ReadingFixture(FakeSpeechStream(finished: true))
     let reader = fixture.reader(.text("Hello there"), settings: Settings(provider: "fixture", language: "en-GB", reading: ["fixture": .init(voice: "chosen", speed: 1.2), "other": .init(voice: "other", speed: 0.8)]))
     #expect(await reader.run() == nil)
-    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "chosen", speed: 1.2, language: "en-GB", credential: "fake")])
+    #expect(fixture.requests == [SpeechRequest(text: "Hello", voice: "chosen", speed: 1.2, language: "en", credential: "fake")])
   }
 
   @Test func streamFailureReachesReadingOutcome() async {
@@ -332,6 +357,21 @@ extension ReadingOperationTests {
 }
 
 extension ReadingOperationTests {
+  @Test("A voice still setting up ends the reading in the waiting pill, and an unusable one in red",
+    arguments: [ServiceState.waiting("Downloading voice"), .unavailable("No voice")])
+  func notReadyPill(_ state: ServiceState) async {
+    let first = ReadingFixture()
+    first.readiness = ServiceReadiness(transcription: .ready, voice: state, cleanup: nil)
+    let fixture = ReadingCoordinatorFixture(first: first)
+    let controller = fixture.controller
+    #expect(controller.speak("Hello"))
+    await controller.waitForCompletion()
+    let expected: Pill.Phase = state == .waiting("Downloading voice")
+      ? .waiting("Downloading voice") : .error("No voice")
+    #expect(fixture.presentations.last?.phase == expected)
+    #expect(controller.lastError == state.message && first.requests.isEmpty)
+  }
+
   @Test func stopDuringFailureCleanupDoesNotReviveAnError() async {
     let fixture = ReadingFixture(); fixture.selection = nil; fixture.suspendCleanup = true
     let reader = fixture.reader(.selection)

@@ -5,6 +5,7 @@ import Testing
 /// Defined here rather than registered, so the wording is shown to come from the provider.
 private let acme = Provider(
   id: "acme", name: "Acme", summary: "", credential: .apiKey(placeholder: "acme-…"),
+  languages: [.english],
   transcription: TranscriptionService(keytermLimit: 1) { _ in fatalError("Not started") },
   voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 1) { _ in
     fatalError("Not spoken")
@@ -18,8 +19,9 @@ private let acme = Provider(
     (ProviderError.rateLimited, "Acme rate limit reached"),
     (SessionError.provider(.unavailable), "Acme is unavailable"),
     (ProviderError.failed("HTTP 418"), "Acme error: HTTP 418"),
-    (DictationOperation.OperationError.noAPIKey, "Add your Acme API key in EchoType Settings"),
-    (Reader.Failure.noAPIKey, "Add your Acme API key in EchoType Settings"),
+    (MissingCredential(), "Add your Acme API key in EchoType Settings"),
+    (NotReady(state: .waiting("Downloading speech model")), "Downloading speech model"),
+    (NotReady(state: .unavailable("Not supported on this Mac")), "Not supported on this Mac"),
   ]
   for (error, message) in cases {
     #expect(DictationController.describe(error, provider: acme) == message)

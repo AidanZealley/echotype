@@ -18,15 +18,15 @@ import Observation
     guard case .dictating(let operation) = phase else { return .idle }
     switch operation.presentation {
     case .starting: return .starting
-    case .capturing(let snapshot, let readiness):
-      guard readiness.microphone else { return .starting }
+    case .capturing(let snapshot, let hints):
+      guard hints.microphone else { return .starting }
       return snapshot.state == .paused ? .paused : .listening
     case .finishing: return .finishing
     case .inserting: return .inserting
     case .cancelled: return .cancelled
     }
   }
-  private(set) var hasAPIKey: Bool?
+  private(set) var hasCredential: Bool?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
   /// The last dictation that reached `running`, whatever its outcome. Nil until one ends. Kept in
@@ -91,8 +91,8 @@ import Observation
       return Reader(source, id: id, settings: settings, dependencies: .init(
         selection: { await clipboard.copySelection(cancelled: $0) },
         cleanup: { await clipboard.waitForCleanup() },
-        credential: provider.credential, key: { await Self.storedKey(for: provider) },
-        voice: provider.voice, player: SpeechPlayer(onLevel: level)), onPresentation: present)
+        provider: provider, key: { await Self.storedKey(for: provider) },
+        player: SpeechPlayer(onLevel: level)), onPresentation: present)
     }, focusedScreen: { NSScreen.forFocusedWindow() }, showPanel: { pill, screen in
       if let screen { panel.show(pill, on: screen) }
     }, hidePanel: { panel.hide() })
@@ -128,19 +128,24 @@ import Observation
       var checked: ProviderID?
       for await provider in Observations({ store.settings.provider }) where provider != checked {
         checked = provider
-        await self?.refreshAPIKeyStatus()
+        await self?.refreshCredentialStatus()
       }
     }
+    // Starts setup the provider needs, such as a speech model download, without waiting for the
+    // first dictation. The answer is not kept; Settings and operations check for themselves.
+    let provider = Providers[store.settings.provider]
+    let request = ReadinessRequest(settings: store.settings, provider: provider)
+    Task { _ = await provider.readiness.check(request) }
   }
 
   /// Whether the selected provider has its credential.
-  func refreshAPIKeyStatus(clearError: Bool = false) async {
+  func refreshCredentialStatus(clearError: Bool = false) async {
     keyStatusGeneration += 1
     let generation = keyStatusGeneration
     let provider = Providers[store.settings.provider]
     let available = provider.credential.isSatisfied(by: await Self.storedKey(for: provider))
     guard generation == keyStatusGeneration else { return }
-    hasAPIKey = available
+    hasCredential = available
     if clearError { lastError = nil }
   }
 
@@ -223,7 +228,8 @@ import Observation
       let failure = await operation.run()
       guard isReading(operation) else { return }
       phase = .idle; readingTask = nil
-      end(showing: failure.map { Self.describe($0, provider: Providers[settings.provider]) })
+      end(showing: failure.map { Self.describe($0, provider: Providers[settings.provider]) },
+        waiting: Self.isWaiting(failure))
     }
   }
 
@@ -233,7 +239,8 @@ import Observation
     case .starting: phase = .readingStarting
     case .playing: phase = .reading
     case .paused: phase = .readingPaused
-    case .failed(let message): phase = .error(message)
+    // `end(showing:waiting:)` shows the worded failure once the run returns.
+    case .failed: return
     case .stopped: end(); return
     }
     pill = Pill(phase: phase, isReading: true, level: reader.level,
@@ -276,22 +283,21 @@ import Observation
         startCapture: { try await audio.start(deviceUID: $0) },
         stopCapture: { audio.stop() },
         releaseCapture: { await audio.waitForCleanup() },
-        credential: provider.credential, key: { await Self.storedKey(for: provider) },
-        transcription: provider.transcription,
+        provider: provider, key: { await Self.storedKey(for: provider) },
         captureDestination: { DestinationFocus().capture() },
         insert: { [clipboard] text, destination, sends, cancelled, begin in
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
         },
-        cleanup: provider.cleanup,
         clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()),
       onPresentation: { [weak self] presentation, settled, provisional in
         if presentation == .cancelled { self?.end(); return }
-        if case .starting(let readiness) = presentation, !readiness.microphone { self?.showStarting() }
+        if case .starting(let hints) = presentation, !hints.microphone { self?.showStarting() }
         self?.updatePill {
           if case .capturing = presentation { $0.canCommit = true } else { $0.canCommit = false }
           $0.settled = settled
           $0.provisional = provisional
           if let phase = presentation.pillPhase { $0.phase = phase }
+          if let hints = presentation.hints { $0.cleanupSkipped = hints.cleanupSkipped }
           if presentation == .finishing { $0.level = 0 }
         }
       })
@@ -345,7 +351,7 @@ import Observation
       }
       phase = .idle
       operationTask = nil
-      end(showing: message)
+      end(showing: message, waiting: Self.isWaiting(result.startupFailure))
       return result
     }
   }
@@ -408,13 +414,14 @@ import Observation
     showPanel(pill, screen)
   }
 
-  /// Ends the session's pill: fades it, or shows `error` in red for three seconds first.
-  private func end(showing error: String? = nil) {
+  /// Ends the session's pill: fades it, or shows `error` for three seconds first, in red or, when
+  /// a service is still setting up, as waiting.
+  private func end(showing error: String? = nil, waiting: Bool = false) {
     lastError = error
     guard var pill else { return }
     self.pill = nil
     guard let error else { return hidePanel() }
-    pill.phase = .error(error)
+    pill.phase = waiting ? .waiting(error) : .error(error)
     showPanel(pill, screen)
     errorFade = Task {
       try? await Task.sleep(for: .seconds(3))
@@ -422,12 +429,19 @@ import Observation
     }
   }
 
+  /// Whether `error` is a service still setting up rather than a failure.
+  private static func isWaiting(_ error: (any Error)?) -> Bool {
+    (error as? NotReady)?.state.status == .waiting
+  }
+
   /// Words a dictation or reading failure for the pill, naming the provider it ran with.
   static func describe(_ error: any Error, provider: Provider) -> String {
     switch error {
+    case let error as NotReady:
+      error.state.message ?? ""
     case Reader.Failure.nothingSelected:
       "Nothing selected"
-    case Reader.Failure.noAPIKey, DictationOperation.OperationError.noAPIKey:
+    case is MissingCredential:
       "Add your \(provider.name) API key in EchoType Settings"
     case Reader.Failure.playback(let underlying):
       "Audio output failed: \(underlying.localizedDescription)"

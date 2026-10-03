@@ -72,8 +72,14 @@ public struct Settings: Equatable, Sendable {
   /// provider's adapter enforce the caps.
   public var keyterms: [String]
 
-  /// BCP-47 language tag passed to the transcription API.
+  /// The user's preferred language tag, kept even when the selected provider does not list it.
+  /// Read it with `language(for:)`, which gives the tag a provider uses.
   public var language: String
+
+  /// The stored tag when `provider` lists it, otherwise its first language's tag.
+  public func language(for provider: Provider) -> String {
+    provider.languages.contains { $0.tag == language } ? language : provider.languages[0].tag
+  }
 
   /// Seconds without transcript activity before the session shows its paused state. Nothing is
   /// ever inserted on this timeout; it only changes what the overlay renders.
@@ -129,8 +135,9 @@ public struct Settings: Equatable, Sendable {
     }
   }
 
-  public func readingChoice(for service: VoiceService) -> Reading {
-    (reading[provider.rawValue] ?? Reading()).validated(for: service)
+  /// The stored choice for `provider`, validated against its voice service.
+  public func readingChoice(for provider: Provider) -> Reading {
+    (reading[provider.id.rawValue] ?? Reading()).validated(for: provider.voice)
   }
 
   /// Whether a dictation ending in a request like "reply with EchoType" is sent with Return.
@@ -140,7 +147,7 @@ public struct Settings: Equatable, Sendable {
     hotkey: Hotkey = .optionD,
     provider: ProviderID = Providers.all[0].id,
     keyterms: [String] = [],
-    language: String = "en",
+    language: String = Language.english.tag,
     silenceTimeout: TimeInterval = 10,
     hardCap: TimeInterval = 300,
     finalizeTimeout: TimeInterval = 8,
@@ -168,14 +175,13 @@ public struct Settings: Equatable, Sendable {
 /// The stored form. Only the fields the settings window edits are persisted; the timeouts stay
 /// code defaults so today's values are not frozen into every install.
 ///
-/// The key names and the hotkey's shape are the upgrade contract: renaming one would reset
-/// that setting on every existing install. Each field decodes on its own and falls back to its
-/// default, so adding a field later, or one unreadable field, never resets the others. Retired
-/// keys, `batchOnCommit` and `cleanUp`, are ignored.
+/// The key names and the hotkey's shape are the stored contract: renaming one would reset that
+/// setting. Each field decodes on its own and falls back to its default, so adding a field
+/// later, or one unreadable field, never resets the others.
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
     case hotkey, provider, keyterms, language, inputDeviceID
-    case readAloudHotkey, reading, voice, speechSpeed, sendReplyRequests
+    case readAloudHotkey, reading, sendReplyRequests
   }
 
   private struct ReadingKey: CodingKey {
@@ -208,10 +214,6 @@ extension Settings: Codable {
           reading[key.stringValue] = try? entries.decode(Reading.self, forKey: key)
         }
       }
-    } else if container.contains(.voice) || container.contains(.speechSpeed) {
-      reading = Providers.migratedReading(
-        voice: try? container.decode(String.self, forKey: .voice),
-        speed: try? container.decode(Double.self, forKey: .speechSpeed))
     }
     sendReplyRequests =
       (try? container.decodeIfPresent(Bool.self, forKey: .sendReplyRequests))

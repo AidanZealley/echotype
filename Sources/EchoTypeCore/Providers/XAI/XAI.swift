@@ -4,7 +4,7 @@ extension Provider {
   /// The app reaches xAI only through this description and its services.
   public static let xAI = Provider(
     id: "xai", name: "xAI", summary: "Paid. Uses your xAI API key.",
-    credential: .apiKey(placeholder: "xai-…"),
+    credential: .apiKey(placeholder: "xai-…"), languages: [.english],
     transcription: XAI.transcription, voice: XAI.voice, cleanup: XAI.cleanup)
 }
 

@@ -5,36 +5,38 @@ import Observation
 /// Owns capture, transcription, revision and insertion for one admitted command.
 @MainActor @Observable final class DictationOperation {
   /// Advisory hints shown before finishing. Only finishing captures the insertion destination.
-  struct Readiness: Equatable {
+  struct Hints: Equatable {
     var microphone = false
     var destination = false
+    /// The provider has cleanup that was not ready at start, so this dictation inserts unrevised.
+    var cleanupSkipped = false
   }
 
   enum Presentation: Equatable {
-    case starting(Readiness)
-    case capturing(SessionMachine.Snapshot, Readiness)
+    case starting(Hints)
+    case capturing(SessionMachine.Snapshot, Hints)
     case finishing
     case inserting
     case cancelled
 
     /// Nil once finishing, inserting or cancelled.
-    var readiness: Readiness? {
+    var hints: Hints? {
       switch self {
-      case .starting(let readiness), .capturing(_, let readiness): readiness
+      case .starting(let hints), .capturing(_, let hints): hints
       case .finishing, .inserting, .cancelled: nil
       }
     }
 
-    fileprivate func with(_ readiness: Readiness) -> Presentation {
-      if case .capturing(let snapshot, _) = self { return .capturing(snapshot, readiness) }
-      return .starting(readiness)
+    fileprivate func with(_ hints: Hints) -> Presentation {
+      if case .capturing(let snapshot, _) = self { return .capturing(snapshot, hints) }
+      return .starting(hints)
     }
 
     var pillPhase: Pill.Phase? {
       switch self {
-      case .starting(let readiness), .capturing(_, let readiness):
-        guard readiness.microphone else { return .starting }
-        guard readiness.destination else { return .selectInput }
+      case .starting(let hints), .capturing(_, let hints):
+        guard hints.microphone else { return .starting }
+        guard hints.destination else { return .selectInput }
         if case .capturing(let snapshot, _) = self, snapshot.state == .paused { return .paused }
         return .listening
       case .finishing: return .transcribing
@@ -55,15 +57,12 @@ import Observation
     var startCapture: @MainActor (String?) async throws -> AsyncThrowingStream<Data, any Error>
     var stopCapture: @MainActor () -> Void
     var releaseCapture: @MainActor () async -> Void
-    /// What the provider needs before a dictation starts.
-    var credential: Credential
+    /// The provider this dictation runs with.
+    var provider: Provider
     /// The provider's stored key, or nil.
     var key: @Sendable () async -> String?
-    var transcription: TranscriptionService
     var captureDestination: @MainActor () -> Destination?
     var insert: @MainActor (String, Destination?, Bool, @escaping @MainActor () -> Bool, @escaping @MainActor () -> Void) async -> Clipboard.InsertionResult
-    /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
-    var cleanup: CleanupService?
     var clock: any SessionClock
     var testClock: any SessionClock
     /// Times the final revision budget.
@@ -73,6 +72,8 @@ import Observation
   let settings: Settings
   let isTest: Bool
   private let dependencies: Dependencies
+  /// The provider's cleanup, or nil when it has none or was not ready at start.
+  private var cleanup: CleanupService?
   private let onPresentation: @MainActor (Presentation, String, String) -> Void
   private(set) var presentation: Presentation = .starting(.init())
   var cancelled: Bool { presentation == .cancelled }
@@ -93,7 +94,7 @@ import Observation
   /// Capture buffers report levels even during silence; reuse them instead of owning a timer.
   private static let destinationProbeInterval: TimeInterval = 0.5
   /// Finishing, inserting or cancelled.
-  private var finishing: Bool { presentation.readiness == nil }
+  private var finishing: Bool { presentation.hints == nil }
 
   init(settings: Settings, isTest: Bool = false, dependencies: Dependencies,
     onPresentation: @escaping @MainActor (Presentation, String, String) -> Void = { _, _, _ in }
@@ -101,6 +102,7 @@ import Observation
     self.settings = settings
     self.isTest = isTest
     self.dependencies = dependencies
+    self.cleanup = dependencies.provider.cleanup
     self.onPresentation = onPresentation
   }
 
@@ -111,15 +113,15 @@ import Observation
   var canCancel: Bool { !isTest && presentation != .inserting && !cancelled }
 
   func microphoneReady() {
-    guard hasRun, var readiness = presentation.readiness else { return }
-    readiness.microphone = true
+    guard hasRun, var hints = presentation.hints else { return }
+    hints.microphone = true
     let now = dependencies.clock.now
     if !isTest && lastDestinationProbe.map({ now - $0 >= Self.destinationProbeInterval }) != false {
       lastDestinationProbe = now
       // Advisory only. Never retain this token for insertion.
-      readiness.destination = dependencies.captureDestination() != nil
+      hints.destination = dependencies.captureDestination() != nil
     }
-    let next = presentation.with(readiness)
+    let next = presentation.with(hints)
     if next != presentation { publish(next) }
   }
 
@@ -174,29 +176,44 @@ import Observation
     let destinationReady = !isTest && dependencies.captureDestination() != nil
     if !isTest { lastDestinationProbe = dependencies.clock.now }
     publish(.starting(.init(destination: destinationReady)))
+    try await checkReadiness()
     let chunks = try await dependencies.startCapture(settings.inputDeviceID)
     try checkStartup()
     let key = await dependencies.key()
     try checkStartup()
-    guard dependencies.credential.isSatisfied(by: key) else { throw OperationError.noAPIKey }
+    guard dependencies.provider.credential.isSatisfied(by: key) else { throw MissingCredential() }
     let transcriber = try await startTranscriber(key: key)
     let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
     if !isTest {
       trace = DictationTrace(startedAt: .now)
-      if let cleanup = dependencies.cleanup {
+      if let cleanup {
         reviser = Reviser(cleanup: cleanup, credential: key, finalClock: dependencies.revisionClock)
       }
     }
     return await transcribe(session, chunks: chunks)
   }
 
+  /// Dictation and Test need transcription. Cleanup is used only if ready now; otherwise this
+  /// dictation inserts unrevised text and the pill says so. Checked before capture opens, so a
+  /// blocked operation opens nothing.
+  private func checkReadiness() async throws {
+    let services = await dependencies.provider.readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
+    try checkStartup()
+    try services.transcription.requireReady()
+    guard !isTest, let state = services.cleanup, state.status != .ready else { return }
+    cleanup = nil
+    var hints = presentation.hints ?? .init()
+    hints.cleanupSkipped = true
+    publish(presentation.with(hints))
+  }
+
   /// Starting may suspend, so Escape or a capture failure during it must still close what it
   /// opened.
   private func startTranscriber(key: String?) async throws -> any LiveTranscriber {
-    let service = dependencies.transcription
-    let transcriber = try await service.start(
-      TranscriptionRequest(settings: settings, keytermLimit: service.keytermLimit, credential: key))
+    let provider = dependencies.provider
+    let transcriber = try await provider.transcription.start(
+      TranscriptionRequest(settings: settings, provider: provider, credential: key))
     do {
       try checkStartup()
     } catch {
@@ -328,7 +345,7 @@ import Observation
       if snapshot.state == .finalizing { finish() }
       let shown = await reviser?.submit(committed: transcript.committed) ?? transcript.committed
       if !cancelled && !finishing && (snapshot.state == .listening || snapshot.state == .paused) {
-        publish(.capturing(snapshot, presentation.readiness ?? .init()), settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
+        publish(.capturing(snapshot, presentation.hints ?? .init()), settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
         if !isTest && settings.sendReplyRequests && ReplyRequest.matches(transcript.committed) { commit() }
       } else if !cancelled && finishing {
         publish(.finishing, settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
@@ -368,5 +385,4 @@ import Observation
     if !isTest { onPresentation(next, self.settled, self.provisional) }
   }
 
-  enum OperationError: Error { case noAPIKey }
 }

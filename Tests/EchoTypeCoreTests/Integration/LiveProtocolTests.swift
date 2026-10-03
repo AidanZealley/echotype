@@ -60,7 +60,7 @@ enum LiveSession {
 func liveStreamingSessionRecordsItsEventSequence() async throws {
   let recording = try WAVRecording(contentsOf: URL(fileURLWithPath: LiveSession.fixturePath))
   let request = TranscriptionRequest(
-    settings: Settings(), keytermLimit: XAI.transcription.keytermLimit,
+    settings: Settings(), provider: .xAI,
     credential: LiveSession.apiKey)
   let url = XAI.Transcriber.streamingURL(for: request)
   let transport = URLSessionWebSocketTransport(

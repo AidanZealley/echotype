@@ -22,6 +22,9 @@ struct Pill: Equatable {
     case reading
     /// Reading is paused by the user, with its place in the audio retained.
     case readingPaused
+    /// A service the session needs is not ready yet, so it did not start. Shown inline beside
+    /// an amber mark, with the provider's reason.
+    case waiting(String)
     /// Shown inline in red.
     case error(String)
   }
@@ -31,6 +34,8 @@ struct Pill: Equatable {
   var isReading = false
   /// The microphone that actually opened for this dictation.
   var inputDevice: InputDevice?
+  /// The provider's cleanup was not ready, so this dictation inserts unrevised text.
+  var cleanupSkipped = false
   /// Rendered solid. Committed text, revised when cleanup is on, followed by settled utterance runs.
   var settled = ""
   /// Rendered dimmed after `settled`. `SessionMachine.Snapshot.provisional`.

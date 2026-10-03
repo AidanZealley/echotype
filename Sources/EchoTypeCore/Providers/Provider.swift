@@ -14,23 +14,39 @@ public struct Provider: Identifiable, Sendable {
   /// One line for Settings, such as what it costs and what it needs.
   public var summary: String
   public var credential: Credential
+  /// The languages the provider supports, never empty. The first is its default.
+  public var languages: [Language]
   public var transcription: TranscriptionService
   public var voice: VoiceService
   /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
   public var cleanup: CleanupService?
+  /// Whether this Mac can use the services now. `.always` when only the credential gates them.
+  public var readiness: Readiness
 
   public init(
     id: ProviderID, name: String, summary: String, credential: Credential,
-    transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?
+    languages: [Language], transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
+    readiness: Readiness = .always
   ) {
     self.id = id
     self.name = name
     self.summary = summary
     self.credential = credential
+    self.languages = languages
     self.transcription = transcription
     self.voice = voice
     self.cleanup = cleanup
+    self.readiness = readiness
   }
+}
+
+/// A language a provider supports.
+public struct Language: Hashable, Sendable {
+  public var name: String
+  /// Bare BCP-47 language tag, such as `en`. The provider's adapter maps it to its own form.
+  public var tag: String
+
+  public static let english = Language(name: "English", tag: "en")
 }
 
 /// A provider's stable identifier. Renaming one would reset the choice and lose the stored key
@@ -74,6 +90,104 @@ public enum ProviderError: Error, Equatable, Sendable {
   case failed(String)
 }
 
+// MARK: Readiness
+
+/// Whether this Mac can use the provider's services now, for these settings. Dictation and Test
+/// check it before opening capture and reading before requesting speech; each starts only when
+/// every service it uses is `.ready`.
+public struct Readiness: Sendable {
+  /// What each service can do now. Starts any setup it needs; the provider runs at most one
+  /// setup at a time, so calling again is cheap.
+  public var check: @Sendable (ReadinessRequest) async -> ServiceReadiness
+  /// Yields when an earlier answer may be out of date, such as setup finishing or failing.
+  public var changes: @Sendable () -> AsyncStream<Void>
+
+  public init(
+    check: @escaping @Sendable (ReadinessRequest) async -> ServiceReadiness,
+    changes: @escaping @Sendable () -> AsyncStream<Void>
+  ) {
+    self.check = check
+    self.changes = changes
+  }
+
+  /// For a provider whose services need nothing but the credential. It cannot see which services
+  /// the provider has, so it answers `.ready` for cleanup too; operations use cleanup only when
+  /// the provider has it. Its answer never changes, so `changes` finishes at once.
+  public static let always = Readiness(
+    check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) },
+    changes: { AsyncStream { $0.finish() } })
+}
+
+public struct ReadinessRequest: Hashable, Sendable {
+  /// The app's BCP-47 tag; the provider resolves its own form.
+  public var language: String
+  /// One of the voice service's voice ids.
+  public var voice: String
+
+  public init(language: String, voice: String) {
+    self.language = language
+    self.voice = voice
+  }
+
+  /// The request for the provider's dictation language and the stored voice.
+  public init(settings: Settings, provider: Provider) {
+    self.init(
+      language: settings.language(for: provider), voice: settings.readingChoice(for: provider).voice)
+  }
+}
+
+public struct ServiceReadiness: Equatable, Sendable {
+  public var transcription: ServiceState
+  public var voice: ServiceState
+  /// Nil when the provider has no cleanup.
+  public var cleanup: ServiceState?
+
+  public init(transcription: ServiceState, voice: ServiceState, cleanup: ServiceState?) {
+    self.transcription = transcription
+    self.voice = voice
+    self.cleanup = cleanup
+  }
+}
+
+/// One service's status, with the provider's own wording, which the app shows as is under the
+/// service's name and in a pill that stops an operation.
+public struct ServiceState: Equatable, Sendable {
+  public enum Status: Equatable, Sendable {
+    case ready
+    /// Setup or loading is under way, such as downloading a speech model.
+    case waiting
+    /// The Mac or its settings rule the service out until the user changes something.
+    case unavailable
+  }
+
+  public var status: Status
+  /// What is wrong and how to fix it, or for a ready service, a note such as which voice stands
+  /// in for a missing one. Required unless ready.
+  public var message: String?
+  /// Where the user can fix it, such as a System Settings pane.
+  public var fix: URL?
+
+  public init(status: Status, message: String?, fix: URL? = nil) {
+    self.status = status
+    self.message = message
+    self.fix = fix
+  }
+
+  public static let ready = Self(status: .ready, message: nil)
+
+  public static func ready(_ note: String, fix: URL? = nil) -> Self {
+    Self(status: .ready, message: note, fix: fix)
+  }
+
+  public static func waiting(_ message: String) -> Self {
+    Self(status: .waiting, message: message)
+  }
+
+  public static func unavailable(_ message: String, fix: URL? = nil) -> Self {
+    Self(status: .unavailable, message: message, fix: fix)
+  }
+}
+
 // MARK: Transcription
 
 /// Live transcription. `start` opens one session; nothing is opened until it is called, since an
@@ -105,14 +219,14 @@ public struct TranscriptionRequest: Equatable, Sendable {
     self.credential = credential
   }
 
-  /// The request for one dictation. A saved `EchoType` in any case is dropped, since the
-  /// built-in term already leads the list.
-  public init(settings: Settings, keytermLimit: Int, credential: String?) {
+  /// The request for one dictation with `provider`, cut to its transcription `keytermLimit`. A
+  /// saved `EchoType` in any case is dropped, since the built-in term already leads the list.
+  public init(settings: Settings, provider: Provider, credential: String?) {
     let builtIn = "EchoType"
     let saved = settings.keyterms.filter { $0.caseInsensitiveCompare(builtIn) != .orderedSame }
     self.init(
-      language: settings.language,
-      keyterms: Array(([builtIn] + saved).prefix(keytermLimit)),
+      language: settings.language(for: provider),
+      keyterms: Array(([builtIn] + saved).prefix(provider.transcription.keytermLimit)),
       credential: credential)
   }
 }
@@ -227,13 +341,13 @@ public struct SpeechRequest: Equatable, Sendable {
     self.credential = credential
   }
 
-  /// The request for one reading of already capped text, with the stored voice, the validated
-  /// speed and the dictation language.
-  public init(text: String, settings: Settings, voice: VoiceService, credential: String?) {
-    let choice = settings.readingChoice(for: voice)
+  /// The request for one reading of `text` with `provider`, cut to the voice service's maximum,
+  /// using the stored voice, the validated speed and the dictation language.
+  public init(text: String, settings: Settings, provider: Provider, credential: String?) {
+    let choice = settings.readingChoice(for: provider)
     self.init(
-      text: text, voice: choice.voice, speed: choice.speed,
-      language: settings.language, credential: credential)
+      text: provider.voice.capped(text), voice: choice.voice, speed: choice.speed,
+      language: settings.language(for: provider), credential: credential)
   }
 }
 

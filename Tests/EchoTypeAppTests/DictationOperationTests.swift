@@ -180,6 +180,8 @@ private struct Insertion: Equatable {
   var insertionResult = Clipboard.InsertionResult(insertion: .attempted, sending: .notRequested)
   var credential = Credential.apiKey(placeholder: "")
   var storedKey: String? = "fake-key"
+  /// Nil for a provider with the default, always-ready readiness.
+  var readiness: ServiceReadiness?
   var requests: [TranscriptionRequest] = []
 
   init() {
@@ -203,15 +205,28 @@ private struct Insertion: Equatable {
           Task { await points.pass(.captureStop); self.chunks.finish() }
         },
         releaseCapture: { points.record(.captureRelease) },
-        credential: credential,
+        provider: Provider(
+          id: "fixture", name: "Fixture", summary: "", credential: credential, languages: [.english],
+          transcription: TranscriptionService(keytermLimit: 100) { request in
+            await MainActor.run { self.requests.append(request) }
+            await points.pass(.transcriberStart)
+            return self.transcriber
+          },
+          voice: VoiceService(voices: [Voice(id: "default", name: "Default")], speedRange: 1...1, maximumCharacters: 1) { _ in
+            fatalError("Not spoken")
+          },
+          cleanup: cleanup ? CleanupService { request in
+            guard request.final else { return request.text }
+            await points.pass(.revision)
+            try Task.checkCancellation()
+            return request.text
+          } : nil,
+          readiness: readiness.map { answer in
+            Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
+          } ?? .always),
         key: { [storedKey] in
           await points.pass(.key)
           return storedKey
-        },
-        transcription: TranscriptionService(keytermLimit: 100) { request in
-          await MainActor.run { self.requests.append(request) }
-          await points.pass(.transcriberStart)
-          return self.transcriber
         },
         captureDestination: { points.record(.destination); return self.focusedDestination },
         insert: { text, destination, sends, cancelled, begin in
@@ -224,12 +239,6 @@ private struct Insertion: Equatable {
           self.insertions.append(.init(text: text, sends: sends))
           return self.insertionResult
         },
-        cleanup: cleanup ? CleanupService { request in
-          guard request.final else { return request.text }
-          await points.pass(.revision)
-          try Task.checkCancellation()
-          return request.text
-        } : nil,
         clock: clock, testClock: testClock, revisionClock: revisionClock),
       onPresentation: { phase, _, _ in
         self.presented.append(phase)
@@ -393,8 +402,8 @@ struct DictationOperationTests {
     let h = Harness()
     h.storedKey = nil
     let result = await h.operation().run()
-    guard case DictationOperation.OperationError.noAPIKey? = result.startupFailure else {
-      Issue.record("Expected noAPIKey"); return
+    guard result.startupFailure is MissingCredential else {
+      Issue.record("Expected MissingCredential"); return
     }
     #expect(h.points.count(.transcriberStart) == 0 && h.points.count(.captureRelease) == 1)
   }
@@ -410,6 +419,56 @@ struct DictationOperationTests {
     if failure == .noReady { await h.clock.advance(5) }
     guard case .failed(let text, _) = await task.value.outcome else { Issue.record("Expected readiness failure"); return }
     #expect(text.isEmpty && h.transcriber.calls.isEmpty && h.points.count(.captureRelease) == 1)
+  }
+
+  // MARK: Provider readiness
+
+  @Test("Dictation waits for transcription, opening no capture or transcriber",
+    arguments: [ServiceState.waiting("Downloading speech model"), .unavailable("Not supported")])
+  func blockedDictation(_ state: ServiceState) async {
+    let h = Harness()
+    h.readiness = ServiceReadiness(transcription: state, voice: .ready, cleanup: .ready)
+    let result = await h.operation(cleanup: true).run()
+    #expect((result.startupFailure as? NotReady)?.state == state && result.trace == nil)
+    #expect(h.points.count(.captureStart) == 0 && h.points.count(.transcriberStart) == 0)
+    #expect(h.insertions.isEmpty)
+  }
+
+  @Test("Cleanup is used only if ready at start; otherwise the dictation inserts unrevised and reports it",
+    arguments: [ServiceState.ready, .waiting("Loading"), .unavailable("Not supported")])
+  func cleanupReadiness(_ state: ServiceState) async {
+    let h = Harness()
+    h.readiness = ServiceReadiness(transcription: .ready, voice: .ready, cleanup: state)
+    let operation = h.operation(cleanup: true)
+    let task = await h.start(operation)
+    let skipped = state != .ready
+    #expect(h.presented.contains { $0.hints?.cleanupSkipped == true } == skipped)
+    operation.commit()
+    let result = await task.value
+    #expect(result.startupFailure == nil && result.outcome == .insert("spoken words"))
+    #expect(h.points.count(.revision) == (skipped ? 0 : 1))
+  }
+
+  @Test("Test waits for transcription only")
+  func testReadiness() async {
+    let blocked = Harness()
+    blocked.readiness = ServiceReadiness(
+      transcription: .waiting("Downloading speech model"), voice: .ready, cleanup: .ready)
+    let failure = await blocked.operation(test: true).run().startupFailure
+    #expect((failure as? NotReady)?.state == .waiting("Downloading speech model"))
+    #expect(blocked.points.count(.captureStart) == 0)
+
+    let h = Harness()
+    h.readiness = ServiceReadiness(
+      transcription: .ready, voice: .unavailable("No voice"), cleanup: .waiting("Loading"))
+    let task = Task { await h.operation(test: true).run() }
+    await h.points.reached(.captureStart)
+    h.transcriber.emit(.ready)
+    h.transcriber.say("test words")
+    h.speak(Data([1]))
+    await h.points.reached(.audioSend)
+    await h.testClock.advance(5)
+    #expect(await task.value.outcome == .insert("test words"))
   }
 
   // MARK: Finishing

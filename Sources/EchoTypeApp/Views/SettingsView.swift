@@ -141,6 +141,8 @@ private struct UpdatesTab: View {
 private struct GeneralTab: View {
   @Bindable var store: SettingsStore
 
+  private var provider: Provider { Providers[store.settings.provider] }
+
   var body: some View {
     Form {
       Picker("Hotkey", selection: $store.settings.hotkey) {
@@ -149,7 +151,14 @@ private struct GeneralTab: View {
         }
       }
       InputRow(store: store)
-      LanguageRow(store: store)
+      Picker("Language", selection: Binding(
+        get: { store.settings.language(for: provider) },
+        set: { store.settings.language = $0 }
+      )) {
+        ForEach(provider.languages, id: \.self) { language in
+          Text(verbatim: language.name).tag(language.tag)
+        }
+      }
       VStack(alignment: .leading) {
         Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
         Text("Ending with a request like “reply with EchoType” sends the message")
@@ -168,11 +177,14 @@ private struct GeneralTab: View {
 
 private struct ReadAloudTab: View {
   @Bindable var store: SettingsStore
+  /// The voice service's state for the current settings, followed while this tab is open. Nil
+  /// until the first check answers.
+  @State private var voiceState: ServiceState?
 
   private var provider: Provider { Providers[store.settings.provider] }
   private var reading: Binding<EchoTypeCore.Settings.Reading> {
     Binding(
-      get: { store.settings.readingChoice(for: provider.voice) },
+      get: { store.settings.readingChoice(for: provider) },
       set: { store.settings.reading[provider.id.rawValue] = $0 })
   }
 
@@ -188,6 +200,7 @@ private struct ReadAloudTab: View {
           Text(verbatim: voice.name).tag(voice.id)
         }
       }
+      if let voiceState { ServiceNote(state: voiceState) }
       LabeledContent("Speed") {
         HStack {
           Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
@@ -200,6 +213,44 @@ private struct ReadAloudTab: View {
     .formStyle(.columns)
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
+    .task(id: Followed(settings: store.settings, provider: provider)) {
+      voiceState = nil
+      let followed = Followed(settings: store.settings, provider: provider)
+      await provider.readiness.follow(followed.request) { voiceState = $0.voice }
+    }
+  }
+}
+
+/// What a tab follows. Changes when the provider, language or voice does, which restarts the
+/// following.
+private struct Followed: Hashable {
+  var provider: ProviderID
+  var request: ReadinessRequest
+
+  init(settings: EchoTypeCore.Settings, provider: Provider) {
+    self.provider = provider.id
+    request = ReadinessRequest(settings: settings, provider: provider)
+  }
+}
+
+/// A service's message, red when unavailable, with an Open button when the provider says where
+/// to fix it. Nothing for a state without a message.
+private struct ServiceNote: View {
+  let state: ServiceState
+
+  var body: some View {
+    if let message = state.message {
+      HStack(alignment: .firstTextBaseline) {
+        Text(verbatim: message)
+          .font(.caption)
+          .foregroundStyle(state.status == .unavailable ? Color.red : Color.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer(minLength: 8)
+        if let fix = state.fix {
+          Button("Open") { NSWorkspace.shared.open(fix) }
+        }
+      }
+    }
   }
 }
 
@@ -218,8 +269,13 @@ extension EchoTypeCore.Settings.Hotkey {
 private struct ProviderTab: View {
   @Bindable var store: SettingsStore
   let controller: DictationController?
+  /// The selected provider's readiness for the current settings, followed while this tab is
+  /// open. Nil until the first check answers.
+  @State private var readiness: ServiceReadiness?
 
   private var provider: Provider { Providers[store.settings.provider] }
+
+  private var followed: Followed { Followed(settings: store.settings, provider: provider) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -231,11 +287,11 @@ private struct ProviderTab: View {
       Text(verbatim: provider.summary)
         .font(.caption)
         .foregroundStyle(.secondary)
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: 10) {
         // These two services are required by the Provider contract.
-        feature("Live transcription", available: true)
-        feature("Read aloud", available: true)
-        feature("Cleanup", available: provider.cleanup != nil)
+        feature("Live transcription", state: readiness?.transcription)
+        feature("Read aloud", state: readiness?.voice)
+        feature("Cleanup", offered: provider.cleanup != nil, state: readiness?.cleanup)
       }
       ProviderControls(provider: provider, controller: controller)
         // Each provider gets its own key draft, reveal state and async results.
@@ -244,15 +300,43 @@ private struct ProviderTab: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
+    .task(id: followed) {
+      readiness = nil
+      await Providers[followed.provider].readiness.follow(followed.request) { readiness = $0 }
+    }
   }
 
-  private func feature(_ title: String, available: Bool) -> some View {
-    Label {
-      Text(title)
-    } icon: {
-      Image(systemName: available ? "checkmark.circle.fill" : "minus.circle")
-        .foregroundStyle(available ? Color.green : Color.secondary)
+  /// One service: its status mark and its name with the provider's message below. A service the
+  /// provider does not offer is marked grey, and one not yet checked shows progress.
+  private func feature(_ title: String, offered: Bool = true, state: ServiceState?) -> some View {
+    HStack(alignment: .top) {
+      StatusMark(status: state?.status, offered: offered)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(verbatim: title)
+        if offered, let state { ServiceNote(state: state) }
+      }
     }
+  }
+}
+
+/// Green when ready, red when unavailable and progress while waiting or not yet checked.
+private struct StatusMark: View {
+  let status: ServiceState.Status?
+  let offered: Bool
+
+  var body: some View {
+    Group {
+      if !offered {
+        Image(systemName: "minus.circle").foregroundStyle(.secondary)
+      } else {
+        switch status {
+        case .ready: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .unavailable: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        case .waiting, nil: ProgressView().controlSize(.small)
+        }
+      }
+    }
+    .frame(width: 16, height: 16)
   }
 }
 
@@ -426,7 +510,7 @@ private struct ProviderControls: View {
     let id = provider.id
     guard await write("Couldn't save the key", { Keychain.save(key, for: id) }) else { return }
     savedKey = key
-    await controller?.refreshAPIKeyStatus(clearError: true)
+    await controller?.refreshCredentialStatus(clearError: true)
     draft = ""
     replacing = false
     revealed = false
@@ -436,7 +520,7 @@ private struct ProviderControls: View {
     let id = provider.id
     guard await write("Couldn't remove the key", { Keychain.remove(for: id) }) else { return }
     savedKey = nil
-    await controller?.refreshAPIKeyStatus(clearError: true)
+    await controller?.refreshCredentialStatus(clearError: true)
     revealed = false
   }
 
@@ -448,30 +532,6 @@ private struct ProviderControls: View {
     writeError = succeeded ? nil : failure
     if succeeded { testOutcome = nil }
     return succeeded
-  }
-}
-
-/// Holds its own text so clearing the field to type a new tag does not snap back to the
-/// default. A blank field stores the default.
-private struct LanguageRow: View {
-  let store: SettingsStore
-  @State private var text: String
-
-  init(store: SettingsStore) {
-    self.store = store
-    _text = State(initialValue: store.settings.language)
-  }
-
-  var body: some View {
-    LabeledContent("Language") {
-      TextField("Language", text: $text, prompt: Text(verbatim: EchoTypeCore.Settings().language))
-        .labelsHidden()
-        .frame(width: 80)
-        .onChange(of: text) {
-          let tag = text.trimmingCharacters(in: .whitespaces)
-          store.settings.language = tag.isEmpty ? EchoTypeCore.Settings().language : tag
-        }
-    }
   }
 }
 
@@ -636,5 +696,22 @@ private struct PermissionsRow: View {
   private func refresh() {
     microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     deviceControl = AXIsProcessTrusted()
+  }
+}
+
+extension Readiness {
+  /// Reports the answer for `request` now, which starts any setup it needs, and again each time
+  /// `changes` yields. Runs until cancelled, which drops the stream; an answer that arrives after
+  /// cancellation is ignored.
+  @MainActor func follow(
+    _ request: ReadinessRequest, update: @MainActor (ServiceReadiness) -> Void
+  ) async {
+    let changes = changes()
+    func report() async {
+      let answer = await check(request)
+      if !Task.isCancelled { update(answer) }
+    }
+    await report()
+    for await _ in changes { await report() }
   }
 }
