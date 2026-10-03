@@ -1,10 +1,10 @@
 import Foundation
 
 /// The word and sentence rules shared by `Reviser` and `ReplyRequest`.
-enum Prose {
+public enum Prose {
   /// Lowercased words with punctuation stripped at their edges. Hyphens and dashes separate
   /// words, so dropping the stutter in "I-I'm" is a deletion.
-  static func words(_ text: some StringProtocol) -> [String] { tokens(text).map(\.word) }
+  public static func words(_ text: some StringProtocol) -> [String] { tokens(text).map(\.word) }
 
   /// Each word with the raw form it came from, such as `("sure.", "sure")`.
   static func tokens(_ text: some StringProtocol) -> [(raw: String, word: String)] {

@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 configuration=$1
 app=$2
 
-swift build -c "$configuration"
+swift build -c "$configuration" --product EchoTypeApp
 
 staged=$(mktemp -d .build/EchoType-XXXXXX)
 trap 'rm -rf "$staged"' EXIT

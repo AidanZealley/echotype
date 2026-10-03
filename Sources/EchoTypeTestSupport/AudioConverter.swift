@@ -3,11 +3,11 @@ import Foundation
 /// Converts Float32 audio into the format the xAI streaming endpoint expects: 16 kHz, mono,
 /// little-endian Int16.
 ///
-/// A test fixture helper, not production code. The app converts captured audio with
+/// A test and bench helper, not production code. The app converts captured audio with
 /// `AVAudioConverter`, which resamples properly; this exists only to feed a recorded WAV to the
-/// live protocol tests, where what is being validated is event ordering rather than transcription
-/// accuracy. It was written by hand when `EchoTypeCore` had to build on Linux, and moved here
-/// when it no longer did, so that nothing in the app has two resamplers to choose between.
+/// bench and the live protocol tests, where what is being validated is event ordering and
+/// latency rather than transcription accuracy. It lives in `EchoTypeTestSupport` so that nothing
+/// in the app has two resamplers to choose between.
 ///
 /// It resamples by linear interpolation with no anti-alias filter, so downsampling folds content
 /// above 8 kHz back into the band. That is audible on fricatives and is the reason this is not
@@ -21,7 +21,7 @@ import Foundation
 /// stream is held back rather than extrapolated. A stream of `frames` mono frames therefore
 /// yields `ceil((frames - 1) / ratio)` samples, where `ratio` is the input rate divided by
 /// 16 kHz. At 48 kHz that is exactly one third of the input.
-struct AudioConverter: Sendable {
+public struct AudioConverter: Sendable {
   /// The rate the endpoint is configured with, via `sample_rate=16000`.
   static let outputSampleRate: Double = 16_000
 
@@ -41,7 +41,7 @@ struct AudioConverter: Sendable {
   /// The final frame of the previous call, kept so interpolation can span a buffer boundary.
   private var carriedFrame: Float?
 
-  init(inputSampleRate: Double, channelCount: Int = 1) {
+  public init(inputSampleRate: Double, channelCount: Int = 1) {
     // A zero rate would leave the output position pinned at zero and loop forever.
     precondition(inputSampleRate > 0, "input sample rate must be positive")
     precondition(channelCount > 0, "channel count must be positive")
@@ -57,7 +57,7 @@ struct AudioConverter: Sendable {
   /// `AVAudioEngine`'s input node is non-interleaved by default. A buffer ending mid-frame
   /// drops the orphan sample, which pairs the wrong channels together for the rest of the
   /// session.
-  mutating func convert(_ samples: [Float]) -> Data {
+  public mutating func convert(_ samples: [Float]) -> Data {
     let frames = downmixToMono(samples)
     guard !frames.isEmpty else { return Data() }
 
