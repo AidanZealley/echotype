@@ -9,7 +9,7 @@ Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 Before the settings milestone the defaults in `Settings()` were the settings, the key was
 seeded by hand with `security`, and the keyterms were a hard-coded list. Two risks shaped
-the storage: a stored value that decodes to a different hotkey after an upgrade, and a
+the storage: a stored value that decodes to a different hotkey after a code change, and a
 Keychain item the app cannot read without a prompt.
 
 ## Decision
@@ -19,7 +19,7 @@ Keychain item the app cannot read without a prompt.
   `provider`, `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
   `readAloudHotkey` (shaped like `hotkey`), `reading` and
   `sendReplyRequests`. The key names and
-  the modifier bit positions are the upgrade contract.
+  the modifier bit positions are the stored contract.
 - Each field decodes on its own and falls back to its default, so a missing or unreadable
   field resets only itself and adding a field never resets the hotkey. Data that is not a
   JSON object gives all defaults.
@@ -29,16 +29,9 @@ Keychain item the app cannot read without a prompt.
   back to 1. Each field and provider entry decodes independently. Reading requests and
   persistence apply the same validation, preserving valid fractional speeds. The slider
   uses the provider's range in 0.1 steps.
-- When `reading` is absent, stored `voice` and `speechSpeed` migrate to the `xai` entry.
-  The migration retains the previous finite 0.7 through 1.5 speed validation and fallback
-  to 1. Encoding writes `reading` and stops writing `voice` and `speechSpeed`. A present
-  but malformed `reading` falls back independently without re-importing legacy fields.
 - `provider` is the selected provider's id ([0025](0025-provider-adapters.md)). A missing
   id, or one no registered provider has, gives the first entry of `Providers.all`, today
   `xai`.
-- The retired `batchOnCommit` and `cleanUp` keys are ignored on decode and never written,
-  so an old batch or cleanup preference does not govern revision, which is always on (see
-  [0021](0021-revise-committed-dictation.md)).
 - The menu bar's `hotkeysActive` choice is stored under its own `UserDefaults` key and
   defaults to on. Other stored settings are fields the window edits. `silenceTimeout`, `hardCap` and
   `finalizeTimeout` stay code defaults, so today's values are not frozen into every

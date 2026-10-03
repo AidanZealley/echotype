@@ -75,8 +75,7 @@ meant editing each of them.
   service's reason beside its mark. Apple's `changes` stream covers System Settings changes,
   because it observes installed voices and Apple Intelligence availability. The app makes one
   check at launch to start setup, and operations check at start.
-- Legacy reading migration stays in the registry so `Settings` does not name xAI.
-  The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
+- The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
   credential status separate when the selection changes. Storage and validation are
   described in [0010](0010-settings-storage-and-api-key.md).
 

@@ -76,11 +76,9 @@ public struct Settings: Equatable, Sendable {
   /// Read it with `language(for:)`, which gives the tag a provider uses.
   public var language: String
 
-  /// The tag of the provider's language that matches the stored one by language subtag, so
-  /// `en-US` gives `en`, or its first language's tag when none matches.
+  /// The stored tag when `provider` lists it, otherwise its first language's tag.
   public func language(for provider: Provider) -> String {
-    let subtag = language.split(separator: "-").first.map { $0.lowercased() }
-    return (provider.languages.first { $0.tag == subtag } ?? provider.languages[0]).tag
+    provider.languages.contains { $0.tag == language } ? language : provider.languages[0].tag
   }
 
   /// Seconds without transcript activity before the session shows its paused state. Nothing is
@@ -177,14 +175,13 @@ public struct Settings: Equatable, Sendable {
 /// The stored form. Only the fields the settings window edits are persisted; the timeouts stay
 /// code defaults so today's values are not frozen into every install.
 ///
-/// The key names and the hotkey's shape are the upgrade contract: renaming one would reset
-/// that setting on every existing install. Each field decodes on its own and falls back to its
-/// default, so adding a field later, or one unreadable field, never resets the others. Retired
-/// keys, `batchOnCommit` and `cleanUp`, are ignored.
+/// The key names and the hotkey's shape are the stored contract: renaming one would reset that
+/// setting. Each field decodes on its own and falls back to its default, so adding a field
+/// later, or one unreadable field, never resets the others.
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
     case hotkey, provider, keyterms, language, inputDeviceID
-    case readAloudHotkey, reading, voice, speechSpeed, sendReplyRequests
+    case readAloudHotkey, reading, sendReplyRequests
   }
 
   private struct ReadingKey: CodingKey {
@@ -217,10 +214,6 @@ extension Settings: Codable {
           reading[key.stringValue] = try? entries.decode(Reading.self, forKey: key)
         }
       }
-    } else if container.contains(.voice) || container.contains(.speechSpeed) {
-      reading = Providers.migratedReading(
-        voice: try? container.decode(String.self, forKey: .voice),
-        speed: try? container.decode(Double.self, forKey: .speechSpeed))
     }
     sendReplyRequests =
       (try? container.decodeIfPresent(Bool.self, forKey: .sendReplyRequests))

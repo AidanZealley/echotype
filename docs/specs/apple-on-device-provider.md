@@ -80,7 +80,7 @@ This step is complete when readiness is part of the provider contract and these 
 
 Replace the free-text Language field with a picker over the selected provider's languages. Each provider lists its own `Language` values, a display name and a bare BCP-47 tag such as `en` or `fr`, and the first is its default. Both list only English (`en`) for now. A language is added to a provider's list once someone can test it with that provider.
 
-`Settings.language` stays one stored tag, the user's preference. `Settings.language(for:)` resolves it per provider to the entry with the same language subtag, or to the provider's default if there is none. Loading never rewrites the stored tag, so a saved `fr` comes back if a provider later lists French. Requests carry the resolved tag.
+`Settings.language` stays one stored tag, the user's preference. `Settings.language(for:)` resolves it per provider to the stored tag if the provider lists it, or to the provider's default if not. Loading never rewrites the stored tag, so a saved `fr` comes back if a provider later lists French. Requests carry the resolved tag.
 
 Each adapter resolves the tag to its own form. xAI passes it through. Apple resolves it to a supported regional locale per service and reports an unsupported language through readiness.
 
