@@ -201,7 +201,7 @@ import Observation
     let services = await dependencies.provider.readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
     try checkStartup()
     try services.transcription.requireReady()
-    guard !isTest, let state = services.cleanup, state != .ready else { return }
+    guard !isTest, let state = services.cleanup, state.status != .ready else { return }
     cleanup = nil
     var hints = presentation.hints ?? .init()
     hints.cleanupSkipped = true

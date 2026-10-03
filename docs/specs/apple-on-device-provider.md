@@ -54,22 +54,23 @@ public struct ServiceReadiness: Equatable, Sendable {
   public var cleanup: ServiceState?
 }
 
-public enum ServiceState: Equatable, Sendable {
-  case ready
-  /// Setup or loading is under way, such as "Downloading speech model".
-  case waiting(String)
-  /// The Mac or its settings rule the service out, such as "Needs Apple Intelligence".
-  case unavailable(String)
+public struct ServiceState: Equatable, Sendable {
+  public enum Status { case ready, waiting, unavailable }
+  public var status: Status
+  /// What is wrong and how to fix it, or a note for a ready service. Required unless ready.
+  public var message: String?
+  /// Where the user can fix it, such as a System Settings pane.
+  public var fix: URL?
 }
 ```
 
-The provider writes every reason string. xAI uses the default, always-ready readiness, so its behaviour, feature marks and missing-key handling are unchanged.
+The provider writes every message. xAI uses the default, always-ready readiness, so its behaviour, feature marks and missing-key handling are unchanged.
 
 Behaviour:
 
 - **Operation start.** Dictation and Test check readiness after the credential and before opening capture. Reading checks it before requesting speech. An operation starts only when the service it needs is `.ready`. Dictation and Test need transcription, and reading and MCP speech need voice. Dictation uses cleanup only when it is `.ready` at start; otherwise it inserts unrevised text and the pill says "No cleanup".
 - **Pill.** `.unavailable` uses the existing red error pill, as "No microphone found" does. `.waiting` uses a new amber or neutral pill phase that shows the reason and fades the same way. A waiting operation does not start. A dictation whose cleanup is not ready does start: its hint row shows "No cleanup" beside the input device, and the reason stays in the Provider tab.
-- **Provider tab.** Feature marks still show which services a provider supports, and missing cleanup keeps its grey mark. A supported service that is not ready shows its reason beside the mark.
+- **Provider tab.** Each service's mark shows its status: green when ready, red when unavailable and in progress while waiting or not yet checked. A service the provider does not offer keeps its grey mark. The provider's message sits under the service's name, saying what is wrong and how to fix it, and an Open button follows when the state links to where the user can fix it. Apple links Apple Intelligence & Siri when Apple Intelligence is off, and Accessibility > Read & Speak when no voice is installed or another voice stands in for the saved one.
 - **Refresh.** The Provider tab follows readiness while it is open: it checks, and so starts any required setup, on a change of provider, language or voice and on each `changes` yield. Apple's `changes` stream covers System Settings changes, because it observes installed voices and Apple Intelligence availability. The app makes one check at launch to start setup early, including launch with Apple already selected, and keeps no answer from it. Each operation checks at start.
 - **Setup.** One installation runs at a time and may complete after switching providers. A failure reports a short reason and the next check retries it, so reselecting Apple or trying again retries. A short waiting reason is enough; numeric progress and a shared download manager are unnecessary.
 - **Mid-dictation loss.** If cleanup becomes unusable during a dictation, failed requests preserve the original text through the existing `Reviser`. No other fallback machinery.
@@ -105,7 +106,7 @@ Implement `Providers/Apple/` against the contracts:
   - Pass the built-in `EchoType` term and saved keyterms through `AnalysisContext`, with a provisional `keytermLimit` of 100.
 - **Voice.**
   - Voices are Zoe Premium (`com.apple.voice.premium.en-US.Zoe`, the default) and Jamie Premium (`com.apple.voice.premium.en-GB.Malcolm`, shown as "Jamie"). Siri voices are not available through this API.
-  - If the saved voice is missing or does not suit the language, fall back to an installed voice for the language without overwriting the saved choice. If none exists, report `.unavailable` with guidance to download one in System Settings > Accessibility > Read & Speak. Refresh on the voices-changed notification.
+  - If the saved voice is missing or does not suit the language, fall back to an installed voice for the language without overwriting the saved choice. A stand-in is `.ready` with a note naming both voices and a link to Read & Speak. If none exists, report `.unavailable` with guidance and a link to download one in Accessibility > Read & Speak. Refresh on the voices-changed notification.
   - Map speed through fixed per-voice rate anchors. The spike measured Zoe's; Jamie needs his own. Confirm the range by ear, keeping 1x. Aidan accepted the implemented `0.8...1.3` range on 2026-10-02; his preferred speed of 1.1x does not change the defaults.
   - The text limit is 60,000 Unicode scalars. Submit one utterance of at most 250 scalars at a time, preferring the last complete sentence within the bound, and start the next only after the previous is consumed.
   - Take the sample rate from the synthesiser's buffers, deliver at most 100 ms per chunk and cancel pending pulls promptly.

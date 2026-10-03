@@ -25,13 +25,16 @@ extension Apple {
     /// The most text one utterance holds. Synthesis cannot be paused, so the next utterance
     /// starts only once the last one's audio is pulled; this bounds what a paused reading holds.
     static let utteranceLimit = 250
-    static let missingVoice = "Download a voice in System Settings > Accessibility > Read & Speak"
+    static let missingVoice =
+      "No voice is downloaded for this language. Download one in Accessibility > Read & Speak."
 
     // MARK: Voices
 
     /// The parts of an installed voice that resolution looks at.
     struct InstalledVoice: Equatable {
       var id: String
+      /// Shown when it stands in for the saved voice.
+      var name: String
       /// BCP-47, such as `en-GB`.
       var language: String
       var quality: AVSpeechSynthesisVoiceQuality
@@ -39,16 +42,28 @@ extension Apple {
 
     static func installedVoices() -> [InstalledVoice] {
       AVSpeechSynthesisVoice.speechVoices().map {
-        InstalledVoice(id: $0.identifier, language: $0.language, quality: $0.quality)
+        InstalledVoice(id: $0.identifier, name: $0.name, language: $0.language, quality: $0.quality)
       }
     }
 
-    /// Voice readiness, which needs only an installed voice for the language. Downloading one is
-    /// up to the user; `Apple.changes` yields when the installed voices change.
+    /// Voice readiness, which needs only an installed voice for the language. Another voice
+    /// standing in for the saved one is ready, with a note saying so. Downloading one is up to the
+    /// user; `Apple.changes` yields when the installed voices change.
     static func check(language: String, voice: String, installed: [InstalledVoice] = installedVoices())
       -> ServiceState
     {
-      resolve(voice, language: language, among: installed) == nil ? .unavailable(missingVoice) : .ready
+      guard let used = resolve(voice, language: language, among: installed) else {
+        return .unavailable(missingVoice, fix: SystemSettings.readAndSpeak)
+      }
+      guard used != voice, let saved = voices.first(where: { $0.id == voice }),
+        let standIn = installed.first(where: { $0.id == used })
+      else { return .ready }
+      if installed.contains(where: { $0.id == voice }) {
+        return .ready("\(saved.name) doesn't speak this language, so \(standIn.name) reads instead.")
+      }
+      return .ready(
+        "\(saved.name) isn't downloaded, so \(standIn.name) reads instead. Download \(saved.name) in Accessibility > Read & Speak.",
+        fix: SystemSettings.readAndSpeak)
     }
 
     /// The saved voice when it is installed and speaks the language, otherwise the best installed

@@ -35,15 +35,17 @@ extension Apple {
     {
       switch availability {
       case .unavailable(.deviceNotEligible):
-        .unavailable("Apple Intelligence is not supported on this Mac")
+        .unavailable("This Mac can't run Apple Intelligence, so dictation is not cleaned up.")
       case .unavailable(.appleIntelligenceNotEnabled):
-        .unavailable("Needs Apple Intelligence")
+        .unavailable(
+          "Apple Intelligence is off, so dictation is not cleaned up. Turn it on in Apple Intelligence & Siri.",
+          fix: Apple.SystemSettings.appleIntelligence)
       case _ where !supportsLanguage:
-        .unavailable("Cleanup does not support this language")
+        .unavailable("Apple Intelligence doesn't support this language, so dictation is not cleaned up.")
       case .unavailable(.modelNotReady):
         .waiting("Preparing Apple Intelligence")
       case .unavailable:
-        .unavailable("Apple Intelligence is unavailable")
+        .unavailable("Apple Intelligence is unavailable, so dictation is not cleaned up.")
       case .available:
         .ready
       }

@@ -20,10 +20,10 @@ struct AppleTranscriptionLiveTests {
   func englishBecomesReady() async {
     let changes = Apple.changes.stream()
     var state = await Apple.speechAssets.check(language: "en")
-    if case .waiting = state {
+    if state.status == .waiting {
       for await _ in changes {
         state = await Apple.speechAssets.check(language: "en")
-        if case .waiting = state { continue }
+        if state.status == .waiting { continue }
         break
       }
     }

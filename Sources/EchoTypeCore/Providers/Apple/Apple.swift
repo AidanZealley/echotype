@@ -63,6 +63,13 @@ enum Apple {
     Locale(identifier: locales[tag] ?? tag)
   }
 
+  /// The System Settings panes a readiness message sends the user to.
+  enum SystemSettings {
+    static let readAndSpeak = URL(
+      string: "x-apple.systempreferences:com.apple.Accessibility-Settings.extension?SpokenContent")!
+    static let appleIntelligence = URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!
+  }
+
   /// Tells every follower of `Readiness.changes` that an earlier answer may be out of date.
   final class Changes: Sendable {
     private let followers = Mutex<[UUID: AsyncStream<Void>.Continuation]>([:])

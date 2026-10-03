@@ -41,8 +41,10 @@ meant editing each of them.
   [0006](0006-api-key-and-error-surface.md) describes.
 - `Provider.readiness` defaults to `Readiness.always`. A provider whose services can exist and still be
   unusable on a given Mac supplies a `Readiness`: `check(ReadinessRequest)` answers a
-  `ServiceReadiness` with a `ServiceState` per service (`ready`, `waiting(reason)` or
-  `unavailable(reason)`, with nil cleanup when the provider has none), and `changes()` yields
+  `ServiceReadiness` with a `ServiceState` per service, with nil cleanup when the provider has
+  none. A state is a status (`ready`, `waiting` or `unavailable`), the provider's message saying
+  what is wrong and how to fix it, or a note for a ready service, and an optional link to where
+  the user can fix it, such as a System Settings pane. `changes()` yields
   when an earlier answer may be out of date. A provider that leaves the default, such as xAI,
   is always usable once its credential is present. Operations gate on the credential in one
   place, throwing the app-side `MissingCredential`, before they check readiness.
@@ -69,10 +71,11 @@ meant editing each of them.
   it is `.ready` at start; otherwise the dictation inserts unrevised text and the pill says
   "No cleanup". `DictationOperation` checks before opening capture, and `Reader` after the credential
   and before requesting speech. `.waiting` ends the pill in its amber waiting phase and
-  `.unavailable` in the red error pill, each showing the provider's reason as is. The
+  `.unavailable` in the red error pill, each showing the provider's message as is. The
   Provider tab follows the selected provider's readiness while it is open: it checks on a
-  change of provider, language or voice and on each `changes` yield, and shows a not-ready
-  service's reason beside its mark. Apple's `changes` stream covers System Settings changes,
+  change of provider, language or voice and on each `changes` yield. Each service's row shows a
+  green, red or in-progress status mark, the provider's message under its name, and an Open
+  button when the state carries a link. Apple's `changes` stream covers System Settings changes,
   because it observes installed voices and Apple Intelligence availability. The app makes one
   check at launch to start setup, and operations check at start.
 - The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
@@ -130,7 +133,7 @@ above; none names Apple.
 | `DictationOperation.swift` and `Reader.swift`: check readiness before capture or speech, and the app-internal `NotReady` error | An operation must not start with a service that is not ready. Dictation checks before the credential, which is read after capture opens, so xAI startup is unchanged. | Yes, the operation side of readiness. |
 | `DictationController.swift`: wires each operation's check and makes one check at launch to start setup, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress while the Provider tab is open, on a change of provider, language or voice and on each `changes` yield. One check at launch starts setup. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
 | `Pill.swift`, `PillView.swift`, `PillDemo.swift`: `Pill.Phase.waiting` and its demo steps | A service still setting up is not an error, so it gets an amber pill. | Yes, generic UI for `.waiting`. |
-| `SettingsView.swift`: readiness reasons beside the Provider tab's marks | Shows why a supported service cannot be used yet. | Yes. |
+| `SettingsView.swift`: a status mark, message and Open button for each service in the Provider tab | Shows whether each service works, why not, and where to fix it. | Yes. |
 | `Settings.swift` and `SettingsView.swift`: `Provider.languages`, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each provider lists its languages and its adapter resolves a known bare tag. | Yes. The stored tag is kept and resolved per provider. |
 | Tests: readiness in `DictationOperationTests`, `ReadingOperationTests`, `ProviderWordingTests`, `ProviderReadinessTests`; the language list in `SettingsTests` and `SettingsValidationTests`; Apple fixture tests in `Apple*Tests.swift` and opt-in live checks in `Integration/Apple*LiveTests.swift` | Cover the shared changes with fake services, and Apple's adapters with fixtures. Live checks run only with `ECHOTYPE_APPLE_LIVE=1`. | Shared tests cover the contract; Apple tests are the provider's own. |
 | `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/` deleted | The production adapters and their tests replaced the experiments; git history keeps them. | No. |

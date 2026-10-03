@@ -369,7 +369,7 @@ extension ReadingOperationTests {
     let expected: Pill.Phase = state == .waiting("Downloading voice")
       ? .waiting("Downloading voice") : .error("No voice")
     #expect(fixture.presentations.last?.phase == expected)
-    #expect(controller.lastError == state.reason && first.requests.isEmpty)
+    #expect(controller.lastError == state.message && first.requests.isEmpty)
   }
 
   @Test func stopDuringFailureCleanupDoesNotReviveAnError() async {

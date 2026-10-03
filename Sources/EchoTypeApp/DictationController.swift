@@ -431,14 +431,14 @@ import Observation
 
   /// Whether `error` is a service still setting up rather than a failure.
   private static func isWaiting(_ error: (any Error)?) -> Bool {
-    if case .waiting? = (error as? NotReady)?.state { true } else { false }
+    (error as? NotReady)?.state.status == .waiting
   }
 
   /// Words a dictation or reading failure for the pill, naming the provider it ran with.
   static func describe(_ error: any Error, provider: Provider) -> String {
     switch error {
     case let error as NotReady:
-      error.state.reason ?? ""
+      error.state.message ?? ""
     case Reader.Failure.nothingSelected:
       "Nothing selected"
     case is MissingCredential:

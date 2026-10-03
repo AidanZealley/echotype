@@ -254,11 +254,11 @@ private struct ProviderTab: View {
       Text(verbatim: provider.summary)
         .font(.caption)
         .foregroundStyle(.secondary)
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: 10) {
         // These two services are required by the Provider contract.
-        feature("Live transcription", available: true, state: readiness?.transcription)
-        feature("Read aloud", available: true, state: readiness?.voice)
-        feature("Cleanup", available: provider.cleanup != nil, state: readiness?.cleanup)
+        feature("Live transcription", state: readiness?.transcription)
+        feature("Read aloud", state: readiness?.voice)
+        feature("Cleanup", offered: provider.cleanup != nil, state: readiness?.cleanup)
       }
       ProviderControls(provider: provider, controller: controller)
         // Each provider gets its own key draft, reveal state and async results.
@@ -273,21 +273,47 @@ private struct ProviderTab: View {
     }
   }
 
-  /// A supported service that is not ready shows the provider's reason beside its mark.
-  private func feature(_ title: String, available: Bool, state: ServiceState?) -> some View {
-    HStack(alignment: .firstTextBaseline) {
-      Label {
-        Text(title)
-      } icon: {
-        Image(systemName: available ? "checkmark.circle.fill" : "minus.circle")
-          .foregroundStyle(available ? Color.green : Color.secondary)
+  /// One service: its status mark, its name with the provider's message below, and an Open
+  /// button when the provider says where to fix it. A service the provider does not offer is
+  /// marked grey, and one not yet checked shows progress.
+  private func feature(_ title: String, offered: Bool = true, state: ServiceState?) -> some View {
+    HStack(alignment: .top) {
+      StatusMark(status: state?.status, offered: offered)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(verbatim: title)
+        if offered, let state, let message = state.message {
+          Text(verbatim: message)
+            .font(.caption)
+            .foregroundStyle(state.status == .unavailable ? Color.red : Color.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
-      if let state, let reason = state.reason {
-        Text(verbatim: reason)
-          .font(.caption)
-          .foregroundStyle(state == .unavailable(reason) ? Color.red : Color.secondary)
+      Spacer(minLength: 8)
+      if offered, let fix = state?.fix {
+        Button("Open") { NSWorkspace.shared.open(fix) }
       }
     }
+  }
+}
+
+/// Green when ready, red when unavailable and progress while waiting or not yet checked.
+private struct StatusMark: View {
+  let status: ServiceState.Status?
+  let offered: Bool
+
+  var body: some View {
+    Group {
+      if !offered {
+        Image(systemName: "minus.circle").foregroundStyle(.secondary)
+      } else {
+        switch status {
+        case .ready: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .unavailable: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        case .waiting, nil: ProgressView().controlSize(.small)
+        }
+      }
+    }
+    .frame(width: 16, height: 16)
   }
 }
 

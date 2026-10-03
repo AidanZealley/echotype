@@ -21,7 +21,7 @@ extension Apple {
     }
 
     static let downloading = "Downloading speech model"
-    static let failed = "Speech model download failed"
+    static let failed = "Speech model download failed. Dictate or reopen Settings to try again."
 
     private let system: System
     private let changes: Changes
@@ -40,9 +40,9 @@ extension Apple {
     /// Whether transcription can run in this language now. Starts the installation it needs
     /// without waiting for it.
     func check(language: String) async -> ServiceState {
-      guard system.isAvailable() else { return .unavailable("Transcription is not supported on this Mac") }
+      guard system.isAvailable() else { return .unavailable("This Mac can't transcribe on device") }
       guard let locale = await system.locale(language) else {
-        return .unavailable("Transcription does not support this language")
+        return .unavailable("On-device transcription doesn't support this language")
       }
       let installed = await system.isInstalled(locale)
       // Read after the awaits, so a setup that ended meanwhile counts and is not repeated.

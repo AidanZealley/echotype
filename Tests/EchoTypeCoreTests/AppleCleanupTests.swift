@@ -3,17 +3,24 @@ import Foundation
 import FoundationModels
 import Testing
 
+private let notEligible = "This Mac can't run Apple Intelligence, so dictation is not cleaned up."
+private let unsupportedLanguage =
+  "Apple Intelligence doesn't support this language, so dictation is not cleaned up."
+private let turnedOff = ServiceState.unavailable(
+  "Apple Intelligence is off, so dictation is not cleaned up. Turn it on in Apple Intelligence & Siri.",
+  fix: Apple.SystemSettings.appleIntelligence)
+
 @Suite struct AppleCleanupTests {
   @Test(
     "Each availability and language support maps to its readiness",
     arguments: [
       (.available, true, .ready),
-      (.unavailable(.deviceNotEligible), true, .unavailable("Apple Intelligence is not supported on this Mac")),
-      (.unavailable(.appleIntelligenceNotEnabled), true, .unavailable("Needs Apple Intelligence")),
+      (.unavailable(.deviceNotEligible), true, .unavailable(notEligible)),
+      (.unavailable(.appleIntelligenceNotEnabled), true, turnedOff),
       (.unavailable(.modelNotReady), true, .waiting("Preparing Apple Intelligence")),
-      (.available, false, .unavailable("Cleanup does not support this language")),
-      (.unavailable(.modelNotReady), false, .unavailable("Cleanup does not support this language")),
-      (.unavailable(.appleIntelligenceNotEnabled), false, .unavailable("Needs Apple Intelligence")),
+      (.available, false, .unavailable(unsupportedLanguage)),
+      (.unavailable(.modelNotReady), false, .unavailable(unsupportedLanguage)),
+      (.unavailable(.appleIntelligenceNotEnabled), false, turnedOff),
     ] as [(SystemLanguageModel.Availability, Bool, ServiceState)])
   func readiness(availability: SystemLanguageModel.Availability, supportsLanguage: Bool, expected: ServiceState) {
     #expect(Apple.Intelligence.state(availability, supportsLanguage: supportsLanguage) == expected)

@@ -149,13 +149,43 @@ public struct ServiceReadiness: Equatable, Sendable {
   }
 }
 
-/// The provider writes each reason, which the app shows as is.
-public enum ServiceState: Equatable, Sendable {
-  case ready
-  /// Setup or loading is under way, such as "Downloading speech model".
-  case waiting(String)
-  /// The Mac or its settings rule the service out, such as "Needs Apple Intelligence".
-  case unavailable(String)
+/// One service's status, with the provider's own wording, which the app shows as is under the
+/// service's name and in a pill that stops an operation.
+public struct ServiceState: Equatable, Sendable {
+  public enum Status: Equatable, Sendable {
+    case ready
+    /// Setup or loading is under way, such as downloading a speech model.
+    case waiting
+    /// The Mac or its settings rule the service out until the user changes something.
+    case unavailable
+  }
+
+  public var status: Status
+  /// What is wrong and how to fix it, or for a ready service, a note such as which voice stands
+  /// in for a missing one. Required unless ready.
+  public var message: String?
+  /// Where the user can fix it, such as a System Settings pane.
+  public var fix: URL?
+
+  public init(status: Status, message: String?, fix: URL? = nil) {
+    self.status = status
+    self.message = message
+    self.fix = fix
+  }
+
+  public static let ready = Self(status: .ready, message: nil)
+
+  public static func ready(_ note: String, fix: URL? = nil) -> Self {
+    Self(status: .ready, message: note, fix: fix)
+  }
+
+  public static func waiting(_ message: String) -> Self {
+    Self(status: .waiting, message: message)
+  }
+
+  public static func unavailable(_ message: String, fix: URL? = nil) -> Self {
+    Self(status: .unavailable, message: message, fix: fix)
+  }
 }
 
 // MARK: Transcription

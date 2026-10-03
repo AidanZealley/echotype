@@ -104,9 +104,9 @@ import Testing
 
     await system.open()
     #expect(await assets.check(language: "en") == .waiting("Downloading speech model"))
-    #expect(await state(after: followed, of: assets) == .unavailable("Speech model download failed"))
+    #expect(await state(after: followed, of: assets) == .unavailable(Apple.SpeechAssets.failed))
     #expect(await assets.check(language: "en") == .waiting("Downloading speech model"))
-    #expect(await state(after: followed, of: assets) == .unavailable("Speech model download failed"))
+    #expect(await state(after: followed, of: assets) == .unavailable(Apple.SpeechAssets.failed))
     #expect(await system.installs == 2)
   }
 
@@ -115,11 +115,11 @@ import Testing
     let mac = FakeSpeechSystem(installed: false, available: false)
     #expect(
       await Apple.SpeechAssets(system: mac.system, changes: Apple.Changes()).check(language: "en")
-        == .unavailable("Transcription is not supported on this Mac"))
+        == .unavailable("This Mac can't transcribe on device"))
     let language = FakeSpeechSystem(installed: false)
     #expect(
       await Apple.SpeechAssets(system: language.system, changes: Apple.Changes()).check(language: "xx")
-        == .unavailable("Transcription does not support this language"))
+        == .unavailable("On-device transcription doesn't support this language"))
     #expect(await mac.installs + language.installs == 0)
   }
 
