@@ -65,6 +65,66 @@ import Testing
     #expect(board.items.first?.data(forType: .html) == Data([1, 2]))
   }
 
+  /// Scripts a field holding `field` with its caret at `caret` once the paste lands, `lag` polls
+  /// after it is posted. Until then the caret stays at the anchor and the field has no text.
+  private func insert(
+    _ transcript: String, anchor: Int?, field: String, caret: Int, lag: Int = 0, sends: Bool = false,
+    board: Board, verify: @escaping @MainActor (Destination?) -> DestinationVerification = { _ in .matching }
+  ) async -> Duration {
+    var waited = Duration.zero
+    var polls = 0
+    let previous = board.onWait
+    board.onWait = { waited += $0; polls += 1; await previous($0) }
+    let units = Array(field.utf16)
+    _ = await Clipboard(access: board.access).insert(transcript, destination: nil, sends: sends,
+      verify: verify,
+      selectedRange: { _ in
+        polls > lag ? CFRange(location: caret, length: 0) : anchor.map { CFRange(location: $0, length: 0) }
+      },
+      stringInRange: { _, range in
+        guard polls > lag, range.location + range.length <= units.count else { return nil }
+        return String(utf16CodeUnits: Array(units[range.location..<range.location + range.length]), count: range.length)
+      }, cancelled: { false })
+    return waited
+  }
+
+  @Test func confirmsPasteAtAnchorEarlyIncludingNonASCII() async {
+    for transcript in ["hello", "hi 👋 café"] {
+      let board = Board()
+      let field = "ab" + transcript
+      let waited = await insert(transcript, anchor: 2, field: field, caret: 2 + transcript.utf16.count, board: board)
+      #expect(waited < .milliseconds(400))
+      #expect(board.restores == 1)
+    }
+  }
+
+  @Test func confirmsAppendThatLandsAfterEarlyPolls() async {
+    let waited = await insert("hi", anchor: 2, field: "abhi", caret: 4, lag: 3, board: Board())
+    #expect(waited == .milliseconds(100))
+  }
+
+  @Test func unconfirmedPasteSpendsTheFullFallback() async {
+    let wrongCaret = Board()
+    #expect(await insert("hi", anchor: 0, field: "hi", caret: 0, board: wrongCaret) == .milliseconds(400))
+    let wrongText = Board()
+    #expect(await insert("hi", anchor: 0, field: "ho", caret: 2, board: wrongText) == .milliseconds(400))
+    let unreadable = Board()
+    #expect(await insert("hi", anchor: nil, field: "hi", caret: 2, board: unreadable) == .milliseconds(400))
+  }
+
+  @Test func returnFollowsConfirmationAfterAFreshVerify() async {
+    let board = Board()
+    var log: [String] = []
+    board.onWait = { _ in log.append("wait") }
+    var verifications = 0
+    let waited = await insert("hi", anchor: 0, field: "hi", caret: 2, sends: true, board: board,
+      verify: { _ in verifications += 1; log.append("verify"); return .matching })
+    #expect(waited < .milliseconds(400))
+    #expect(verifications == 2)
+    #expect(board.events.map(\.0) == [9, 36])
+    #expect(log == ["verify", "wait", "verify"])
+  }
+
   @Test func transactionIgnoresCancellationAfterWriteAndPreservesExternalWriter() async {
     let board = Board()
     var cancelled = false

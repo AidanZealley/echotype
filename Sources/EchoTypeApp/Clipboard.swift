@@ -82,9 +82,13 @@ import EchoTypeCore
 
   /// Cancellation and destination are checked after queued cleanup, immediately before the
   /// first write. From that write onward this service owns completion, including Return.
+  /// Paste is confirmed by reading back the transcript at the pre-paste caret. Fields that
+  /// cannot answer finish after the same fixed window, so confirmation is never required.
   func insert(
     _ text: String, destination: Destination?, sends: Bool,
     verify: @escaping @MainActor (Destination?) -> DestinationVerification = DestinationFocus().verify,
+    selectedRange: @escaping @MainActor (Destination?) -> CFRange? = DestinationFocus.selectedRange,
+    stringInRange: @escaping @MainActor (Destination?, CFRange) -> String? = DestinationFocus.string,
     cancelled: @escaping @MainActor () -> Bool,
     onBegin: @escaping @MainActor () -> Void = {}
   ) async -> InsertionResult {
@@ -106,12 +110,14 @@ import EchoTypeCore
       // AX lookup and pasteboard providers can allow another process to invalidate the saved
       // contents before our write. Our later write count cannot prove that snapshot was valid.
       let snapshotValid = access.count() == snapshotCount
+      let anchor = selectedRange(destination)?.location
       access.write(text)
       let owned = access.count()
       access.post(9, .maskCommand)
+      await awaitPaste(text, at: anchor, destination: destination,
+        selectedRange: selectedRange, stringInRange: stringInRange)
       var sending = DictationTrace.Sending.notRequested
       if sends {
-        await access.wait(.milliseconds(200))
         let check = verify(destination)
         if check == .matching {
           access.post(36, [])
@@ -120,12 +126,35 @@ import EchoTypeCore
           sending = .skipped(check == .changed ? .changed : .unavailable)
         }
       }
-      await access.wait(sends ? .milliseconds(600) : .milliseconds(800))
       if snapshotValid, access.count() == owned, !saved.isEmpty { access.restore(saved) }
       return .init(insertion: .attempted, sending: sending)
     }
     pending = Task { _ = await task.value }
     return await task.value
+  }
+
+  /// Polls for the transcript at the anchor, stopping at the first failed read. Always spends
+  /// the full 400 ms window when unconfirmed. Poll iterations are counted, as in `copySelection`.
+  /// The string is read only once the caret has moved: before the paste lands, the transcript's
+  /// range can extend past the end of the field and fail.
+  private func awaitPaste(
+    _ text: String, at anchor: Int?, destination: Destination?,
+    selectedRange: @MainActor (Destination?) -> CFRange?,
+    stringInRange: @MainActor (Destination?, CFRange) -> String?
+  ) async {
+    let polls = 16
+    var elapsed = 0
+    let length = text.utf16.count
+    while let anchor, elapsed < polls {
+      await access.wait(.milliseconds(25))
+      elapsed += 1
+      guard let caret = selectedRange(destination) else { break }
+      guard caret.location == anchor + length, caret.length == 0 else { continue }
+      guard let pasted = stringInRange(destination, CFRange(location: anchor, length: length))
+      else { break }
+      if pasted == text { return }
+    }
+    if elapsed < polls { await access.wait(.milliseconds(25 * (polls - elapsed))) }
   }
 
   /// Explicit user Copy also queues behind synthetic transactions and their restoration.
