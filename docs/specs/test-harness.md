@@ -76,8 +76,10 @@ that correction.
 
 `EchoTypeBench`, an executable target depending on `EchoTypeCore`, runs corpus samples
 through a `Provider`'s services using the public contracts. The existing integration
-helpers (`WAVRecording`, `AudioConverter`) move into a place both the bench and tests can
-use. Every command takes `--provider xai|apple|local` and writes raw JSONL into
+helpers (`WAVRecording`, `AudioConverter`) move out of `EchoTypeCoreTests` into an
+`EchoTypeTestSupport` library target that the bench and tests both depend on. SwiftPM
+executables cannot depend on test targets, and WAV file handling has no place in the
+shipping `EchoTypeCore`. Every command takes `--provider xai|apple|local` and writes raw JSONL into
 `~/Library/Application Support/EchoTypeBench/runs/<run-id>/`, with a `run.json` recording
 the Mac, OS, toolchain, source revision, provider and candidate selection.
 
@@ -139,6 +141,27 @@ Three debug-only seams let the bench drive the signed debug app.
    phases, pill phases, readiness changes, completed `DictationTrace`s, reading timings and
    errors. Reading timings include first audible audio, taken from `SpeechPlayer`'s
    existing output tap.
+
+The event log observes the app from outside rather than adding logging calls across
+it. One debug-only file in `EchoTypeApp`, installed by one `#if DEBUG` line at startup,
+records events by two means:
+
+- **Observation for state.** `DictationController`, `DictationOperation` and `Reader` are
+  `@Observable`, so `Observations` sequences over `DictationController.state`,
+  `lastTrace` and `lastError` record operation phases, completed traces and errors.
+  Readiness changes come from `Readiness.follow`, as Settings already uses. `Observations`
+  merges changes made within one main-actor turn, so these events show where a run went
+  and ended, not exact timings.
+- **Wrapped dependencies for timing.** A `ReadingPlayback` decorator around
+  `SpeechPlayer` records start, pause, resume and scheduled audio. Wrapping the player's
+  `onLevel` closure, which the output tap feeds, timestamps first audible audio. Wrapping
+  `DictationOperation.Dependencies.insert` records the inserted text and its timing.
+
+To make the wrapping possible, the default reader and dictation factories move out of
+`DictationController`'s convenience initialiser and `makeOperation` into factory
+functions that the debug file can wrap. The file audio seam swaps `startCapture` at the
+same point. Property wrappers, scattered `os.Logger` calls and macros were rejected:
+each puts logging code at every site, and `Logger` calls would remain in release builds.
 
 Scenarios run in one of two modes, because pasting needs keyboard focus and a
 command-line process cannot reliably take it. On 2026-10-03 a window launched from the
