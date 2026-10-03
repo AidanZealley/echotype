@@ -1,8 +1,10 @@
 @testable import EchoTypeCore
 import Foundation
+import Speech
 import Testing
 
-/// Real `SpeechTranscriber` sessions through `SessionMachine`. Skipped unless
+/// Real `SpeechTranscriber` sessions, including recorded speech through `SessionMachine`.
+/// Skipped unless
 /// `ECHOTYPE_APPLE_LIVE=1`, so an ordinary run touches no Apple framework or speech assets:
 ///
 /// ```bash
@@ -35,6 +37,30 @@ struct AppleTranscriptionLiveTests {
     let readiness = Provider.apple.readiness
     let request = ReadinessRequest(settings: Settings(provider: Provider.apple.id), provider: .apple)
     #expect(await readiness.check(request) == ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready))
+  }
+
+  @Test("With installed English assets, a transcriber is ready within five seconds", .timeLimit(.minutes(1)))
+  func installedTranscriberStartsWithinFiveSeconds() async throws {
+    let locale = try #require(await Apple.Transcriber.supportedLocale(for: "en"))
+    try #require(await AssetInventory.status(forModules: [Apple.Transcriber.module(for: locale)]) == .installed,
+      "This timing check requires installed English speech assets.")
+
+    // Run this test alone to measure a fresh process, before another session warms the analyser.
+    let started = ContinuousClock.now
+    let transcriber = try await Apple.transcription.start(TranscriptionRequest(
+      settings: Settings(language: "en"), provider: .apple, credential: nil))
+    let seconds: Double?
+    do {
+      let ready = try await transcriber.events.first(where: { $0 == .ready })
+      seconds = ready == nil ? nil : (ContinuousClock.now - started) / .seconds(1)
+    } catch {
+      await transcriber.waitForClose()
+      throw error
+    }
+    await transcriber.waitForClose()
+    let elapsed = try #require(seconds, "The transcriber ended before becoming ready.")
+    print("Apple transcriber ready: \(elapsed) s")
+    #expect(elapsed < 5, "\(elapsed) s")
   }
 
   @Test("Finishing before ready, or after only silence, ends with nothing")
@@ -71,10 +97,13 @@ struct AppleTranscriptionLiveTests {
     let running = Task { await machine.run() }
     let observing = Task {
       var committed = ""
+      var states: [SessionMachine.State] = []
       for await snapshot in machine.snapshots {
         #expect(snapshot.transcript.committed.hasPrefix(committed))
         committed = snapshot.transcript.committed
+        if states.last != snapshot.state { states.append(snapshot.state) }
       }
+      return states
     }
 
     var converter = AudioConverter(inputSampleRate: recording.sampleRate, channelCount: recording.channelCount)
@@ -87,7 +116,7 @@ struct AppleTranscriptionLiveTests {
     await machine.beginFinishing()
     await machine.sendClosing()
     let outcome = await running.value
-    await observing.value
+    let states = await observing.value
     transcriber.close()
     await transcriber.waitForClose()
 
@@ -96,8 +125,12 @@ struct AppleTranscriptionLiveTests {
       Issue.record("The recording produced no insertable text: \(outcome)")
       return
     }
-    // The research fixture ends with this sentence, which resolves only after finish.
-    if path.contains("echotype-s1-synthetic") { #expect(text.lowercased().contains("when i stop recording")) }
+    // The research fixture has three-second pauses and a tail that resolves only after finish.
+    if path.contains("echotype-s1-synthetic") {
+      #expect(text.lowercased().contains("when i stop recording"))
+      let paused = try #require(states.firstIndex(of: .paused), "The recording should pause the session.")
+      #expect(states.dropFirst(paused + 1).contains(.listening), "Speech after the pause should resume listening.")
+    }
   }
 
   private func session(_ settings: Settings) async throws -> (SessionMachine, any LiveTranscriber) {

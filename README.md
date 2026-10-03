@@ -113,6 +113,20 @@ protocol test also needs `ECHOTYPE_FIXTURE_WAV` pointing at a recording; see
 `Tests/EchoTypeCoreTests/Integration/LiveProtocolTests.swift`. Checks that run Apple's
 frameworks are skipped unless `ECHOTYPE_APPLE_LIVE=1` is set.
 
+To measure transcription readiness in a fresh test process with English speech assets
+already installed, run:
+
+```bash
+ECHOTYPE_APPLE_LIVE=1 swift test --disable-xctest --filter installedTranscriberStartsWithinFiveSeconds
+```
+
+This checks the adapter's five-second readiness target, not the complete signed-app launch.
+The Apple live suites also cover silent sessions, reading pause/resume and cancellation,
+and synthesis with a missing saved voice using an installed fallback. For recorded speech,
+set `ECHOTYPE_FIXTURE_WAV` to a 16-bit PCM WAV. The research's synthetic fixture additionally
+checks pause/resume and the final transcript tail; its observed jargon errors are recorded
+in the [verification plan](docs/apple-on-device-provider/implementation/plan.md#automated-evidence).
+
 The code is split into `EchoTypeCore`, which holds the session, protocol and settings
 logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.
 [`docs/decisions`](docs/decisions/README.md) records why things work the way they do, and

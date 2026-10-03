@@ -39,15 +39,20 @@ struct AppleVoiceLiveTests {
     #expect(seconds > 18 && seconds < 35, "\(seconds) s")
   }
 
-  @Test("A reading that is not pulled submits nothing more")
+  @Test("A paused reading submits nothing more, then resumes through the paragraph")
   func pausedReadingStopsSubmitting() async throws {
     let stream = reading(paragraph)
     defer { stream.cancel() }
-    _ = try #require(try await stream.next())
+    let first = try #require(try await stream.next())
     let remaining = stream.remaining
     #expect(paragraph.unicodeScalars.count - remaining.unicodeScalars.count <= Apple.Speech.utteranceLimit)
     try await Task.sleep(for: .seconds(2))
     #expect(stream.remaining == remaining)
+    var samples = first.samples.count
+    while let chunk = try await stream.next() { samples += chunk.samples.count }
+    let seconds = Double(samples) / Double(first.sampleRate)
+    // The same complete paragraph bound used by voiceReadsToTheEnd, excluding the pause.
+    #expect(seconds > 18 && seconds < 35, "\(seconds) s after resuming")
   }
 
   @Test("Cancelling a pending pull throws promptly, and another reading then works")
@@ -66,6 +71,22 @@ struct AppleVoiceLiveTests {
     var samples = 0
     while let chunk = try await next.next() { samples += chunk.samples.count }
     #expect(samples > 0)
+  }
+
+  @Test("A missing saved voice reads using a real installed English fallback")
+  func missingVoiceReadsWithFallback() async throws {
+    let saved = "echotype.test.missing-voice"
+    let fallback = try #require(Apple.Speech.resolve(saved, language: "en", among: Apple.Speech.installedVoices()))
+    #expect(fallback != saved)
+    #expect(Apple.Speech.check(language: "en", voice: saved) == .ready)
+    let stream = Apple.voice.speak(SpeechRequest(
+      text: "The installed fallback voice still reads this sentence.", voice: saved, speed: 1,
+      language: "en", credential: nil))
+    defer { stream.cancel() }
+    var samples = 0
+    while let chunk = try await stream.next() { samples += chunk.samples.count }
+    #expect(samples > 0)
+    print("Apple fallback voice: \(fallback)")
   }
 
   private func reading(_ text: String) -> Apple.Speech.Stream {
