@@ -222,8 +222,23 @@ extension EchoTypeCore.Settings.Hotkey {
 private struct ProviderTab: View {
   @Bindable var store: SettingsStore
   let controller: DictationController?
+  /// The selected provider's readiness for the current settings, followed while this tab is
+  /// open. Nil until the first check answers, and for a provider that declares no readiness.
+  @State private var readiness: ServiceReadiness?
 
   private var provider: Provider { Providers[store.settings.provider] }
+
+  /// Changes when the provider, language or voice does, which restarts the following.
+  private struct ReadinessID: Hashable {
+    var provider: ProviderID
+    var language: String
+    var voice: String
+  }
+
+  private var readinessID: ReadinessID {
+    let request = ReadinessRequest(settings: store.settings, voice: provider.voice)
+    return ReadinessID(provider: provider.id, language: request.language, voice: request.voice)
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -248,10 +263,14 @@ private struct ProviderTab: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
     .fixedSize(horizontal: false, vertical: true)
+    .task(id: readinessID) {
+      readiness = nil
+      guard let source = provider.readiness else { return }
+      await source.follow(ReadinessRequest(settings: store.settings, voice: provider.voice)) {
+        readiness = $0
+      }
+    }
   }
-
-  /// Nil until the controller has checked, and for a provider that declares no readiness.
-  private var readiness: ServiceReadiness? { controller?.readiness }
 
   /// A supported service that is not ready shows the provider's reason beside its mark.
   private func feature(_ title: String, available: Bool, state: ServiceState?) -> some View {
@@ -627,5 +646,22 @@ private struct PermissionsRow: View {
   private func refresh() {
     microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     deviceControl = AXIsProcessTrusted()
+  }
+}
+
+extension Readiness {
+  /// Reports the answer for `request` now, which starts any setup it needs, and again each time
+  /// `changes` yields. Runs until cancelled, which drops the stream; an answer that arrives after
+  /// cancellation is ignored.
+  @MainActor func follow(
+    _ request: ReadinessRequest, update: @MainActor (ServiceReadiness) -> Void
+  ) async {
+    let changes = changes()
+    func report() async {
+      let answer = await check(request)
+      if !Task.isCancelled { update(answer) }
+    }
+    await report()
+    for await _ in changes { await report() }
   }
 }

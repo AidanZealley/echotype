@@ -70,12 +70,7 @@ Behaviour:
 - **Operation start.** Dictation and Test check readiness after the credential and before opening capture. Reading checks it before requesting speech. An operation starts only when every service it uses is `.ready`. Dictation uses transcription and cleanup, Test uses transcription, and reading and MCP speech use voice.
 - **Pill.** `.unavailable` uses the existing red error pill, as "No microphone found" does. `.waiting` uses a new amber or neutral pill phase that shows the reason and fades the same way. A waiting operation does not start.
 - **Provider tab.** Feature marks still show which services a provider supports, and missing cleanup keeps its grey mark. A supported service that is not ready shows its reason beside the mark.
-- **Refresh.** The controller checks readiness, and so starts any required setup, on:
-  - provider, language or voice changes,
-  - launch, including launch with Apple already selected,
-  - the app becoming active, which covers System Settings changes,
-  - each `changes` yield,
-  - operation start.
+- **Refresh.** The Provider tab follows readiness while it is open: it checks, and so starts any required setup, on a change of provider, language or voice and on each `changes` yield. Apple's `changes` stream covers System Settings changes, because it observes installed voices and Apple Intelligence availability. The app makes one check at launch to start setup early, including launch with Apple already selected, and keeps no answer from it. Each operation checks at start.
 - **Setup.** One installation runs at a time and may complete after switching providers. A failure reports a short reason and the next check retries it, so reselecting Apple or trying again retries. A short waiting reason is enough; numeric progress and a shared download manager are unnecessary.
 - **Mid-dictation loss.** If cleanup becomes unusable during a dictation, failed requests preserve the original text through the existing `Reviser`. No other fallback machinery.
 

@@ -65,9 +65,11 @@ meant editing each of them.
   voice. `DictationOperation` checks before opening capture, and `Reader` after the credential
   and before requesting speech. `.waiting` ends the pill in its amber waiting phase and
   `.unavailable` in the red error pill, each showing the provider's reason as is. The
-  controller follows the selected provider's readiness for Settings: it checks at launch, on
-  a change of provider, language or voice, when the app becomes active and on each `changes`
-  yield, and the Provider tab shows a not-ready service's reason beside its mark.
+  Provider tab follows the selected provider's readiness while it is open: it checks on a
+  change of provider, language or voice and on each `changes` yield, and shows a not-ready
+  service's reason beside its mark. Apple's `changes` stream covers System Settings changes,
+  because it observes installed voices and Apple Intelligence availability. The app makes one
+  check at launch to start setup, and operations check at start.
 - Legacy reading migration stays in the registry so `Settings` does not name xAI.
   The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
   credential status separate when the selection changes. Storage and validation are
@@ -121,7 +123,7 @@ above; none names Apple.
 |---|---|---|
 | `Provider.swift`: `Provider.readiness`, `Readiness`, `ReadinessRequest`, `ServiceReadiness`, `ServiceState` | Apple's services can exist and still be unusable on a Mac. The credential was the only usability check. | Yes. Optional, so xAI declares none and is unchanged. |
 | `DictationOperation.swift` and `Reader.swift`: check readiness before capture or speech, and the app-internal `NotReady` error | An operation must not start with a service that is not ready. Dictation checks before the credential, which is read after capture opens, so xAI startup is unchanged. | Yes, the operation side of readiness. |
-| `DictationController.swift`: follows the selected provider's readiness for Settings, wires each operation's check, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress and starts setup at launch, on a change of provider, language or voice, on app activation and on each `changes` yield. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
+| `DictationController.swift`: wires each operation's check and makes one check at launch to start setup, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress while the Provider tab is open, on a change of provider, language or voice and on each `changes` yield. One check at launch starts setup. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
 | `Pill.swift`, `PillView.swift`, `PillDemo.swift`: `Pill.Phase.waiting` and its demo steps | A service still setting up is not an error, so it gets an amber pill. | Yes, generic UI for `.waiting`. |
 | `SettingsView.swift`: readiness reasons beside the Provider tab's marks | Shows why a supported service cannot be used yet. | Yes. |
 | `Settings.swift` and `SettingsView.swift`: `Settings.Language`, a fixed list, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each adapter now resolves a known bare tag. | Yes. Stored tags map to a list entry on load. |

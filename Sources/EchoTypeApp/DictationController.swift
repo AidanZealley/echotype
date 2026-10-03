@@ -27,10 +27,6 @@ import Observation
     }
   }
   private(set) var hasAPIKey: Bool?
-  /// The selected provider's readiness for the current settings, for Settings to show. Nil when
-  /// the provider declares none, and until its first check answers.
-  private(set) var readiness: ServiceReadiness?
-  @ObservationIgnored private var readinessTask: Task<Void, Never>?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
   /// The last dictation that reached `running`, whatever its outcome. Nil until one ends. Kept in
@@ -71,7 +67,6 @@ import Observation
   private var phase = Phase.idle
   private var monitor: HotkeyMonitor?
   @ObservationIgnored private var speakObserver: (any NSObjectProtocol)?
-  @ObservationIgnored private var activeObserver: (any NSObjectProtocol)?
 
   /// The session's pill and the screen it stays on, from the press until the session ends.
   private var pill: Pill?
@@ -137,47 +132,11 @@ import Observation
         await self?.refreshAPIKeyStatus()
       }
     }
-    // Follows the selected provider's readiness from launch, and again whenever the provider,
-    // language or voice changes or the app becomes active, which covers System Settings changes.
-    Task { [weak self, store] in
-      var followed: (ProviderID, ReadinessRequest)?
-      for await selection in Observations({ () -> (ProviderID, ReadinessRequest) in
-        let provider = Providers[store.settings.provider]
-        return (provider.id, ReadinessRequest(settings: store.settings, voice: provider.voice))
-      }) {
-        if let followed, followed == selection { continue }
-        followed = selection
-        self?.followReadiness(of: Providers[selection.0])
-      }
+    // Starts setup the provider needs, such as a speech model download, without waiting for the
+    // first dictation. The answer is not kept; Settings and operations check for themselves.
+    if let check = Self.readinessCheck(Providers[store.settings.provider], store.settings) {
+      Task { _ = await check() }
     }
-    activeObserver = NotificationCenter.default.addObserver(
-      forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-    ) { [weak self] _ in
-      MainActor.assumeIsolated {
-        guard let self else { return }
-        self.followReadiness(of: Providers[self.store.settings.provider])
-      }
-    }
-  }
-
-  /// Checks `provider`'s readiness for the current settings now, which starts any setup it
-  /// needs, and again each time its `changes` yields. Replaces the provider followed before and
-  /// drops its stream, so a late answer from it is ignored.
-  func followReadiness(of provider: Provider) {
-    readinessTask?.cancel()
-    readiness = nil
-    guard let source = provider.readiness else { return }
-    let request = ReadinessRequest(settings: store.settings, voice: provider.voice)
-    readinessTask = Task { [weak self] in
-      let changes = source.changes()
-      await self?.checkReadiness(source, request)
-      for await _ in changes { await self?.checkReadiness(source, request) }
-    }
-  }
-
-  private func checkReadiness(_ source: Readiness, _ request: ReadinessRequest) async {
-    let answer = await source.check(request)
-    if !Task.isCancelled { readiness = answer }
   }
 
   /// The check an operation runs before it starts, or nil when the provider declares no
