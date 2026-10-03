@@ -1,6 +1,7 @@
 # 0025 Everything specific to a provider sits behind its adapters
 
 Status: accepted, 2026-10-01 (provider adapters, registry, credentials and settings).
+Extended 2026-10-03 with readiness, per-provider languages and the Apple provider.
 
 ## Context
 
@@ -104,11 +105,44 @@ meant editing each of them.
 4. Add it to `Providers.all`.
 5. Add fixture tests for its adapters, and keep checks that call real services opt-in.
 
-Settings, the Provider picker and feature list with readiness reasons, Read Aloud voices
-and speed, Keyterms limit, dictation and reading wiring, the waiting and error pills,
-error messages, menu bar status and Keychain pick it up with no further change. Reading
-choices use the provider id as their storage key. Cleanup is always on when its service is present; no capability flags or cleanup toggle
-are needed.
+Settings, the Provider picker and its service status rows, the Language picker, Read Aloud
+voices, speed and voice status, Keyterms limit, dictation and reading wiring, the waiting and
+error pills, error messages, menu bar status and Keychain pick it up with no further change.
+Reading choices use the provider id as their storage key. Cleanup is always on when its
+service is present and ready; no capability flags or cleanup toggle are needed.
+
+## Apple
+
+Apple runs every service on the Mac with no key or account: `SpeechTranscriber` for live
+transcription, `AVSpeechSynthesizer` for read aloud and Foundation Models for cleanup. It is
+a free fallback; lower quality than xAI is acceptable, and xAI stays the default. The
+[research](../research/apple-on-device-provider.md) holds the measurements behind these
+choices.
+
+- **Language.** Apple lists English only. Bare `en` resolves to `en-GB` in every service,
+  since the frameworks' own bare-tag matching varies between processes.
+- **Readiness.** Transcription needs the speech model for the locale, which the adapter
+  downloads through one installation at a time, started by any check. The voice needs a
+  voice for the language. Cleanup needs Apple Intelligence on and supporting the language;
+  the system loads its model. Messages say what is wrong and how to fix it, linking Apple
+  Intelligence & Siri or Accessibility > Read & Speak.
+- **Transcription.** Final segments append to committed text and volatile results replace
+  provisional text. Recognised text is the speech evidence, since `SpeechDetector` reported
+  nothing. Finishing a session that recognised nothing makes the framework reject the
+  recognition, which is an empty finish. Keyterms go through `AnalysisContext`, capped at a
+  provisional 100.
+- **Voice.** System voice, the default, reads with the system's default voice for the
+  language and works on any Mac. Zoe and Jamie are optional premium downloads. A saved voice
+  that is missing or does not speak the language falls back to the system voice, with a
+  note, and is kept so it returns once installed. Speed maps through rates measured by ear
+  for Zoe and Jamie over `0.8...1.3`; other voices use Zoe's. Text goes to the synthesiser
+  one utterance of at most 250 scalars at a time, so a paused reading stops synthesis.
+- **Cleanup.** Each request gets a fresh `LanguageModelSession` with greedy sampling. Context
+  overflow and other failures throw, and `Reviser` keeps the dictated text.
+- **Permissions.** No bundle permission changed. `SpeechTranscriber` transcribed under
+  `swift test` with Speech authorisation never requested; the existing microphone permission
+  covers capture. First-use prompts on a signed install are an open check in
+  [0007](0007-known-gaps.md).
 
 ## Consequences
 
@@ -133,18 +167,8 @@ above; none names Apple.
 | `DictationOperation.swift` and `Reader.swift`: check readiness before capture or speech, and the app-internal `NotReady` error | An operation must not start with a service that is not ready. Dictation checks before the credential, which is read after capture opens, so xAI startup is unchanged. | Yes, the operation side of readiness. |
 | `DictationController.swift`: wires each operation's check and makes one check at launch to start setup, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress while the Provider tab is open, on a change of provider, language or voice and on each `changes` yield. One check at launch starts setup. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
 | `Pill.swift`, `PillView.swift`, `PillDemo.swift`: `Pill.Phase.waiting` and its demo steps | A service still setting up is not an error, so it gets an amber pill. | Yes, generic UI for `.waiting`. |
-| `SettingsView.swift`: a status mark, message and Open button for each service in the Provider tab | Shows whether each service works, why not, and where to fix it. | Yes. |
+| `SettingsView.swift`: a status mark, message and Open button for each service in the Provider tab, and the voice's status under the Read Aloud picker | Shows whether each service works, why not, and where to fix it. | Yes. |
 | `Settings.swift` and `SettingsView.swift`: `Provider.languages`, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each provider lists its languages and its adapter resolves a known bare tag. | Yes. The stored tag is kept and resolved per provider. |
 | Tests: readiness in `DictationOperationTests`, `ReadingOperationTests`, `ProviderWordingTests`, `ProviderReadinessTests`; the language list in `SettingsTests` and `SettingsValidationTests`; Apple fixture tests in `Apple*Tests.swift` and opt-in live checks in `Integration/Apple*LiveTests.swift` | Cover the shared changes with fake services, and Apple's adapters with fixtures. Live checks run only with `ECHOTYPE_APPLE_LIVE=1`. | Shared tests cover the contract; Apple tests are the provider's own. |
 | `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/` deleted | The production adapters and their tests replaced the experiments; git history keeps them. | No. |
-| `README.md`, this record, [0007](0007-known-gaps.md), the [specification](../specs/apple-on-device-provider.md) and the [research](../research/apple-on-device-provider.md) | Document Apple, readiness and the language list, mark the experiments removed, and record the user-approved external-check placement. | No. |
-| `docs/apple-on-device-provider/implementation/01-provider-readiness.md` through `06-register-apple.md`, `plan.md`, `README.md` and `final-review.md` | Record implementation handoffs, reviews, verification and workflow status. | No. Workflow documentation. |
-
-No bundle permission changed. The SDK documents Speech authorisation and its usage
-description only for `SFSpeechRecognizer`, and the adapters transcribed under `swift test`
-with Speech authorisation `notDetermined` throughout. The existing microphone permission
-covers capture. Aidan reported signed-build offline dictation and cleanup passing at G2 item 1.
-First-use permission prompt behavior remains pending at item 13 in the
-[G2 end checklist](../apple-on-device-provider/implementation/plan.md#g2-end-checklist), after
-whole-feature review by his decision. Successful signing and unsigned tests do not establish
-that behavior.
+| `README.md`, this record, [0007](0007-known-gaps.md) and the [research](../research/apple-on-device-provider.md) | Document Apple, readiness and the language list, and record the checks still open. The specification and implementation plan were retired into this record. | No. |

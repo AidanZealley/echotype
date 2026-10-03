@@ -124,8 +124,8 @@ This checks the adapter's five-second readiness target, not the complete signed-
 The Apple live suites also cover silent sessions, reading pause/resume and cancellation,
 and synthesis with a missing saved voice using an installed fallback. For recorded speech,
 set `ECHOTYPE_FIXTURE_WAV` to a 16-bit PCM WAV. The research's synthetic fixture additionally
-checks pause/resume and the final transcript tail; its observed jargon errors are recorded
-in the [verification plan](docs/apple-on-device-provider/implementation/plan.md#automated-evidence).
+checks pause/resume and the final transcript tail; it and its observed jargon errors are
+described in the [research](docs/research/apple-on-device-provider.md#synthetic-transcription-fixture).
 
 The code is split into `EchoTypeCore`, which holds the session, protocol and settings
 logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.
