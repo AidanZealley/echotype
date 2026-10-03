@@ -38,6 +38,27 @@ enum DestinationVerification: String {
     return Self.same(destination, current) ? .matching : .changed
   }
 
+  /// The caret or selection in UTF-16 offsets. Nil means the field does not expose it.
+  static func selectedRange(_ destination: Destination?) -> CFRange? {
+    guard let destination,
+      let value = attribute(kAXSelectedTextRangeAttribute, of: destination.target),
+      CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+    var range = CFRange()
+    return AXValueGetValue(value as! AXValue, .cfRange, &range) ? range : nil
+  }
+
+  /// The text in a UTF-16 range, bounded like every other lookup. Nil means the read failed.
+  static func string(_ destination: Destination?, in range: CFRange) -> String? {
+    var range = range
+    guard let destination, let parameter = AXValueCreate(.cfRange, &range),
+      AXUIElementSetMessagingTimeout(destination.target, 0.1) == .success else { return nil }
+    var value: CFTypeRef?
+    guard AXUIElementCopyParameterizedAttributeValue(
+      destination.target, kAXStringForRangeParameterizedAttribute as CFString, parameter, &value)
+      == .success else { return nil }
+    return value as? String
+  }
+
   private static func same(_ lhs: Destination, _ rhs: Destination) -> Bool {
     lhs.pid == rhs.pid && CFEqual(lhs.application, rhs.application)
       && CFEqual(lhs.window, rhs.window) && CFEqual(lhs.target, rhs.target)

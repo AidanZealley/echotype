@@ -1,7 +1,7 @@
 # 0020 Own clipboard transactions and verify the destination before paste
 
-Status: accepted, 2026-09-26. Updated for shared clipboard ownership on 2026-09-30
-and Electron compatibility on 2026-10-01.
+Status: accepted, 2026-09-26. Updated for shared clipboard ownership on 2026-09-30,
+Electron compatibility on 2026-10-01 and paste confirmation on 2026-10-03.
 
 ## Context
 
@@ -26,12 +26,20 @@ also uses the clipboard and must not race insertion or its restoration.
   before writing. Destination loss skips paste and preserves final text in Last
   Dictation. Do not activate another app or restore focus automatically.
 - Write the final transcript once and post Cmd+V with explicit Command flags. Once the
-  write-and-paste transaction starts, the clipboard service owns completion. Restore
-  saved contents after 800 ms if their snapshot was valid and EchoType still owns the
+  write-and-paste transaction starts, the clipboard service owns completion.
+- Just before writing, read the field's selected range and keep its location as the
+  anchor. After Cmd+V, poll every 25 ms for up to 400 ms. Paste is confirmed when the
+  selected range is a caret at the anchor plus the transcript's UTF-16 length and the
+  string for the transcript's range at the anchor equals the transcript. The string is
+  read only after the caret moves. Polling stops at the first failed read. An unreadable anchor, unsupported attributes, transformed
+  text and terminals finish after the full 400 ms fallback instead. Reads use the same
+  100 ms messaging timeout. No observers or whole-value comparison are used.
+- Then restore saved contents if their snapshot was valid and EchoType still owns the
   write. Leave the transcript when the original clipboard was empty.
-- An eligible reply request posts Return with empty flags after 200 ms, only if the
-  destination still matches. A failed second check suppresses Return without repeating
-  paste. Synthetic keys establish an attempt, not editor receipt.
+- An eligible reply request posts Return with empty flags after confirmation or
+  fallback, only if the destination still matches. A failed second check suppresses
+  Return without repeating paste. Synthetic keys establish an attempt, not editor
+  receipt, and confirmation covers insertion only, not submission.
 - Selection Copy posts Cmd+C and keeps its full 300 ms response window, even after
   cancellation. Read a string and restore only while ownership remains valid. Apps
   that copy a current line without a selection retain those semantics.

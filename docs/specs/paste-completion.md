@@ -1,6 +1,6 @@
 # Observe paste completion
 
-Status: draft for approval, 2026-10-03. Implementation is not authorised by this document alone.
+Status: approved and implemented 2026-10-03. Manual compatibility checks are pending.
 
 ## Goal
 
