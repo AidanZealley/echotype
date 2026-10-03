@@ -32,7 +32,7 @@ struct AppleTranscriptionLiveTests {
 
   @Test("The registered provider is ready for English with its default voice")
   func providerIsReady() async throws {
-    let readiness = try #require(Provider.apple.readiness)
+    let readiness = Provider.apple.readiness
     let request = ReadinessRequest(settings: Settings(provider: Provider.apple.id), provider: .apple)
     #expect(await readiness.check(request) == ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready))
   }

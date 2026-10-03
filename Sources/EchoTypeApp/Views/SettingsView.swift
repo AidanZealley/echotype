@@ -228,7 +228,7 @@ private struct ProviderTab: View {
   @Bindable var store: SettingsStore
   let controller: DictationController?
   /// The selected provider's readiness for the current settings, followed while this tab is
-  /// open. Nil until the first check answers, and for a provider that declares no readiness.
+  /// open. Nil until the first check answers.
   @State private var readiness: ServiceReadiness?
 
   private var provider: Provider { Providers[store.settings.provider] }
@@ -269,8 +269,7 @@ private struct ProviderTab: View {
     .fixedSize(horizontal: false, vertical: true)
     .task(id: followed) {
       readiness = nil
-      guard let source = Providers[followed.provider].readiness else { return }
-      await source.follow(followed.request) { readiness = $0 }
+      await Providers[followed.provider].readiness.follow(followed.request) { readiness = $0 }
     }
   }
 
@@ -462,7 +461,7 @@ private struct ProviderControls: View {
     let id = provider.id
     guard await write("Couldn't save the key", { Keychain.save(key, for: id) }) else { return }
     savedKey = key
-    await controller?.refreshAPIKeyStatus(clearError: true)
+    await controller?.refreshCredentialStatus(clearError: true)
     draft = ""
     replacing = false
     revealed = false
@@ -472,7 +471,7 @@ private struct ProviderControls: View {
     let id = provider.id
     guard await write("Couldn't remove the key", { Keychain.remove(for: id) }) else { return }
     savedKey = nil
-    await controller?.refreshAPIKeyStatus(clearError: true)
+    await controller?.refreshCredentialStatus(clearError: true)
     revealed = false
   }
 

@@ -6,6 +6,9 @@ struct NotReady: Error {
   let state: ServiceState
 }
 
+/// The provider needs a credential that is not stored, so nothing was started.
+struct MissingCredential: Error {}
+
 extension ServiceState {
   /// The provider's reason, or nil when ready.
   var reason: String? {

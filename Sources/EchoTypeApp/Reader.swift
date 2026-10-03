@@ -4,7 +4,7 @@ import Observation
 
 /// Created without side effects. The coordinator reserves it, then owns and joins `run()`.
 @MainActor @Observable final class Reader {
-  enum Failure: Error { case nothingSelected, noAPIKey, playback(any Error) }
+  enum Failure: Error { case nothingSelected, playback(any Error) }
   enum Source { case selection, text(String) }
   enum Presentation: Equatable { case starting, playing, paused, failed(String), stopped }
   struct Dependencies {
@@ -103,15 +103,13 @@ import Observation
     }
     let apiKey = await dependencies.key()
     try checkStopped()
-    guard dependencies.provider.credential.isSatisfied(by: apiKey) else { throw Failure.noAPIKey }
+    guard dependencies.provider.credential.isSatisfied(by: apiKey) else { throw MissingCredential() }
     let provider = dependencies.provider
-    if let readiness = provider.readiness {
-      let services = await readiness.check(ReadinessRequest(settings: settings, provider: provider))
-      try checkStopped()
-      try services.voice.requireReady()
-    }
+    let services = await provider.readiness.check(ReadinessRequest(settings: settings, provider: provider))
+    try checkStopped()
+    try services.voice.requireReady()
     let stream = provider.voice.speak(
-      SpeechRequest(text: provider.voice.capped(spoken), settings: settings, provider: provider, credential: apiKey))
+      SpeechRequest(text: spoken, settings: settings, provider: provider, credential: apiKey))
     self.stream = stream
     // Each short chunk waits for playback capacity before the stream is pulled again.
     while let audio = try await stream.next() {

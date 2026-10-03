@@ -20,13 +20,13 @@ public struct Provider: Identifiable, Sendable {
   public var voice: VoiceService
   /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
   public var cleanup: CleanupService?
-  /// Nil when the services are always usable once the credential is present.
-  public var readiness: Readiness?
+  /// Whether this Mac can use the services now. `.always` when only the credential gates them.
+  public var readiness: Readiness
 
   public init(
     id: ProviderID, name: String, summary: String, credential: Credential,
     languages: [Language], transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
-    readiness: Readiness? = nil
+    readiness: Readiness = .always
   ) {
     self.id = id
     self.name = name
@@ -109,6 +109,13 @@ public struct Readiness: Sendable {
     self.check = check
     self.changes = changes
   }
+
+  /// For a provider whose services need nothing but the credential. It cannot see which services
+  /// the provider has, so it answers `.ready` for cleanup too; operations use cleanup only when
+  /// the provider has it. Its answer never changes, so `changes` finishes at once.
+  public static let always = Readiness(
+    check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) },
+    changes: { AsyncStream { $0.finish() } })
 }
 
 public struct ReadinessRequest: Hashable, Sendable {
@@ -304,12 +311,12 @@ public struct SpeechRequest: Equatable, Sendable {
     self.credential = credential
   }
 
-  /// The request for one reading of already capped text with `provider`, using the stored voice,
-  /// the validated speed and the dictation language.
+  /// The request for one reading of `text` with `provider`, cut to the voice service's maximum,
+  /// using the stored voice, the validated speed and the dictation language.
   public init(text: String, settings: Settings, provider: Provider, credential: String?) {
     let choice = settings.readingChoice(for: provider)
     self.init(
-      text: text, voice: choice.voice, speed: choice.speed,
+      text: provider.voice.capped(text), voice: choice.voice, speed: choice.speed,
       language: settings.language(for: provider), credential: credential)
   }
 }

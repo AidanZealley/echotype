@@ -53,7 +53,7 @@ private final class FakeSpeechStream: SpeechStream {
   var keys = 0
   var credential = Credential.apiKey(placeholder: "")
   var storedKey: String? = "fake"
-  /// Nil for a provider that declares no readiness.
+  /// Nil for a provider with the default, always-ready readiness.
   var readiness: ServiceReadiness?
   init(_ request: FakeSpeechStream = FakeSpeechStream()) { self.request = request }
   func reader(_ source: Reader.Source = .text("Hello"), id: UUID = UUID(),
@@ -77,7 +77,7 @@ private final class FakeSpeechStream: SpeechStream {
         cleanup: nil,
         readiness: readiness.map { answer in
           Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
-        }), key: {
+        } ?? .always), key: {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return self.storedKey
@@ -150,7 +150,7 @@ private final class FakeSpeechStream: SpeechStream {
   func missingKey() async {
     let fixture = ReadingFixture(); fixture.storedKey = nil
     let reader = fixture.reader()
-    guard case Reader.Failure.noAPIKey? = await reader.run() else { Issue.record("Expected noAPIKey"); return }
+    guard await reader.run() is MissingCredential else { Issue.record("Expected MissingCredential"); return }
     #expect(fixture.requests.isEmpty)
   }
 

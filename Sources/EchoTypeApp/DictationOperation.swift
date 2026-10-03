@@ -5,7 +5,7 @@ import Observation
 /// Owns capture, transcription, revision and insertion for one admitted command.
 @MainActor @Observable final class DictationOperation {
   /// Advisory hints shown before finishing. Only finishing captures the insertion destination.
-  struct Readiness: Equatable {
+  struct Hints: Equatable {
     var microphone = false
     var destination = false
     /// The provider has cleanup that was not ready at start, so this dictation inserts unrevised.
@@ -13,30 +13,30 @@ import Observation
   }
 
   enum Presentation: Equatable {
-    case starting(Readiness)
-    case capturing(SessionMachine.Snapshot, Readiness)
+    case starting(Hints)
+    case capturing(SessionMachine.Snapshot, Hints)
     case finishing
     case inserting
     case cancelled
 
     /// Nil once finishing, inserting or cancelled.
-    var readiness: Readiness? {
+    var hints: Hints? {
       switch self {
-      case .starting(let readiness), .capturing(_, let readiness): readiness
+      case .starting(let hints), .capturing(_, let hints): hints
       case .finishing, .inserting, .cancelled: nil
       }
     }
 
-    fileprivate func with(_ readiness: Readiness) -> Presentation {
-      if case .capturing(let snapshot, _) = self { return .capturing(snapshot, readiness) }
-      return .starting(readiness)
+    fileprivate func with(_ hints: Hints) -> Presentation {
+      if case .capturing(let snapshot, _) = self { return .capturing(snapshot, hints) }
+      return .starting(hints)
     }
 
     var pillPhase: Pill.Phase? {
       switch self {
-      case .starting(let readiness), .capturing(_, let readiness):
-        guard readiness.microphone else { return .starting }
-        guard readiness.destination else { return .selectInput }
+      case .starting(let hints), .capturing(_, let hints):
+        guard hints.microphone else { return .starting }
+        guard hints.destination else { return .selectInput }
         if case .capturing(let snapshot, _) = self, snapshot.state == .paused { return .paused }
         return .listening
       case .finishing: return .transcribing
@@ -94,7 +94,7 @@ import Observation
   /// Capture buffers report levels even during silence; reuse them instead of owning a timer.
   private static let destinationProbeInterval: TimeInterval = 0.5
   /// Finishing, inserting or cancelled.
-  private var finishing: Bool { presentation.readiness == nil }
+  private var finishing: Bool { presentation.hints == nil }
 
   init(settings: Settings, isTest: Bool = false, dependencies: Dependencies,
     onPresentation: @escaping @MainActor (Presentation, String, String) -> Void = { _, _, _ in }
@@ -113,15 +113,15 @@ import Observation
   var canCancel: Bool { !isTest && presentation != .inserting && !cancelled }
 
   func microphoneReady() {
-    guard hasRun, var readiness = presentation.readiness else { return }
-    readiness.microphone = true
+    guard hasRun, var hints = presentation.hints else { return }
+    hints.microphone = true
     let now = dependencies.clock.now
     if !isTest && lastDestinationProbe.map({ now - $0 >= Self.destinationProbeInterval }) != false {
       lastDestinationProbe = now
       // Advisory only. Never retain this token for insertion.
-      readiness.destination = dependencies.captureDestination() != nil
+      hints.destination = dependencies.captureDestination() != nil
     }
-    let next = presentation.with(readiness)
+    let next = presentation.with(hints)
     if next != presentation { publish(next) }
   }
 
@@ -181,7 +181,7 @@ import Observation
     try checkStartup()
     let key = await dependencies.key()
     try checkStartup()
-    guard dependencies.provider.credential.isSatisfied(by: key) else { throw OperationError.noAPIKey }
+    guard dependencies.provider.credential.isSatisfied(by: key) else { throw MissingCredential() }
     let transcriber = try await startTranscriber(key: key)
     let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
@@ -198,13 +198,12 @@ import Observation
   /// dictation inserts unrevised text and the pill says so. Checked before capture opens, so a
   /// blocked operation opens nothing.
   private func checkReadiness() async throws {
-    guard let readiness = dependencies.provider.readiness else { return }
-    let services = await readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
+    let services = await dependencies.provider.readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
     try checkStartup()
     try services.transcription.requireReady()
     guard !isTest, let state = services.cleanup, state != .ready else { return }
     cleanup = nil
-    var hints = presentation.readiness ?? .init()
+    var hints = presentation.hints ?? .init()
     hints.cleanupSkipped = true
     publish(presentation.with(hints))
   }
@@ -346,7 +345,7 @@ import Observation
       if snapshot.state == .finalizing { finish() }
       let shown = await reviser?.submit(committed: transcript.committed) ?? transcript.committed
       if !cancelled && !finishing && (snapshot.state == .listening || snapshot.state == .paused) {
-        publish(.capturing(snapshot, presentation.readiness ?? .init()), settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
+        publish(.capturing(snapshot, presentation.hints ?? .init()), settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
         if !isTest && settings.sendReplyRequests && ReplyRequest.matches(transcript.committed) { commit() }
       } else if !cancelled && finishing {
         publish(.finishing, settled: [shown, transcript.utterance].filter { !$0.isEmpty }.joined(separator: " "), provisional: transcript.provisional)
@@ -386,5 +385,4 @@ import Observation
     if !isTest { onPresentation(next, self.settled, self.provisional) }
   }
 
-  enum OperationError: Error { case noAPIKey }
 }

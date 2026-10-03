@@ -180,7 +180,7 @@ private struct Insertion: Equatable {
   var insertionResult = Clipboard.InsertionResult(insertion: .attempted, sending: .notRequested)
   var credential = Credential.apiKey(placeholder: "")
   var storedKey: String? = "fake-key"
-  /// Nil for a provider that declares no readiness.
+  /// Nil for a provider with the default, always-ready readiness.
   var readiness: ServiceReadiness?
   var requests: [TranscriptionRequest] = []
 
@@ -223,7 +223,7 @@ private struct Insertion: Equatable {
           } : nil,
           readiness: readiness.map { answer in
             Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
-          }),
+          } ?? .always),
         key: { [storedKey] in
           await points.pass(.key)
           return storedKey
@@ -402,8 +402,8 @@ struct DictationOperationTests {
     let h = Harness()
     h.storedKey = nil
     let result = await h.operation().run()
-    guard case DictationOperation.OperationError.noAPIKey? = result.startupFailure else {
-      Issue.record("Expected noAPIKey"); return
+    guard result.startupFailure is MissingCredential else {
+      Issue.record("Expected MissingCredential"); return
     }
     #expect(h.points.count(.transcriberStart) == 0 && h.points.count(.captureRelease) == 1)
   }
@@ -442,7 +442,7 @@ struct DictationOperationTests {
     let operation = h.operation(cleanup: true)
     let task = await h.start(operation)
     let skipped = state != .ready
-    #expect(h.presented.contains { $0.readiness?.cleanupSkipped == true } == skipped)
+    #expect(h.presented.contains { $0.hints?.cleanupSkipped == true } == skipped)
     operation.commit()
     let result = await task.value
     #expect(result.startupFailure == nil && result.outcome == .insert("spoken words"))

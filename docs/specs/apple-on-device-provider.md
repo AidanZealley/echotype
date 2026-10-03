@@ -63,7 +63,7 @@ public enum ServiceState: Equatable, Sendable {
 }
 ```
 
-The provider writes every reason string. xAI's `readiness` is nil, so its behaviour, feature marks and missing-key handling are unchanged.
+The provider writes every reason string. xAI uses the default, always-ready readiness, so its behaviour, feature marks and missing-key handling are unchanged.
 
 Behaviour:
 

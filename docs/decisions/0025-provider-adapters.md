@@ -39,12 +39,13 @@ meant editing each of them.
   bar shows "Add your <name> API key in Settings".
 - Failures reach the app as `ProviderError` and are worded with the provider's name, as
   [0006](0006-api-key-and-error-surface.md) describes.
-- `Provider.readiness` is optional. A provider whose services can exist and still be
+- `Provider.readiness` defaults to `Readiness.always`. A provider whose services can exist and still be
   unusable on a given Mac supplies a `Readiness`: `check(ReadinessRequest)` answers a
   `ServiceReadiness` with a `ServiceState` per service (`ready`, `waiting(reason)` or
   `unavailable(reason)`, with nil cleanup when the provider has none), and `changes()` yields
-  when an earlier answer may be out of date. A provider with nil readiness, such as xAI, is
-  always usable once its credential is present.
+  when an earlier answer may be out of date. A provider that leaves the default, such as xAI,
+  is always usable once its credential is present. Operations gate on the credential in one
+  place, throwing the app-side `MissingCredential`, before they check readiness.
 
 ## Service responsibilities
 
@@ -96,8 +97,8 @@ meant editing each of them.
    task the adapter owns so it survives a provider switch, tolerates concurrent calls and
    reports an unsupported language. Its `changes` returns a fresh stream per call and yields
    whenever setup starts, finishes or fails, or the system's state changes. The provider
-   writes every reason the app shows. Leave it `nil` when the services are always usable
-   once the credential is present.
+   writes every reason the app shows. Leave the default, `Readiness.always`, when the
+   services are always usable once the credential is present.
 4. Add it to `Providers.all`.
 5. Add fixture tests for its adapters, and keep checks that call real services opt-in.
 
@@ -126,7 +127,7 @@ above; none names Apple.
 
 | Change | Reason | Shared contract |
 |---|---|---|
-| `Provider.swift`: `Provider.readiness`, `Readiness`, `ReadinessRequest`, `ServiceReadiness`, `ServiceState` | Apple's services can exist and still be unusable on a Mac. The credential was the only usability check. | Yes. Optional, so xAI declares none and is unchanged. |
+| `Provider.swift`: `Provider.readiness`, `Readiness`, `ReadinessRequest`, `ServiceReadiness`, `ServiceState` | Apple's services can exist and still be unusable on a Mac. The credential was the only usability check. | Yes. Defaults to `Readiness.always`, so xAI is unchanged. |
 | `DictationOperation.swift` and `Reader.swift`: check readiness before capture or speech, and the app-internal `NotReady` error | An operation must not start with a service that is not ready. Dictation checks before the credential, which is read after capture opens, so xAI startup is unchanged. | Yes, the operation side of readiness. |
 | `DictationController.swift`: wires each operation's check and makes one check at launch to start setup, ends a blocked operation in the waiting or error pill, words `NotReady` as the provider's reason | Settings shows setup progress while the Provider tab is open, on a change of provider, language or voice and on each `changes` yield. One check at launch starts setup. | Yes. A reader's raw failure is no longer shown before the worded one, which also applies to xAI. |
 | `Pill.swift`, `PillView.swift`, `PillDemo.swift`: `Pill.Phase.waiting` and its demo steps | A service still setting up is not an error, so it gets an amber pill. | Yes, generic UI for `.waiting`. |
