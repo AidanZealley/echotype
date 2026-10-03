@@ -239,6 +239,14 @@ Each step is usable before the next starts.
    The local provider's signed-app checks run through them.
 4. **Guided sessions**, including the voice audition and signed release check.
 5. **Catalogue and agent rule.** Convert the 0007 backlog.
+6. **Remove duplicated tests.** Review the existing tests against what the bench and
+   scenarios now cover, and delete those they make obsolete. The likeliest candidates
+   are the env-gated live tests in `Tests/EchoTypeCoreTests/Integration/`
+   (`AppleTranscriptionLiveTests`, `AppleCleanupLiveTests`, `AppleVoiceLiveTests`,
+   `LiveProtocolTests` and `RevisionPromptTests`), which feed real audio or text to
+   providers as the bench does. Keep a test when it guards behaviour the bench does not
+   check, or runs in `swift test` where the bench cannot. Record each kept overlap's
+   reason in the test's doc comment.
 
 ## Completion criteria
 
@@ -252,6 +260,8 @@ Each step is usable before the next starts.
 - Remaining human checks run as guided sessions that produce evidence files.
 - `AGENTS.md` carries the agent rule, and the 0007 items have scenarios or a recorded
   reason they need a human.
+- No existing test duplicates what the bench or a scenario covers, unless its doc
+  comment says why it stays.
 
 ## Verified on 2026-10-03
 
