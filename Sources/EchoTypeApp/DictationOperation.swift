@@ -57,22 +57,16 @@ import Observation
     var startCapture: @MainActor (String?) async throws -> AsyncThrowingStream<Data, any Error>
     var stopCapture: @MainActor () -> Void
     var releaseCapture: @MainActor () async -> Void
-    /// What the provider needs before a dictation starts.
-    var credential: Credential
+    /// The provider this dictation runs with.
+    var provider: Provider
     /// The provider's stored key, or nil.
     var key: @Sendable () async -> String?
-    var transcription: TranscriptionService
     var captureDestination: @MainActor () -> Destination?
     var insert: @MainActor (String, Destination?, Bool, @escaping @MainActor () -> Bool, @escaping @MainActor () -> Void) async -> Clipboard.InsertionResult
-    /// Nil when the provider has no cleanup, so dictation inserts the committed text unrevised.
-    var cleanup: CleanupService?
     var clock: any SessionClock
     var testClock: any SessionClock
     /// Times the final revision budget.
     var revisionClock: any SessionClock
-    /// The provider's readiness for this operation's settings. Nil when the provider declares
-    /// none, so its services are always usable.
-    var readiness: (@Sendable () async -> ServiceReadiness)? = nil
   }
 
   let settings: Settings
@@ -108,7 +102,7 @@ import Observation
     self.settings = settings
     self.isTest = isTest
     self.dependencies = dependencies
-    self.cleanup = dependencies.cleanup
+    self.cleanup = dependencies.provider.cleanup
     self.onPresentation = onPresentation
   }
 
@@ -187,7 +181,7 @@ import Observation
     try checkStartup()
     let key = await dependencies.key()
     try checkStartup()
-    guard dependencies.credential.isSatisfied(by: key) else { throw OperationError.noAPIKey }
+    guard dependencies.provider.credential.isSatisfied(by: key) else { throw OperationError.noAPIKey }
     let transcriber = try await startTranscriber(key: key)
     let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
@@ -204,8 +198,8 @@ import Observation
   /// dictation inserts unrevised text and the pill says so. Checked before capture opens, so a
   /// blocked operation opens nothing.
   private func checkReadiness() async throws {
-    guard let readiness = dependencies.readiness else { return }
-    let services = await readiness()
+    guard let readiness = dependencies.provider.readiness else { return }
+    let services = await readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
     try checkStartup()
     try services.transcription.requireReady()
     guard !isTest, let state = services.cleanup, state != .ready else { return }
@@ -218,9 +212,9 @@ import Observation
   /// Starting may suspend, so Escape or a capture failure during it must still close what it
   /// opened.
   private func startTranscriber(key: String?) async throws -> any LiveTranscriber {
-    let service = dependencies.transcription
-    let transcriber = try await service.start(
-      TranscriptionRequest(settings: settings, keytermLimit: service.keytermLimit, credential: key))
+    let provider = dependencies.provider
+    let transcriber = try await provider.transcription.start(
+      TranscriptionRequest(settings: settings, provider: provider, credential: key))
     do {
       try checkStartup()
     } catch {

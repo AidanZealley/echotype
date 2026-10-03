@@ -137,8 +137,9 @@ public struct Settings: Equatable, Sendable {
     }
   }
 
-  public func readingChoice(for service: VoiceService) -> Reading {
-    (reading[provider.rawValue] ?? Reading()).validated(for: service)
+  /// The stored choice for `provider`, validated against its voice service.
+  public func readingChoice(for provider: Provider) -> Reading {
+    (reading[provider.id.rawValue] ?? Reading()).validated(for: provider.voice)
   }
 
   /// Whether a dictation ending in a request like "reply with EchoType" is sent with Return.

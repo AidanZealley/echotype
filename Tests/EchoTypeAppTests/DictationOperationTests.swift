@@ -205,15 +205,28 @@ private struct Insertion: Equatable {
           Task { await points.pass(.captureStop); self.chunks.finish() }
         },
         releaseCapture: { points.record(.captureRelease) },
-        credential: credential,
+        provider: Provider(
+          id: "fixture", name: "Fixture", summary: "", credential: credential, languages: [.english],
+          transcription: TranscriptionService(keytermLimit: 100) { request in
+            await MainActor.run { self.requests.append(request) }
+            await points.pass(.transcriberStart)
+            return self.transcriber
+          },
+          voice: VoiceService(voices: [Voice(id: "default", name: "Default")], speedRange: 1...1, maximumCharacters: 1) { _ in
+            fatalError("Not spoken")
+          },
+          cleanup: cleanup ? CleanupService { request in
+            guard request.final else { return request.text }
+            await points.pass(.revision)
+            try Task.checkCancellation()
+            return request.text
+          } : nil,
+          readiness: readiness.map { answer in
+            Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
+          }),
         key: { [storedKey] in
           await points.pass(.key)
           return storedKey
-        },
-        transcription: TranscriptionService(keytermLimit: 100) { request in
-          await MainActor.run { self.requests.append(request) }
-          await points.pass(.transcriberStart)
-          return self.transcriber
         },
         captureDestination: { points.record(.destination); return self.focusedDestination },
         insert: { text, destination, sends, cancelled, begin in
@@ -226,14 +239,7 @@ private struct Insertion: Equatable {
           self.insertions.append(.init(text: text, sends: sends))
           return self.insertionResult
         },
-        cleanup: cleanup ? CleanupService { request in
-          guard request.final else { return request.text }
-          await points.pass(.revision)
-          try Task.checkCancellation()
-          return request.text
-        } : nil,
-        clock: clock, testClock: testClock, revisionClock: revisionClock,
-        readiness: readiness.map { answer in { @Sendable in answer } }),
+        clock: clock, testClock: testClock, revisionClock: revisionClock),
       onPresentation: { phase, _, _ in
         self.presented.append(phase)
         switch phase {

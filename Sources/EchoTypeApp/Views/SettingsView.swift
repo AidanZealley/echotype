@@ -181,7 +181,7 @@ private struct ReadAloudTab: View {
   private var provider: Provider { Providers[store.settings.provider] }
   private var reading: Binding<EchoTypeCore.Settings.Reading> {
     Binding(
-      get: { store.settings.readingChoice(for: provider.voice) },
+      get: { store.settings.readingChoice(for: provider) },
       set: { store.settings.reading[provider.id.rawValue] = $0 })
   }
 
@@ -241,7 +241,7 @@ private struct ProviderTab: View {
   }
 
   private var followed: Followed {
-    Followed(provider: provider.id, request: ReadinessRequest(settings: store.settings, voice: provider.voice))
+    Followed(provider: provider.id, request: ReadinessRequest(settings: store.settings, provider: provider))
   }
 
   var body: some View {

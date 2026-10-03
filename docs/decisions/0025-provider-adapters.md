@@ -21,10 +21,13 @@ meant editing each of them.
 - `Providers.all` in `Providers/Providers.swift` lists every provider in Settings order; the
   first is the default. `Providers[id]` gives the provider with that id, or the default for
   an unknown one. It lists xAI, the default, then Apple.
-- `Settings.provider` stores the selected id. The app reads the selected provider with
+- `Settings.provider` only chooses a provider. The app reads the selected provider with
   `Providers[settings.provider]` from the settings snapshot each dictation, Test or reading
-  takes, and wires that provider's services. Errors are worded with the provider the
-  operation ran with.
+  takes, and hands that `Provider` to the operation, which reads its credential, services
+  and readiness from it. Requests are built from the settings and that provider
+  (`TranscriptionRequest(settings:provider:credential:)`, `SpeechRequest`,
+  `ReadinessRequest`), so nothing below the choice looks the registry up again. Errors are
+  worded with the provider the operation ran with.
 - Each provider's adapters and description live in `Providers/<Name>/`. Outside that
   folder and the registry, code names no provider. The `XAI` and `Apple` namespaces are
   internal to `EchoTypeCore`, so the app can only reach them through `Provider.xAI` and
@@ -106,7 +109,7 @@ are needed.
 
 ## Consequences
 
-- Operation and reading tests drive fake services and a fake credential, so they cover a
+- Operation and reading tests drive a fake provider with fake services and a fake credential, so they cover a
   provider without a credential and a missing key without the Keychain. Error wording is
   tested with a provider defined in the test, not a second registered one.
 - Keychain behaviour is checked on the Mac rather than through a protocol around the

@@ -37,6 +37,19 @@ private final class AdmissionTranscriber: LiveTranscriber {
   var readers: [Reader] = []
   let readingEntered = AdmissionGate(), readingRelease = AdmissionGate()
   var controller: DictationController!
+  private var provider: Provider {
+    Provider(
+      id: "fixture", name: "Fixture", summary: "", credential: .apiKey(placeholder: ""),
+      languages: [.english],
+      transcription: TranscriptionService(keytermLimit: 100) { _ in self.transcriber },
+      voice: VoiceService(voices: [Voice(id: "default", name: "Default")], speedRange: 1...1, maximumCharacters: 1) { _ in
+        fatalError("No network expected")
+      },
+      cleanup: CleanupService { request in
+        guard request.final else { return request.text }
+        self.revisionEntered.open(); await self.revisionRelease.wait(); return request.text
+      })
+  }
   init() {
     (audio, chunks) = AsyncThrowingStream.makeStream()
     controller = DictationController(store: SettingsStore(),
@@ -44,10 +57,8 @@ private final class AdmissionTranscriber: LiveTranscriber {
       write: { _ in }, post: { _, _ in }, wait: { _ in })),
     makeReader: { source, id, settings, present, _ in
       let reader = Reader(source, id: id, settings: settings, dependencies: .init(
-        selection: { _ in nil }, cleanup: {}, credential: .apiKey(placeholder: ""), key: {
+        selection: { _ in nil }, cleanup: {}, provider: self.provider, key: {
           self.readingEntered.open(); await self.readingRelease.wait(); return nil
-        }, voice: VoiceService(voices: [], speedRange: 1...1, maximumCharacters: 1) { _ in
-          fatalError("No network expected")
         }, player: SpeechPlayer(onLevel: { _ in })), onPresentation: present)
       self.readers.append(reader); return reader
     }, focusedScreen: { nil }, showPanel: { _, _ in }, hidePanel: {},
@@ -61,16 +72,12 @@ private final class AdmissionTranscriber: LiveTranscriber {
           return self.audio
         },
         stopCapture: { self.chunks.finish() }, releaseCapture: {},
-        credential: .apiKey(placeholder: ""), key: { "fake" },
-        transcription: TranscriptionService(keytermLimit: 100) { _ in self.transcriber },
+        provider: self.provider, key: { "fake" },
         captureDestination: { nil },
         insert: { _, _, _, _, begin in
           self.insertions += 1
           begin(); self.insertionEntered.open(); await self.insertionRelease.wait()
           return .init(insertion: .attempted, sending: .notRequested)
-        }, cleanup: CleanupService { request in
-          guard request.final else { return request.text }
-          self.revisionEntered.open(); await self.revisionRelease.wait(); return request.text
         }, clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()), onPresentation: { _, settled, _ in
           if settled == "Hello" { self.wordsReceived.open() }
         })

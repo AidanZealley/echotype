@@ -10,15 +10,11 @@ import Observation
   struct Dependencies {
     var selection: (@escaping @MainActor () -> Bool) async -> String?
     var cleanup: () async -> Void
-    /// What the provider needs before a reading starts.
-    var credential: Credential
+    /// The provider this reading runs with.
+    var provider: Provider
     /// The provider's stored key, or nil.
     var key: () async -> String?
-    var voice: VoiceService
     var player: any ReadingPlayback
-    /// The provider's readiness for this reading's settings. Nil when the provider declares
-    /// none, so its voice is always usable.
-    var readiness: (() async -> ServiceReadiness)? = nil
   }
   private let source: Source
   private let settings: Settings
@@ -107,14 +103,15 @@ import Observation
     }
     let apiKey = await dependencies.key()
     try checkStopped()
-    guard dependencies.credential.isSatisfied(by: apiKey) else { throw Failure.noAPIKey }
-    if let readiness = dependencies.readiness {
-      let services = await readiness()
+    guard dependencies.provider.credential.isSatisfied(by: apiKey) else { throw Failure.noAPIKey }
+    let provider = dependencies.provider
+    if let readiness = provider.readiness {
+      let services = await readiness.check(ReadinessRequest(settings: settings, provider: provider))
       try checkStopped()
       try services.voice.requireReady()
     }
-    let voice = dependencies.voice
-    let stream = voice.speak(SpeechRequest(text: voice.capped(spoken), settings: settings, voice: voice, credential: apiKey))
+    let stream = provider.voice.speak(
+      SpeechRequest(text: provider.voice.capped(spoken), settings: settings, provider: provider, credential: apiKey))
     self.stream = stream
     // Each short chunk waits for playback capacity before the stream is pulled again.
     while let audio = try await stream.next() {

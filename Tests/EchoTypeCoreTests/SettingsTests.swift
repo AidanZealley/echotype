@@ -52,8 +52,8 @@ func missingFieldsDefault() {
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
   #expect(Settings(decoding: stored).provider == Providers.all[0].id)
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
-  #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0].voice).voice == "ara")
-  #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0].voice).speed == 1.0)
+  #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0]).voice == "ara")
+  #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0]).speed == 1.0)
   #expect(Settings(decoding: stored).sendReplyRequests)
 }
 

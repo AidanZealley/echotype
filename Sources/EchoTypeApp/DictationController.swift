@@ -91,9 +91,8 @@ import Observation
       return Reader(source, id: id, settings: settings, dependencies: .init(
         selection: { await clipboard.copySelection(cancelled: $0) },
         cleanup: { await clipboard.waitForCleanup() },
-        credential: provider.credential, key: { await Self.storedKey(for: provider) },
-        voice: provider.voice, player: SpeechPlayer(onLevel: level),
-        readiness: Self.readinessCheck(provider, settings)), onPresentation: present)
+        provider: provider, key: { await Self.storedKey(for: provider) },
+        player: SpeechPlayer(onLevel: level)), onPresentation: present)
     }, focusedScreen: { NSScreen.forFocusedWindow() }, showPanel: { pill, screen in
       if let screen { panel.show(pill, on: screen) }
     }, hidePanel: { panel.hide() })
@@ -134,19 +133,11 @@ import Observation
     }
     // Starts setup the provider needs, such as a speech model download, without waiting for the
     // first dictation. The answer is not kept; Settings and operations check for themselves.
-    if let check = Self.readinessCheck(Providers[store.settings.provider], store.settings) {
-      Task { _ = await check() }
+    let provider = Providers[store.settings.provider]
+    let request = ReadinessRequest(settings: store.settings, provider: provider)
+    if let readiness = provider.readiness {
+      Task { _ = await readiness.check(request) }
     }
-  }
-
-  /// The check an operation runs before it starts, or nil when the provider declares no
-  /// readiness.
-  nonisolated private static func readinessCheck(_ provider: Provider, _ settings: Settings)
-    -> (@Sendable () async -> ServiceReadiness)?
-  {
-    guard let readiness = provider.readiness else { return nil }
-    let request = ReadinessRequest(settings: settings, voice: provider.voice)
-    return { await readiness.check(request) }
   }
 
   /// Whether the selected provider has its credential.
@@ -294,15 +285,12 @@ import Observation
         startCapture: { try await audio.start(deviceUID: $0) },
         stopCapture: { audio.stop() },
         releaseCapture: { await audio.waitForCleanup() },
-        credential: provider.credential, key: { await Self.storedKey(for: provider) },
-        transcription: provider.transcription,
+        provider: provider, key: { await Self.storedKey(for: provider) },
         captureDestination: { DestinationFocus().capture() },
         insert: { [clipboard] text, destination, sends, cancelled, begin in
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
         },
-        cleanup: provider.cleanup,
-        clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock(),
-        readiness: Self.readinessCheck(provider, settings)),
+        clock: SystemClock(), testClock: SystemClock(), revisionClock: SystemClock()),
       onPresentation: { [weak self] presentation, settled, provisional in
         if presentation == .cancelled { self?.end(); return }
         if case .starting(let readiness) = presentation, !readiness.microphone { self?.showStarting() }

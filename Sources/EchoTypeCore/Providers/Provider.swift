@@ -122,10 +122,10 @@ public struct ReadinessRequest: Hashable, Sendable {
     self.voice = voice
   }
 
-  /// The request for the selected provider's dictation language and the stored voice.
-  public init(settings: Settings, voice: VoiceService) {
+  /// The request for the provider's dictation language and the stored voice.
+  public init(settings: Settings, provider: Provider) {
     self.init(
-      language: settings.language(for: Providers[settings.provider]), voice: settings.readingChoice(for: voice).voice)
+      language: settings.language(for: provider), voice: settings.readingChoice(for: provider).voice)
   }
 }
 
@@ -182,14 +182,14 @@ public struct TranscriptionRequest: Equatable, Sendable {
     self.credential = credential
   }
 
-  /// The request for one dictation. A saved `EchoType` in any case is dropped, since the
-  /// built-in term already leads the list.
-  public init(settings: Settings, keytermLimit: Int, credential: String?) {
+  /// The request for one dictation with `provider`, cut to its transcription `keytermLimit`. A
+  /// saved `EchoType` in any case is dropped, since the built-in term already leads the list.
+  public init(settings: Settings, provider: Provider, credential: String?) {
     let builtIn = "EchoType"
     let saved = settings.keyterms.filter { $0.caseInsensitiveCompare(builtIn) != .orderedSame }
     self.init(
-      language: settings.language(for: Providers[settings.provider]),
-      keyterms: Array(([builtIn] + saved).prefix(keytermLimit)),
+      language: settings.language(for: provider),
+      keyterms: Array(([builtIn] + saved).prefix(provider.transcription.keytermLimit)),
       credential: credential)
   }
 }
@@ -304,13 +304,13 @@ public struct SpeechRequest: Equatable, Sendable {
     self.credential = credential
   }
 
-  /// The request for one reading of already capped text, with the stored voice, the validated
-  /// speed and the dictation language.
-  public init(text: String, settings: Settings, voice: VoiceService, credential: String?) {
-    let choice = settings.readingChoice(for: voice)
+  /// The request for one reading of already capped text with `provider`, using the stored voice,
+  /// the validated speed and the dictation language.
+  public init(text: String, settings: Settings, provider: Provider, credential: String?) {
+    let choice = settings.readingChoice(for: provider)
     self.init(
       text: text, voice: choice.voice, speed: choice.speed,
-      language: settings.language(for: Providers[settings.provider]), credential: credential)
+      language: settings.language(for: provider), credential: credential)
   }
 }
 

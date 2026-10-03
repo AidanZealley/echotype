@@ -68,13 +68,20 @@ private final class FakeSpeechStream: SpeechStream {
       }, cleanup: {
         self.cleanup += 1; self.cleanupEntered.open()
         if self.suspendCleanup { await self.cleanupRelease.wait() }
-      }, credential: credential, key: {
+      }, provider: Provider(
+        id: "fixture", name: "Fixture", summary: "", credential: credential, languages: [.english],
+        transcription: TranscriptionService(keytermLimit: 1) { _ in fatalError("Not started") },
+        voice: VoiceService(voices: [Voice(id: "default", name: "Default"), Voice(id: "chosen", name: "Chosen")], speedRange: 0.5...2, maximumCharacters: 5) {
+          request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
+        },
+        cleanup: nil,
+        readiness: readiness.map { answer in
+          Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
+        }), key: {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return self.storedKey
-      }, voice: VoiceService(voices: [Voice(id: "default", name: "Default"), Voice(id: "chosen", name: "Chosen")], speedRange: 0.5...2, maximumCharacters: 5) {
-          request in MainActor.assumeIsolated { self.requests.append(request); return self.request }
-        }, player: playback.player, readiness: readiness.map { answer in { answer } }),
+      }, player: playback.player),
       onPresentation: onPresentation)
   }
 }

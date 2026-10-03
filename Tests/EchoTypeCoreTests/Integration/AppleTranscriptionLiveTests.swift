@@ -33,7 +33,7 @@ struct AppleTranscriptionLiveTests {
   @Test("The registered provider is ready for English with its default voice")
   func providerIsReady() async throws {
     let readiness = try #require(Provider.apple.readiness)
-    let request = ReadinessRequest(settings: Settings(provider: Provider.apple.id), voice: Provider.apple.voice)
+    let request = ReadinessRequest(settings: Settings(provider: Provider.apple.id), provider: .apple)
     #expect(await readiness.check(request) == ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready))
   }
 
@@ -102,7 +102,7 @@ struct AppleTranscriptionLiveTests {
 
   private func session(_ settings: Settings) async throws -> (SessionMachine, any LiveTranscriber) {
     let request = TranscriptionRequest(
-      settings: settings, keytermLimit: Apple.transcription.keytermLimit, credential: nil)
+      settings: settings, provider: .apple, credential: nil)
     let transcriber = try await Apple.transcription.start(request)
     return (SessionMachine(transcriber: transcriber, settings: settings, clock: SystemClock()), transcriber)
   }
