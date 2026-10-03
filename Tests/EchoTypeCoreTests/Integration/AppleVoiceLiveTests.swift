@@ -76,7 +76,9 @@ struct AppleVoiceLiveTests {
   @Test("A missing saved voice reads using a real installed English fallback")
   func missingVoiceReadsWithFallback() async throws {
     let saved = "echotype.test.missing-voice"
-    let fallback = try #require(Apple.Speech.resolve(saved, language: "en", among: Apple.Speech.installedVoices()))
+    let fallback = try #require(Apple.Speech.resolve(
+      saved, language: "en", among: Apple.Speech.installedVoices(),
+      systemDefault: Apple.Speech.systemDefaultVoice(for: "en")))
     #expect(fallback != saved)
     #expect(Apple.Speech.check(language: "en", voice: saved) == .ready)
     let stream = Apple.voice.speak(SpeechRequest(
@@ -90,6 +92,6 @@ struct AppleVoiceLiveTests {
   }
 
   private func reading(_ text: String) -> Apple.Speech.Stream {
-    Apple.Speech.Stream(text: text, voice: Apple.Speech.voices[0].id, speed: 1)
+    Apple.Speech.Stream(text: text, voice: Apple.Speech.zoeID, speed: 1)
   }
 }
