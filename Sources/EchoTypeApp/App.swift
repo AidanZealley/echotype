@@ -80,7 +80,7 @@ struct EchoTypeApp: App {
       return "Add your \(Providers[store.settings.provider].name) API key in Settings"
     }
     if let error = controller.lastError { return error }
-    if controller.hasCredential == nil { return "Checking API key…" }
+    if controller.hasCredential == nil { return "Starting" }
     return switch controller.state {
     case .idle: "Ready"
     case .starting: "Starting"
