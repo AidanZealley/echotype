@@ -1,7 +1,7 @@
 # Test harness
 
-Status: draft, 2026-10-03. Built alongside the [local models spike](../spikes/local-models/spec.md),
-which is its first consumer. Implementation is not authorised by this document alone.
+Status: approved, 2026-10-03. Built alongside the [local models spike](../spikes/local-models/spec.md),
+which is its first consumer.
 
 ## Goal
 
@@ -62,11 +62,15 @@ words; the bench rejects a manifest where one is not. Scoring derives the delete
 from the expected text rather than storing them separately.
 
 Audio lives in `~/Library/Application Support/EchoTypeBench/audio/<id>.wav`, 16 kHz mono
-Int16. Synthetic dictation is generated from a scripted sample with `say` and
+Int16. Synthetic dictation is generated from a scripted sample's `script` with `say` and
 `afconvert`, which the Apple live tests already use; Apple's transcriber produced a
-complete transcript from such a file on 2026-10-03. Synthetic audio is valid for
-lifecycle and end-to-end runs that only need speech to arrive, and lets the bench be
-built and tested before any recording exists. It is never used for accuracy results.
+complete transcript from such a file on 2026-10-03. It is written to
+`audio/synthetic/<id>.wav`, beside rather than in place of the recording, so one manifest
+entry serves both and a synthetic clip can never stand in for a recording. Commands read
+it only when given `--synthetic`. Synthetic audio is valid for lifecycle and end-to-end
+runs that only need speech to arrive, and lets the bench be built and tested before any
+recording exists. It is never used for accuracy results: runs record whether audio was
+synthetic, and scoring skips those runs.
 
 Reference transcripts start as drafts. The agent drafts each from provider outputs and
 their disagreements; Aidan corrects the draft. A sample counts as reviewed only after
@@ -87,7 +91,7 @@ the Mac, OS, toolchain, source revision, provider and candidate selection.
 | --- | --- | --- |
 | `corpus status` | Lists samples missing audio or a reviewed reference. | What to ask Aidan for. |
 | `record <id>` | Shows the prompt, records until Return and saves the WAV. The first recording asks for the terminal's microphone permission. | The recording. |
-| `synthesize` | Generates synthetic WAVs for scripted dictation samples. | Synthetic recordings. |
+| `synthesize` | Generates synthetic WAVs for scripted dictation samples into `audio/synthetic/`. | Synthetic recordings. |
 | `transcribe` | Feeds 100 ms chunks through a `LiveTranscriber`, at real-time pace for latency or `--fast` for accuracy. | Every event with its time, final text, first provisional and committed text, stop-to-final time, committed text that changed. |
 | `cleanup` | Replays each sample's committed-text timeline through the real `Reviser` with `submit`, then `finish`. | `DictationTrace` revisions, stop-to-insert time, share of time spent revising, fallbacks. |
 | `speak` | Pulls a `SpeechStream` as a real-time player would, with a pause partway. | First chunk time, gaps, real-time factor, audio generated while paused, the WAV. |
@@ -222,10 +226,15 @@ and the signed-install Apple checks, are the first scenario backlog.
 
 Each step is usable before the next starts.
 
-1. **Corpus and bench against xAI and Apple.** `corpus status`, `record`, `transcribe`,
-   `cleanup`, `speak` and `report`. Record the corpus and review references. This gives
-   provider baselines.
-2. **Local candidates in the bench.** The local models spike runs its evaluation here.
+1. **Corpus and bench against Apple.** The `EchoTypeTestSupport` target, then the
+   bench skeleton with manifest validation, `run.json` and `corpus status`, then
+   `record`, `synthesize`, `transcribe`, `cleanup` and `speak`. Apple proves the bench
+   before any local adapter depends on it, and synthetic audio lets it run before any
+   recording exists. Record the corpus and review references alongside.
+2. **Local candidates in the bench.** The local provider is developed against the bench,
+   starting with cleanup, which needs no recordings. The local models spike runs its
+   evaluation here. `report`, the listening page and the paid xAI baselines follow
+   once there are local results to compare.
 3. **App seams, driver and about five scenarios** for the checks requested most often.
    The local provider's signed-app checks run through them.
 4. **Guided sessions**, including the voice audition and signed release check.

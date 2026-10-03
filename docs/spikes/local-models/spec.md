@@ -1,7 +1,6 @@
 # Local model provider spike
 
-Status: draft, 2026-10-03. This document proposes future spike work. The initial
-authorised scope is the spike branch and these documents.
+Status: approved, 2026-10-03.
 
 ## Goal
 
@@ -328,7 +327,7 @@ startup and battery cost remain open until the measurements exist.
 
 Add a results document here when experiments run. Include the winning model choices,
 download and runtime costs, integration changes, remaining blockers and a proposed
-production scope. Keep research and this draft in sync when a candidate changes.
+production scope. Keep research and this spec in sync when a candidate changes.
 
 Before proposing production work, remove superseded experiments, unused dependencies
 and losing candidate implementations. Remove LocalCandidates.swift's comparison
