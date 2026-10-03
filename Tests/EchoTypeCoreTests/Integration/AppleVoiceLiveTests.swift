@@ -33,7 +33,7 @@ struct AppleVoiceLiveTests {
       #expect(chunk.samples.allSatisfy { $0.isFinite && (-1...1).contains($0) })
       samples += chunk.samples.count
     }
-    // The research measured about 24 s for this paragraph; a reading cut at its first
+    // Measured at about 24 s for this paragraph; a reading cut at its first
     // utterance would be about half that.
     let seconds = Double(samples) / Double(try #require(sampleRate))
     #expect(seconds > 18 && seconds < 35, "\(seconds) s")

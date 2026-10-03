@@ -12,8 +12,22 @@ import Testing
 ///   swift test --disable-xctest --filter Apple
 /// ```
 ///
-/// The recording check wants a 16-bit PCM WAV of speech with pauses of a few seconds, such as
-/// the research's synthetic fixture. A missing speech model for English is installed first.
+/// The recording check wants a 16-bit PCM WAV of speech with pauses of a few seconds. A missing
+/// speech model for English is installed first. This makes the synthetic fixture, whose path
+/// turns on the pause and tail checks; it spells EchoType, Zustand and TanStack wrong even
+/// with them as keyterms:
+///
+/// ```bash
+/// dir=/tmp/echotype-s1-synthetic; mkdir -p $dir
+/// say -o $dir/first.aiff 'EchoType lets me dictate notes. I use Zustand and TanStack in my projects.'
+/// say -o $dir/last.aiff 'The final words must survive when I stop recording.'
+/// for name in first last; do afconvert -f WAVE -d LEI16 -r 16000 $dir/$name.aiff $dir/$name.wav; done
+/// python3 -c "import wave
+/// out = wave.open('$dir/recording.wav', 'wb'); out.setparams((1, 2, 16000, 0, 'NONE', ''))
+/// for name in ['first', 'last']:
+///   src = wave.open(f'$dir/{name}.wav'); out.writeframes(src.readframes(src.getnframes()))
+///   out.writeframes(bytes(3 * 16000 * 2))"
+/// ```
 @Suite(
   .serialized,
   .enabled(if: ProcessInfo.processInfo.environment["ECHOTYPE_APPLE_LIVE"] == "1", "Set ECHOTYPE_APPLE_LIVE=1."))
@@ -125,7 +139,7 @@ struct AppleTranscriptionLiveTests {
       Issue.record("The recording produced no insertable text: \(outcome)")
       return
     }
-    // The research fixture has three-second pauses and a tail that resolves only after finish.
+    // The synthetic fixture has three-second pauses and a tail that resolves only after finish.
     if path.contains("echotype-s1-synthetic") {
       #expect(text.lowercased().contains("when i stop recording"))
       let paused = try #require(states.firstIndex(of: .paused), "The recording should pause the session.")

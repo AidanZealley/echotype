@@ -49,5 +49,4 @@ Status: open. Remove each item as it is resolved.
   microphone, and whether Speech asks at all), downloading a missing speech model with
   Settings and the waiting pill following it, keyterm spellings in real jargon dictation,
   a sentence over 250 characters read aloud, and cancelling while a model loads. A
-  synthetic recording spelled EchoType, Zustand and TanStack wrong even as keyterms; see
-  the [research](../research/apple-on-device-provider.md).
+  synthetic recording spelled EchoType, Zustand and TanStack wrong even as keyterms.

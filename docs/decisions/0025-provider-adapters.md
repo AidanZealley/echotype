@@ -115,9 +115,7 @@ service is present and ready; no capability flags or cleanup toggle are needed.
 
 Apple runs every service on the Mac with no key or account: `SpeechTranscriber` for live
 transcription, `AVSpeechSynthesizer` for read aloud and Foundation Models for cleanup. It is
-a free fallback; lower quality than xAI is acceptable, and xAI stays the default. The
-[research](../research/apple-on-device-provider.md) holds the measurements behind these
-choices.
+a free fallback; lower quality than xAI is acceptable, and xAI stays the default.
 
 - **Language.** Apple lists English only. Bare `en` resolves to `en-GB` in every service,
   since the frameworks' own bare-tag matching varies between processes.
@@ -171,4 +169,4 @@ above; none names Apple.
 | `Settings.swift` and `SettingsView.swift`: `Provider.languages`, replacing the free-text Language field | Free text cannot be resolved reliably by every provider; each provider lists its languages and its adapter resolves a known bare tag. | Yes. The stored tag is kept and resolved per provider. |
 | Tests: readiness in `DictationOperationTests`, `ReadingOperationTests`, `ProviderWordingTests`, `ProviderReadinessTests`; the language list in `SettingsTests` and `SettingsValidationTests`; Apple fixture tests in `Apple*Tests.swift` and opt-in live checks in `Integration/Apple*LiveTests.swift` | Cover the shared changes with fake services, and Apple's adapters with fixtures. Live checks run only with `ECHOTYPE_APPLE_LIVE=1`. | Shared tests cover the contract; Apple tests are the provider's own. |
 | `Tests/EchoTypeCoreTests/Integration/AppleProviderSpike/` deleted | The production adapters and their tests replaced the experiments; git history keeps them. | No. |
-| `README.md`, this record, [0007](0007-known-gaps.md) and the [research](../research/apple-on-device-provider.md) | Document Apple, readiness and the language list, and record the checks still open. The specification and implementation plan were retired into this record. | No. |
+| `README.md`, this record and [0007](0007-known-gaps.md) | Document Apple, readiness and the language list, and record the checks still open. The specification, research and implementation plan were retired into this record. | No. |

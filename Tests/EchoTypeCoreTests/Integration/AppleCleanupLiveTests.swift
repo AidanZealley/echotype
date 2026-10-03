@@ -45,7 +45,7 @@ struct AppleCleanupLiveTests {
     let text = await reviser.finish(committed: oversized)
     let seconds = (ContinuousClock.now - started) / .seconds(1)
     #expect(text == oversized)
-    // The research measured 3.02 to 3.21 s; cancellation may land just after the budget.
+    // Measured at 3.02 to 3.21 s; cancellation may land just after the budget.
     #expect(seconds < Reviser.finalTimeout + 1, "\(seconds) s")
   }
 }
