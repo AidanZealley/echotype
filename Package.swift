@@ -17,6 +17,9 @@ let package = Package(
     // Parakeet Unified, so it is pinned by the commit research verified against Swift 6.4.
     .package(
       url: "https://github.com/FluidInference/FluidAudio", revision: "0b1f46289fe27d95b5e66ad8be46e64f5ee02ae7"),
+    // On-device transcription for Whisper. WhisperKit vendors its own tokenizer and Hub code, so
+    // it does not constrain the swift-transformers pin above.
+    .package(url: "https://github.com/argmaxinc/argmax-oss-swift", exact: "1.1.0"),
   ],
   targets: [
     // Session and protocol code without AppKit or TCC. Tests use an injected clock and
@@ -29,6 +32,7 @@ let package = Package(
         .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
         .product(name: "Tokenizers", package: "swift-transformers"),
         .product(name: "FluidAudio", package: "FluidAudio"),
+        .product(name: "WhisperKit", package: "argmax-oss-swift"),
       ]),
     // WAV reading and resampling for the bench and the live tests. Depended on only by those,
     // never by EchoTypeCore or EchoTypeApp.
