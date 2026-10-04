@@ -13,6 +13,10 @@ let package = Package(
     .package(
       url: "https://github.com/ml-explore/mlx-swift-lm", revision: "5e46681b2adcef2db158e7b949aeae3896778e23"),
     .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
+    // On-device transcription for the experimental local provider. The newest tag predates
+    // Parakeet Unified, so it is pinned by the commit research verified against Swift 6.4.
+    .package(
+      url: "https://github.com/FluidInference/FluidAudio", revision: "0b1f46289fe27d95b5e66ad8be46e64f5ee02ae7"),
   ],
   targets: [
     // Session and protocol code without AppKit or TCC. Tests use an injected clock and
@@ -24,6 +28,7 @@ let package = Package(
         .product(name: "MLXLLM", package: "mlx-swift-lm"),
         .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
         .product(name: "Tokenizers", package: "swift-transformers"),
+        .product(name: "FluidAudio", package: "FluidAudio"),
       ]),
     // WAV reading and resampling for the bench and the live tests. Depended on only by those,
     // never by EchoTypeCore or EchoTypeApp.

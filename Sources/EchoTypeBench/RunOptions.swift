@@ -1,13 +1,19 @@
 import EchoTypeCore
 import Foundation
 
+/// The local services the bench measures, each by its own command.
+enum LocalService: String {
+  case transcription
+  case cleanup
+}
+
 /// What `transcribe` and `cleanup` share: the options they take, and getting a provider's
 /// credential and readiness. Parsed by hand like the rest of the bench.
 struct RunOptions {
   let arguments: [String]
   var providerID: String?
-  /// Cleanup is the only local service so far; `--candidate cleanup=<name>` chooses its model.
-  var localSelection = LocalSelection.build
+  /// `--candidate <service>=<name>`: the local candidate to measure, where the build's is not.
+  var candidates: [LocalService: String] = [:]
   var fast = false
   /// How many times the selected samples run in one process. Repeats make warm distributions.
   var repeats = 1
@@ -24,10 +30,11 @@ struct RunOptions {
         guard let value = rest.popFirst() else { throw BenchError("--provider needs a value") }
         providerID = value
       case "--candidate":
-        guard let value = rest.popFirst(), value.hasPrefix("cleanup=") else {
-          throw BenchError("--candidate needs cleanup=<name>")
+        let parts = rest.popFirst()?.split(separator: "=", maxSplits: 1).map(String.init) ?? []
+        guard parts.count == 2, let service = LocalService(rawValue: parts[0]) else {
+          throw BenchError("--candidate needs transcription=<name> or cleanup=<name>")
         }
-        localSelection.cleanup = String(value.dropFirst("cleanup=".count))
+        candidates[service] = parts[1]
       case "--fast": fast = true
       case "--repeat":
         guard let value = rest.popFirst(), let count = Int(value), count >= 1 else {
@@ -42,18 +49,33 @@ struct RunOptions {
   }
 
   /// The provider for `--provider`. The local provider is not in `Providers.all`, so it is
-  /// built here, from the build's selection or `--candidate`.
-  func provider() throws -> Provider {
-    if providerID == Provider.local.id.rawValue { return try .local(localSelection) }
+  /// built here. Its candidates are those of `service`, the one this command measures, so only
+  /// that service's models are prepared and its memory and preparation figures are its own.
+  func provider(measuring service: LocalService) throws -> Provider {
+    if providerID == Provider.local.id.rawValue { return try .local(localSelection(measuring: service)) }
     let known = (Providers.all + [.local]).map(\.id.rawValue)
     guard let providerID, let provider = Providers.all.first(where: { $0.id.rawValue == providerID })
     else { throw BenchError("--provider must be one of: \(known.joined(separator: ", "))") }
     return provider
   }
 
-  /// What `run.json` records: the local provider's candidates, and nothing for the others.
-  var recordedSelection: LocalSelection? {
-    providerID == Provider.local.id.rawValue ? localSelection : nil
+  /// What `run.json` records: the local provider's candidate, and nothing for the others.
+  func recordedSelection(measuring service: LocalService) throws -> LocalSelection? {
+    providerID == Provider.local.id.rawValue ? try localSelection(measuring: service) : nil
+  }
+
+  /// The `--candidate` for `service`, or the build's. A candidate for another service is an
+  /// error rather than ignored, since the run would not use it.
+  private func localSelection(measuring service: LocalService) throws -> LocalSelection {
+    if let other = candidates.keys.first(where: { $0 != service }) {
+      throw BenchError("--candidate \(other.rawValue)=<name> does not apply to this command.")
+    }
+    switch service {
+    case .transcription:
+      return LocalSelection(transcription: candidates[service] ?? LocalSelection.build.transcription)
+    case .cleanup:
+      return LocalSelection(cleanup: candidates[service] ?? LocalSelection.build.cleanup)
+    }
   }
 }
 

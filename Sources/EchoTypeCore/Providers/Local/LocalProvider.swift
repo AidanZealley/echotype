@@ -1,28 +1,53 @@
 import Foundation
 
-/// The experimental local provider: models that run on this Mac with no key or account. Only
-/// cleanup exists so far; transcription and read aloud arrive in later slices, so the provider
-/// stays out of `Providers.all` until they do.
+/// The experimental local provider: models that run on this Mac with no key or account.
+/// Transcription and cleanup exist so far; read aloud arrives in a later slice. A service with no
+/// candidate is neither prepared nor offered.
 enum LocalProvider {
-  static func make(cleanup candidate: CleanupCandidate) -> Provider {
-    let cleanup = LocalCleanup(candidate, store: LocalCandidates.store)
+  static func make(transcription: TranscriptionCandidate?, cleanup: CleanupCandidate?) -> Provider {
+    let store = LocalCandidates.store
+    let transcriber = transcription.map {
+      LocalModel(
+        manifests: $0.manifests, loadingMessage: "Loading the transcription model", store: store,
+        load: $0.load)
+    }
+    let reviser = cleanup.map { candidate in
+      LocalModel(
+        manifests: [candidate.manifest], loadingMessage: "Loading the cleanup model", store: store
+      ) { directories in
+        try await CleanupModel.load(from: directories[0], templateContext: candidate.templateContext)
+      }
+    }
     return Provider(
       id: "local", name: "Local", summary: "Experimental. Runs models on this Mac.",
       credential: .none, languages: [.english],
-      transcription: transcription, voice: voice, cleanup: cleanup.service,
+      transcription: TranscriptionService(keytermLimit: transcription?.keytermLimit ?? 1) { request in
+        guard let start = transcriber?.loaded else { throw ProviderError.unavailable }
+        return try await start(request)
+      },
+      voice: voice,
+      cleanup: reviser.map { reviser in
+        CleanupService { request in
+          guard let model = reviser.loaded else { throw ProviderError.unavailable }
+          return try await model.revise(request)
+        }
+      },
       readiness: Readiness(
         check: { _ in
           ServiceReadiness(
-            transcription: .unavailable(laterSlice), voice: .unavailable(laterSlice),
-            cleanup: cleanup.check())
+            transcription: transcriber?.check() ?? .unavailable("No transcription model is selected."),
+            voice: .unavailable("Local models for this arrive in a later release."),
+            cleanup: reviser?.check())
         },
-        changes: { cleanup.changes() }))
+        changes: { merged([transcriber?.changes(), reviser?.changes()].compactMap { $0 }) }))
   }
 
-  private static let laterSlice = "Local models for this arrive in a later release."
-
-  private static let transcription = TranscriptionService(keytermLimit: 1) { _ in
-    throw ProviderError.unavailable
+  /// One stream that yields when any of `streams` does.
+  private static func merged(_ streams: [AsyncStream<Void>]) -> AsyncStream<Void> {
+    let (merged, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
+    let followers = streams.map { stream in Task { for await _ in stream { continuation.yield() } } }
+    continuation.onTermination = { _ in followers.forEach { $0.cancel() } }
+    return merged
   }
 
   private static let voice = VoiceService(

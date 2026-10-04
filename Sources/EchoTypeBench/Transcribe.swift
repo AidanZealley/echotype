@@ -9,7 +9,7 @@ import Foundation
 /// a transcriber starts. Samples then run one at a time; a failing sample is recorded and the
 /// run goes on.
 func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
-  let provider = try options.provider()
+  let provider = try options.provider(measuring: .transcription)
   let credential = try credential(for: provider)
   let samples = try transcriptionTargets(options, in: manifest)
   let request = TranscriptionRequest(
@@ -21,7 +21,8 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
 
   let directory = try RunInfo.begin(
     command: "transcribe", arguments: options.arguments, provider: provider.id.rawValue,
-    candidates: options.recordedSelection, fast: options.fast, synthetic: options.synthetic)
+    candidates: try options.recordedSelection(measuring: .transcription), fast: options.fast,
+    synthetic: options.synthetic)
   try writeJSON(preparation, to: directory.appending(path: "preparation.json"))
   let log = directory.appending(path: "transcribe.jsonl")
   FileManager.default.createFile(atPath: log.path, contents: nil)

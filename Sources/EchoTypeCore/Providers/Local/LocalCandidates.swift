@@ -2,11 +2,33 @@ import Foundation
 
 /// The candidates one build of the local provider uses, by name. This is the spike's only
 /// selection point: change `build` and rebuild to try another combination. The bench can
-/// override it per run with `--candidate`.
+/// override it per run with `--candidate`. A nil field means the provider neither prepares nor
+/// offers that service.
 public struct LocalSelection: Codable, Equatable, Sendable {
-  public var cleanup: String
+  public var transcription: String?
+  public var cleanup: String?
 
-  public static let build = LocalSelection(cleanup: "qwen3-4b-2507")
+  public init(transcription: String? = nil, cleanup: String? = nil) {
+    self.transcription = transcription
+    self.cleanup = cleanup
+  }
+
+  public static let build = LocalSelection(transcription: "parakeet-unified", cleanup: "qwen3-4b-2507")
+}
+
+/// A transcription model: the pinned files it loads from and the runtime that loads them. A new
+/// runtime adds a candidate here, with its manifests and a loader.
+struct TranscriptionCandidate: Sendable {
+  /// Opens one session on the loaded models.
+  typealias Start = @Sendable (TranscriptionRequest) async throws -> any LiveTranscriber
+
+  let name: String
+  /// Every model the candidate needs, downloaded together and passed to `load` in this order.
+  let manifests: [ModelManifest]
+  /// What the model's keyterm boosting supports.
+  let keytermLimit: Int
+  /// Loads and warms the models from their installed directories.
+  let load: @Sendable ([URL]) async throws -> Start
 }
 
 /// A cleanup model: the pinned files MLX Swift LM loads it from, and how its chat template is
@@ -19,6 +41,33 @@ struct CleanupCandidate: Sendable {
 }
 
 enum LocalCandidates {
+  /// Parakeet Unified EN 0.6B, 640 ms, without keyterm boosting, so its limit is the built-in term
+  /// alone. Text commits when the voice activity model ends an utterance.
+  static let parakeetUnified = TranscriptionCandidate(
+    name: "parakeet-unified",
+    manifests: [ParakeetManifests.unified, ParakeetManifests.voiceActivity], keytermLimit: 1
+  ) { directories in
+    try await ParakeetModel.load(
+      unified: directories[0], voiceActivity: directories[1], keywordSpotting: nil
+    ).start
+  }
+
+  /// The same model with the CTC spotting model rescoring each segment against the request's
+  /// keyterms, and text committed only once rescored. FluidAudio sets no limit: its rescorer
+  /// tightens its thresholds above 10 terms and again above 100 and scans the terms linearly,
+  /// so 100 is the most that keeps the tuned thresholds and matches what Apple and xAI accept.
+  static let parakeetUnifiedKeyterms = TranscriptionCandidate(
+    name: "parakeet-unified-keyterms",
+    manifests: [ParakeetManifests.unified, ParakeetManifests.voiceActivity, ParakeetManifests.keywordSpotting],
+    keytermLimit: 100
+  ) { directories in
+    try await ParakeetModel.load(
+      unified: directories[0], voiceActivity: directories[1], keywordSpotting: directories[2]
+    ).start
+  }
+
+  static let transcription = [parakeetUnified, parakeetUnifiedKeyterms]
+
   /// Qwen3-4B-Instruct-2507 is nonthinking by design, so its template needs no flag. Apache 2.0:
   /// the conversion's card and the upstream repository both say so, and upstream ships a LICENSE.
   static let qwen3 = CleanupCandidate(
@@ -95,16 +144,24 @@ private struct UnknownCandidate: LocalizedError {
 
 extension Provider {
   /// The experimental local provider with the build's candidates. Not in `Providers.all` until
-  /// it can transcribe and read aloud.
+  /// the app lists it.
   public static let local = try! local(.build)  // The build's names are candidates.
 
   /// The local provider with `selection`'s candidates, which only the bench uses. Throws when a
   /// name is not a candidate, listing those that are.
   public static func local(_ selection: LocalSelection) throws -> Provider {
-    guard let cleanup = LocalCandidates.cleanup.first(where: { $0.name == selection.cleanup }) else {
-      throw UnknownCandidate(
-        service: "cleanup", name: selection.cleanup, known: LocalCandidates.cleanup.map(\.name))
+    func find<Candidate>(
+      _ service: String, _ name: String?, in candidates: [Candidate], named: KeyPath<Candidate, String>
+    ) throws -> Candidate? {
+      guard let name else { return nil }
+      guard let candidate = candidates.first(where: { $0[keyPath: named] == name }) else {
+        throw UnknownCandidate(service: service, name: name, known: candidates.map { $0[keyPath: named] })
+      }
+      return candidate
     }
-    return LocalProvider.make(cleanup: cleanup)
+    return LocalProvider.make(
+      transcription: try find(
+        "transcription", selection.transcription, in: LocalCandidates.transcription, named: \.name),
+      cleanup: try find("cleanup", selection.cleanup, in: LocalCandidates.cleanup, named: \.name))
   }
 }

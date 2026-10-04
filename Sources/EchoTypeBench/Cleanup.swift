@@ -8,7 +8,7 @@ import Foundation
 /// Samples then run one at a time, each with a fresh `Reviser`.
 func cleanup(_ options: RunOptions, in manifest: Manifest) async throws {
   guard !options.synthetic else { throw BenchError("--synthetic only applies to transcribe") }
-  let provider = try options.provider()
+  let provider = try options.provider(measuring: .cleanup)
   guard let service = provider.cleanup else { throw BenchError("\(provider.name) has no cleanup.") }
   let credential = try credential(for: provider)
   let samples = try cleanupTargets(options, in: manifest)
@@ -18,7 +18,7 @@ func cleanup(_ options: RunOptions, in manifest: Manifest) async throws {
 
   let directory = try RunInfo.begin(
     command: "cleanup", arguments: options.arguments, provider: provider.id.rawValue,
-    candidates: options.recordedSelection, fast: options.fast, synthetic: false)
+    candidates: try options.recordedSelection(measuring: .cleanup), fast: options.fast, synthetic: false)
   try writeJSON(preparation, to: directory.appending(path: "preparation.json"))
   let log = directory.appending(path: "cleanup.jsonl")
   FileManager.default.createFile(atPath: log.path, contents: nil)
