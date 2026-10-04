@@ -15,7 +15,7 @@ Status: approved; implementation in progress.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Parakeet Unified transcription](01-parakeet-unified.md) | Slice 1 | Accepted |
-| 2 | [Whisper Turbo transcription](02-whisper-turbo.md) | 1 | Not started |
+| 2 | [Whisper Turbo transcription](02-whisper-turbo.md) | 1 | Accepted |
 | 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Not started |
 | 4 | [Local provider in the app](04-app-provider.md) | 3 | Not started |
 | 5 | [Transcription evaluation and results](05-transcription-evaluation.md) | 4 | Not started |
@@ -131,6 +131,8 @@ Carried from slice 1:
   scope runtime claims to the sizes actually measured; derive "warm" figures with the cold request
   excluded, as `report` does.
 
+- Runtime downloader switches may leave tokenizer Hub fallback enabled. Load the pinned local tokenizer explicitly and propagate local errors, so failed preparation cannot fetch outside the store.
+
 ## Decision and drift log
 
 | Date | Decision or drift | Reason | Approved by | Affected workstreams |
@@ -146,3 +148,4 @@ Carried from slice 1:
 | 2026-10-04 | Keyterm boosting uses the public `VocabularyBoostingSession.rescore` on the 15 s cadence with a local commit rule, not FluidAudio's built-in hook. Utterance boundaries and `.speech` use `VadManager` defaults (unboosted text commits only after about a 1 s pause). `utterance` is unused. `keytermLimit` is 1 (`parakeet-unified`) and 100 (`parakeet-unified-keyterms`). | FluidAudio's hook cannot say what is rescored; the spec's commit rule needs it. Details in the workstream 1 handoff. | Lead (workstream 1) | 2, 3, 5 |
 | 2026-10-04 | The Unified conversion card says CC-BY-4.0; the manifest records the NVIDIA Open Model License of the upstream `nvidia/parakeet-unified-en-0.6b`. Unresolved, not a stop. | The packet says to record a conflict, not stop. | Lead (workstream 1) | 5 |
 | 2026-10-04 | Workstream 1 edited the bench's `main.swift` usage text, which the plan assigns to workstream 3. Local slice's `LocalCleanup` is now `LocalModel`. | The usage text would otherwise document only `--candidate cleanup=`. | Lead (workstream 1) | 2, 3 |
+| 2026-10-04 | Whisper uses one-second decode cadence, agreement or pause commitment, a 28-second unsettled-audio bound, Silero speech evidence and a 64-token keyterm prompt with limit 12. A local tokenizer adapter prevents WhisperKit's Hub fallback. | The public wrapper initializer is internal in pinned WhisperKit 1.1.0; local failures must propagate. Final paced and offline runs pass without contract violations. No specification drift. Speech events wait for batch inference; observe pause behaviour in the app check. | Lead (workstream 2) | 3, 4, 5 |

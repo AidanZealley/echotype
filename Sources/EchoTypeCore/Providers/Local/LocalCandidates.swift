@@ -66,7 +66,17 @@ enum LocalCandidates {
     ).start
   }
 
-  static let transcription = [parakeetUnified, parakeetUnifiedKeyterms]
+  /// Whisper large-v3-turbo, 626 MB Core ML, decoding windows of audio again as they grow.
+  /// Keyterms go in as Whisper's prompt, which fits about a dozen.
+  static let whisperTurbo = TranscriptionCandidate(
+    name: "whisper-turbo",
+    manifests: [WhisperManifests.turbo, WhisperManifests.tokenizer, ParakeetManifests.voiceActivity],
+    keytermLimit: 12
+  ) { directories in
+    try await WhisperModel.load(models: directories[0], tokenizer: directories[1], voiceActivity: directories[2]).start
+  }
+
+  static let transcription = [parakeetUnified, parakeetUnifiedKeyterms, whisperTurbo]
 
   /// Qwen3-4B-Instruct-2507 is nonthinking by design, so its template needs no flag. Apache 2.0:
   /// the conversion's card and the upstream repository both say so, and upstream ships a LICENSE.
