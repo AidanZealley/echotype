@@ -4,8 +4,8 @@ import Foundation
 let usage = """
   usage: EchoTypeBench corpus status [--manifest <path>]
          EchoTypeBench record [<id>] [--manifest <path>]
-         EchoTypeBench transcribe --provider apple|xai|local [--fast] [--synthetic] [<id>...] [--manifest <path>]
-         EchoTypeBench cleanup --provider apple|xai|local [--candidate cleanup=<name>] [--fast] [<id>...] [--manifest <path>]
+         EchoTypeBench transcribe --provider apple|xai|local [--fast] [--repeat <n>] [--synthetic] [<id>...] [--manifest <path>]
+         EchoTypeBench cleanup --provider apple|xai|local [--candidate cleanup=<name>] [--fast] [--repeat <n>] [<id>...] [--manifest <path>]
          EchoTypeBench report <run-id-or-path>... [--manifest <path>]
   record walks through the dictation samples still missing a recording, or redoes <id>.
   transcribe feeds each dictation sample's audio (all with audio, or the ids) through the provider's
@@ -13,6 +13,9 @@ let usage = """
   under ~/Library/Application Support/EchoTypeBench/runs/. --synthetic uses generated audio.
   cleanup replays each cleanup sample's committed text (all, or the ids) through the real Reviser at
   real-time pace, or without waiting with --fast, into a run directory like transcribe's.
+  --repeat <n> runs the selected samples n times in one process; the first request is reported as
+  cold and the rest as warm. Both commands also record how long the provider took to become ready
+  and sample the process's memory, the thermal state and the memory pressure.
   xAI reads its key from XAI_API_KEY. The local provider downloads its pinned models on first use;
   --candidate cleanup=qwen3-4b-2507|smollm3-3b chooses its cleanup model (default qwen3-4b-2507).
   report scores transcribe runs (ids under runs/, or paths) against the reviewed references, and cleanup

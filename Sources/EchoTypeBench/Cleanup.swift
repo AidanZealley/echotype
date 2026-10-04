@@ -12,36 +12,46 @@ func cleanup(_ options: RunOptions, in manifest: Manifest) async throws {
   guard let service = provider.cleanup else { throw BenchError("\(provider.name) has no cleanup.") }
   let credential = try credential(for: provider)
   let samples = try cleanupTargets(options, in: manifest)
-  try await requireReady(provider, "cleanup", state: \.cleanup)
+  let sampler = Sampler()
+  let preparation = try await requireReady(provider, "cleanup", state: \.cleanup)
+  sampler.sampleNow()
 
   let directory = try RunInfo.begin(
     command: "cleanup", arguments: options.arguments, provider: provider.id.rawValue,
     candidates: options.recordedSelection, fast: options.fast, synthetic: false)
+  try writeJSON(preparation, to: directory.appending(path: "preparation.json"))
   let log = directory.appending(path: "cleanup.jsonl")
   FileManager.default.createFile(atPath: log.path, contents: nil)
   let logFile = try FileHandle(forWritingTo: log)
   defer { try? logFile.close() }
   let encoder = JSONEncoder()
   encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-  encoder.dateEncodingStrategy = .iso8601
+  encoder.dateEncodingStrategy = .milliseconds
 
-  for sample in samples {
-    let reviser = Reviser(cleanup: service, credential: credential)
-    let result = await replay(sample, through: reviser, fast: options.fast)
-    try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
-    print(summaryLine(for: result))
+  for repeatIndex in 0..<options.repeats {
+    for sample in samples {
+      let reviser = Reviser(cleanup: service, credential: credential)
+      let result = await replay(sample, repeatIndex: repeatIndex, through: reviser, fast: options.fast)
+      try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
+      print(summaryLine(for: result))
+    }
   }
+  try sampler.stop(writingTo: directory)
   print("\n" + directory.path)
 }
 
 /// One sample's record: one JSONL line.
-struct CleanupResult: Codable {
+struct CleanupResult: Codable, RepeatedResult {
   let id: String
+  /// Which run through the samples this was, from 0. Nil in runs from before `--repeat`.
+  let repeatIndex: Int?
   /// The full committed text, as it stood when `finish` was called.
   let input: String
   /// What `finish` returned, which is what a dictation inserts.
   let finalText: String
   let attempts: [DictationTrace.Revision]
+  /// When `finish` was called. Nil in runs from before cancellation was measured.
+  let finishCalledAt: Date?
   /// From calling `finish` to its return.
   let stopToInsertMs: Double
   /// Time spent in revision requests over the timeline: the last segment's time plus stop-to-insert.
@@ -65,7 +75,7 @@ private func cleanupTargets(_ options: RunOptions, in manifest: Manifest) throws
 /// Grows the committed text segment by segment as the app does, then finishes. Segments are
 /// joined by a space: the speech assembler appends each final segment with its own leading
 /// whitespace, and the corpus segments have none.
-private func replay(_ sample: Cleanup, through reviser: Reviser, fast: Bool) async -> CleanupResult {
+private func replay(_ sample: Cleanup, repeatIndex: Int, through reviser: Reviser, fast: Bool) async -> CleanupResult {
   let start = ContinuousClock.now
   var committed = ""
   var error: String?
@@ -79,14 +89,16 @@ private func replay(_ sample: Cleanup, through reviser: Reviser, fast: Bool) asy
     error = "\(thrown)"
   }
 
-  let finishCalledAt = ContinuousClock.now
+  let finishCalledAt = Date()
+  let finishCalledClock = ContinuousClock.now
   let finalText = await reviser.finish(committed: committed)
-  let stopToInsert = ContinuousClock.now - finishCalledAt
+  let stopToInsert = ContinuousClock.now - finishCalledClock
   let attempts = await reviser.attempts
 
   let timeline = (sample.segments.last?.at ?? 0) + stopToInsert / .seconds(1)
   return CleanupResult(
-    id: sample.id, input: committed, finalText: finalText, attempts: attempts,
+    id: sample.id, repeatIndex: repeatIndex, input: committed, finalText: finalText, attempts: attempts,
+    finishCalledAt: finishCalledAt,
     stopToInsertMs: (stopToInsert / .milliseconds(1) * 10).rounded() / 10,
     revisingShare: timeline > 0 ? attempts.map(\.duration).reduce(0, +) / timeline : 0,
     fallbacks: attempts.filter(\.result.isFallback).count, error: error)

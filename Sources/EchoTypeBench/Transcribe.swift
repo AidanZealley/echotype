@@ -15,11 +15,14 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
   let request = TranscriptionRequest(
     settings: Settings(provider: provider.id, keyterms: manifest.keyterms, language: Language.english.tag),
     provider: provider, credential: credential)
-  try await requireReady(provider, "transcription", state: \.transcription)
+  let sampler = Sampler()
+  let preparation = try await requireReady(provider, "transcription", state: \.transcription)
+  sampler.sampleNow()
 
   let directory = try RunInfo.begin(
     command: "transcribe", arguments: options.arguments, provider: provider.id.rawValue,
     candidates: options.recordedSelection, fast: options.fast, synthetic: options.synthetic)
+  try writeJSON(preparation, to: directory.appending(path: "preparation.json"))
   let log = directory.appending(path: "transcribe.jsonl")
   FileManager.default.createFile(atPath: log.path, contents: nil)
   let logFile = try FileHandle(forWritingTo: log)
@@ -27,11 +30,16 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
   let encoder = JSONEncoder()
   encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
 
-  for sample in samples {
-    let result = await transcribe(sample, provider: provider, request: request, fast: options.fast, synthetic: options.synthetic)
-    try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
-    print(summaryLine(for: result))
+  for repeatIndex in 0..<options.repeats {
+    for sample in samples {
+      let result = await transcribe(
+        sample, repeatIndex: repeatIndex, provider: provider, request: request, fast: options.fast,
+        synthetic: options.synthetic)
+      try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
+      print(summaryLine(for: result))
+    }
   }
+  try sampler.stop(writingTo: directory)
   print("\n" + directory.path)
 }
 
@@ -72,7 +80,7 @@ private let phaseTimeout = Duration.seconds(30)
 
 /// One sample's record: one JSONL line. Times are milliseconds after the first audio was sent,
 /// so `.ready` and anything before audio starts are negative.
-struct TranscribeResult: Codable {
+struct TranscribeResult: Codable, RepeatedResult {
   struct Event: Codable {
     let ms: Double
     let event: String
@@ -82,6 +90,8 @@ struct TranscribeResult: Codable {
   }
 
   let id: String
+  /// Which run through the samples this was, from 0. Nil in runs from before `--repeat`.
+  let repeatIndex: Int?
   let synthetic: Bool
   let audioSeconds: Double?
   let events: [Event]
@@ -104,7 +114,7 @@ private struct Observed {
 }
 
 private func transcribe(
-  _ target: (sample: Dictation, audio: URL), provider: Provider, request: TranscriptionRequest,
+  _ target: (sample: Dictation, audio: URL), repeatIndex: Int, provider: Provider, request: TranscriptionRequest,
   fast: Bool, synthetic: Bool
 ) async -> TranscribeResult {
   var origin: ContinuousClock.Instant?
@@ -140,7 +150,7 @@ private func transcribe(
   error = error ?? seen.error
 
   return result(
-    for: target.sample, synthetic: synthetic, audioSeconds: audioSeconds, observed: seen,
+    for: target.sample, repeatIndex: repeatIndex, synthetic: synthetic, audioSeconds: audioSeconds, observed: seen,
     origin: origin ?? finishCalledAt ?? .now, finishCalledAt: finishCalledAt, error: error)
 }
 
@@ -204,7 +214,7 @@ private func closeAfterTimeout(_ transcriber: any LiveTranscriber) -> Task<Void,
 }
 
 private func result(
-  for sample: Dictation, synthetic: Bool, audioSeconds: Double?, observed: Observed,
+  for sample: Dictation, repeatIndex: Int, synthetic: Bool, audioSeconds: Double?, observed: Observed,
   origin: ContinuousClock.Instant, finishCalledAt: ContinuousClock.Instant?, error: String?
 ) -> TranscribeResult {
   let ms = { (instant: ContinuousClock.Instant) in milliseconds(instant - origin) }
@@ -222,7 +232,7 @@ private func result(
   let transcripts = events.filter { $0.event == "transcript" }
   let finished = observed.events.first { $0.event == .finished }
   return TranscribeResult(
-    id: sample.id, synthetic: synthetic, audioSeconds: audioSeconds, events: events,
+    id: sample.id, repeatIndex: repeatIndex, synthetic: synthetic, audioSeconds: audioSeconds, events: events,
     finalText: transcripts.last?.committed ?? "",
     firstProvisionalMs: transcripts.first { $0.provisional?.isEmpty == false }?.ms,
     firstCommittedMs: transcripts.first { $0.committed?.isEmpty == false }?.ms,
