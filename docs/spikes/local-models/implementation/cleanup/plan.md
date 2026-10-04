@@ -1,6 +1,6 @@
 # Local cleanup (slice 1) implementation plan
 
-Status: draft; workstreams 1-4 accepted.
+Status: draft; workstreams 1-4 and the final review accepted.
 
 ## Orchestration record
 
@@ -18,7 +18,7 @@ Status: draft; workstreams 1-4 accepted.
 | 2 | [Local cleanup candidates](02-local-cleanup.md) | 1 | Accepted |
 | 3 | [Bench measurement for local services](03-bench-measurement.md) | 2 | Accepted |
 | 4 | [Cleanup evaluation and results](04-cleanup-evaluation.md) | 3 | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1-4 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1-4 | Accepted |
 
 ## Why these boundaries
 
@@ -115,3 +115,4 @@ None.
 | 2026-10-04 | Store interface as built: internal `ModelStore` with synchronous `state(of:)`, `start(_:)` and `changes()`; manifest directory is `<name>-<revision>`, so a new revision never mixes with old files. `start` has no cancel and failures are in memory only, so a relaunch reports `.missing`. See the handoff in `01-model-assets.md`. | Smallest store meeting the packet. Workstream 2 consumes it unchanged. | Lead (workstream 1) | 2 |
 | 2026-10-04 | The spec names MLX Swift LM as the cleanup dependency, but the library no longer bundles a tokenizer, so `swift-transformers` 1.3.4 is a third direct dependency of `EchoTypeCore`; `CleanupModel.swift` bridges its tokenizer to MLX Swift LM. MLX Swift LM `5e46681` has no tag, so it is pinned by revision (MLX Swift exactly 0.32.3). `build-app.sh` now stages three bundles (MLX, swift-crypto, swift-transformers Hub), not one. | Tokenization and the chat template need it; no other tokenizer is available. A reply that hits the output cap throws, because `Reviser` accepts any in-order subset and would insert text that lost its end. | Lead (workstream 2) | 3, 4 |
 | 2026-10-04 | The paid xAI cleanup baseline is run `20261004T121048Z-xai` (paced, 15 repeats, run by Aidan, no `--fast` run). Its latency was not confirmed as taken on a quiet machine, and the local and Apple runs were on a busy one, so latency figures in `results.md` are upper bounds. Workstream 4 recommends taking `qwen3-4b-2507` forward and rejecting `smollm3-3b`; the recommendation is for the next slice, not a product direction. | The gate passed on Aidan's answer; the run id was found on disk and verified by the lead. | Aidan (run), Lead (workstream 4) | 4, Final |
+| 2026-10-04 | Final review: no Required findings. Accepted corrections were to `results.md` (unsupported download-time figure, peak memory taken as the maximum across runs, deadline claims scoped to windows of about 70 tokens), `research.md` (measured memory and prefill interruptibility noted) and one ceremonial test removed. No specification drift. | The reviewer found no defect that blocks; the corrections bring the record into line with the measurements. | Lead (final review) | Final |

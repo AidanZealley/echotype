@@ -61,8 +61,17 @@ Pins (`Package.resolved`): mlx-swift 0.32.3 (`19601207e9a0de51e03ee6ec0c3c5f3784
 mlx-swift-lm revision `5e46681b2adcef2db158e7b949aeae3896778e23` (no tag), swift-transformers 1.3.4
 (`c21fdcde390313a6d98d8e33a346f2c3486c3ab0`), swift-jinja 2.5.1
 (`4588064a20f3fc093c95f2f7d3359999bf30cae5`). The rest of the resolved set is in `Package.resolved`
-at `6eb5351`. Download time was about a minute per model on first use in workstream 2 and was not
-re-measured here.
+at `6eb5351`.
+
+Download time and transient disk usage were not measured in this slice: no cited run's
+`preparation.json` records a download (every one shows only "Loading the cleanup model"). Recovery
+after an interrupted download was exercised only with the injected download source
+(`ModelStoreTests`), not by killing a live download.
+
+Integration changes the spec expects recorded: `swift-transformers` 1.3.4 is a third direct
+dependency of `EchoTypeCore` (the MLX Swift LM revision no longer bundles a tokenizer; plan.md
+decision log, 2026-10-04), `build-app.sh` stages three resource bundles (MLX, swift-crypto,
+swift-transformers Hub), and CI installs the Metal toolchain.
 
 ### Quality, paced runs (same mode, 11 counted samples x 15 repeats = 165)
 
@@ -204,7 +213,8 @@ Apple's and xAI's 1 to 4 ms cancels a request, not a local forward pass, so it i
 the local figures.
 
 **No run hit the three-second deadline**, so the timer was never exercised and nothing here shows
-it enforced. Enforceability is reasoning from cancellation latency and the code:
+it enforced. This holds for windows up to the corpus's longest (about 70 tokens); longer unpunctuated
+windows were not measured. Enforceability is reasoning from cancellation latency and the code:
 
 - `Reviser.finish` cancels the live revision and awaits it before the three-second timer starts, so
   cancellation latency is added to the wait. For the local models it is 127 to 151 ms at p50 and
@@ -226,8 +236,10 @@ it enforced. Enforceability is reasoning from cancellation latency and the code:
   one 128-token chunk (untested; about 0.7 s, so nearer 4.4 s). The bench's 250 ms overrun threshold
   would flag a late stop.
 - The longest observed final request was 1.85 s and the longest stop-to-insert 2.23 s (derived,
-  n=164; `…110130Z-local`), so no sample came within 0.7 s of the deadline. Local transcription running
-  at the same time may change this and is unmeasured.
+  n=164; `…110130Z-local`), so no sample came within 0.7 s of the deadline. That is the debug build on a
+  window of about 70 tokens. Longer unpunctuated windows were not measured, and by linear
+  extrapolation from 1.85 s at 70 tokens (untested) the budget could be reached beyond roughly 110
+  tokens. Local transcription running at the same time may change this and is unmeasured.
 - The user saw unrevised words after a final fallback on 15 of 165 final revisions for qwen3
   (`…110130Z-local`), 45 of 165 for smollm3 (`…110916Z-local`) and Apple (`…105325Z-apple`), 0 for xAI
   (paid; `…121048Z-xai`) (derived). Those were failures or rejections, not timeouts.
@@ -242,12 +254,14 @@ it enforced. Enforceability is reasoning from cancellation latency and the code:
 | Thermal worst | nominal | nominal | nominal | nominal |
 | Memory pressure worst | normal | normal | warning | normal |
 
-The cold-start runs peak at 2571 MiB and 2169 MiB, ready 2381 and 1829 MiB, with pressure normal
+Across all cited qwen3 runs the highest peak is 2649 MiB (about 2.6 GiB, `…111803Z-local`, offline
+`--fast`), with 2638 MiB in `…105222Z-local` (`--fast`); smollm3's highest is 2171 MiB
+(`…105256Z-local`). The cold-start runs peak at 2571 MiB and 2169 MiB, ready 2381 and 1829 MiB, with pressure normal
 (`…111652Z-local`, `…111730Z-local`). Memory pressure `warning` also appeared in `…105222Z-local`
 (qwen3 `--fast`) but in no other run, on a busy 16 GiB machine; I cannot attribute it to the
 model alone. Apple's and xAI's footprints describe the bench only, not Apple's out-of-process
-model. The planning estimate of 3 to 4 GB for qwen3 in `research.md` is high against 2.5 GiB peak
-for this window size; the buffer cache limit was 64 MiB. Concurrent memory with transcription and
+model. The planning estimate of 3 to 4 GB for qwen3 in `research.md` is high against the 2649 MiB
+peak (`…111803Z-local`) for this window size; the buffer cache limit was 64 MiB. Concurrent memory with transcription and
 read aloud is the later slices' question.
 
 ### Offline
@@ -268,12 +282,12 @@ only, within the load-time ranges under Cold start.
 | Quality vs Apple | Better: 120 vs 75 of 165 exact, 0 vs 300 wrong-deleted words (`…110130Z-local`, `…105325Z-apple`) |
 | Quality vs xAI (paid) | Equal on counted samples (120/165, 0, 150), including the same three misses (`…110130Z-local`, `…121048Z-xai`). One instruction-following failure xAI lacks |
 | Warm latency | p50 616 ms beats Apple (781) and xAI (paid, 704); p95 2194 ms is worse than both (1627, 1046) (`…110130Z-local`, `…105325Z-apple`, `…121048Z-xai`) |
-| Deadline | Never hit; longest stop-to-insert 2.23 s (`…110130Z-local`); enforceable with an overrun of roughly half a second to a second, not demonstrated |
-| Cost | 2.27 GB download, 2.1 GiB installed, 2.5 GiB peak process footprint (`…110130Z-local`), 2.8 to 4.2 s load (n=4, see Cold start) |
+| Deadline | Never hit on windows up to about 70 tokens; longest stop-to-insert 2.23 s, longest final request 1.85 s on the debug build (`…110130Z-local`); longer unpunctuated windows not measured (budget reachable beyond roughly 110 tokens only by untested extrapolation); enforceable with an overrun of roughly half a second to a second, not demonstrated |
+| Cost | 2.27 GB download, 2.1 GiB installed, 2.6 GiB peak process footprint (2649 MiB, `…111803Z-local`; 2573 MiB in `…110130Z-local`), 2.8 to 4.2 s load (n=4, see Cold start) |
 
 Remaining gap to xAI, stated plainly: no measurable difference in word-level quality on 11 samples that
 cannot tell them apart, a tail latency roughly twice xAI's on long windows (2198 vs 992 ms for xAI (paid) on the
-long sample; `…110130Z-local`, `…121048Z-xai`), one command-following failure that falls back safely, and a local cost of about 2.5 GiB
+long sample; `…110130Z-local`, `…121048Z-xai`), one command-following failure that falls back safely, and a local cost of about 2.6 GiB
 of memory and a 3 s load that xAI does not have. smollm3-3b is rejected: 60 validation rejections, 15
 wrong-deleted words and the most missed edits, for 0.5 GiB less memory (`…110916Z-local`).
 
