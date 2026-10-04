@@ -8,14 +8,14 @@ import Foundation
 /// Everything that can be wrong with the request is checked before the run directory exists or
 /// a transcriber starts. Samples then run one at a time; a failing sample is recorded and the
 /// run goes on.
-func transcribe(_ options: TranscribeOptions, in manifest: Manifest) async throws {
+func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
   let provider = try options.provider()
   let credential = try credential(for: provider)
   let samples = try transcriptionTargets(options, in: manifest)
   let request = TranscriptionRequest(
     settings: Settings(provider: provider.id, keyterms: manifest.keyterms, language: Language.english.tag),
     provider: provider, credential: credential)
-  try await requireReady(provider, language: request.language)
+  try await requireReady(provider, "transcription", state: \.transcription)
 
   let directory = try RunInfo.begin(
     command: "transcribe", arguments: options.arguments, provider: provider.id.rawValue,
@@ -35,53 +35,10 @@ func transcribe(_ options: TranscribeOptions, in manifest: Manifest) async throw
   print("\n" + directory.path)
 }
 
-/// Command-line options, parsed by hand like the rest of the bench.
-struct TranscribeOptions {
-  let arguments: [String]
-  var providerID: String?
-  var fast = false
-  var synthetic = false
-  var ids: [String] = []
-
-  init(parsing arguments: [String]) throws {
-    self.arguments = arguments
-    var rest = arguments[...]
-    while let argument = rest.popFirst() {
-      switch argument {
-      case "--provider":
-        guard let value = rest.popFirst() else { throw BenchError("--provider needs a value") }
-        providerID = value
-      case "--fast": fast = true
-      case "--synthetic": synthetic = true
-      case _ where argument.hasPrefix("--"): throw BenchError("unknown option \(argument)")
-      default: ids.append(argument)
-      }
-    }
-  }
-
-  func provider() throws -> Provider {
-    let known = Providers.all.map(\.id.rawValue)
-    guard let providerID, let provider = Providers.all.first(where: { $0.id.rawValue == providerID })
-    else { throw BenchError("--provider must be one of: \(known.joined(separator: ", "))") }
-    return provider
-  }
-}
-
-/// A key provider's credential comes from the environment, as in `LiveProtocolTests`, rather than
-/// the app's Keychain item.
-private func credential(for provider: Provider) throws -> String? {
-  guard case .apiKey = provider.credential else { return nil }
-  let name = "\(provider.id.rawValue.uppercased())_API_KEY"
-  guard let key = ProcessInfo.processInfo.environment[name], !key.isEmpty else {
-    throw BenchError("\(name) is not set; \(provider.name) transcription needs it.")
-  }
-  return key
-}
-
 /// The samples to run, each with its audio: the named dictation samples, or every one that has
 /// audio of the requested kind.
 private func transcriptionTargets(
-  _ options: TranscribeOptions, in manifest: Manifest
+  _ options: RunOptions, in manifest: Manifest
 ) throws -> [(sample: Dictation, audio: URL)] {
   let dictations = manifest.samples.compactMap { sample -> Dictation? in
     if case .dictation(let dictation) = sample { dictation } else { nil }
@@ -107,23 +64,6 @@ private func transcriptionTargets(
   return chosen.map { ($0, audio($0.id)) }
 }
 
-/// Waits while the provider is setting up transcription, such as downloading a speech model.
-private func requireReady(_ provider: Provider, language: String) async throws {
-  let request = ReadinessRequest(language: language, voice: provider.voice.voices[0].id)
-  // Subscribed before the first check, so a change in between is not missed.
-  let changes = provider.readiness.changes()
-  var state = await provider.readiness.check(request).transcription
-  var updates = changes.makeAsyncIterator()
-  while state.status == .waiting {
-    print("Waiting: \(state.message ?? "transcription is setting up")")
-    guard await updates.next() != nil else { break }
-    state = await provider.readiness.check(request).transcription
-  }
-  guard state.status == .ready else {
-    throw BenchError("\(provider.name) transcription is not ready: \(state.message ?? "unavailable")")
-  }
-}
-
 // MARK: One sample
 
 /// How long to wait for `.ready`, and for `.finished` after `finish()`, before closing the
@@ -132,8 +72,8 @@ private let phaseTimeout = Duration.seconds(30)
 
 /// One sample's record: one JSONL line. Times are milliseconds after the first audio was sent,
 /// so `.ready` and anything before audio starts are negative.
-struct TranscribeResult: Encodable {
-  struct Event: Encodable {
+struct TranscribeResult: Codable {
+  struct Event: Codable {
     let ms: Double
     let event: String
     let committed: String?

@@ -91,12 +91,7 @@ struct Cleanup: Decodable {
 
   /// Cleanup only deletes words, so the expected text must be what is left of the input.
   var expectedOnlyDeletesWords: Bool {
-    var remaining = Prose.words(segments.map(\.text).joined(separator: " "))[...]
-    for word in Prose.words(expected) {
-      guard let index = remaining.firstIndex(of: word) else { return false }
-      remaining = remaining[(index + 1)...]
-    }
-    return true
+    deletedIndices(from: Prose.words(segments.map(\.text).joined(separator: " ")), leaving: Prose.words(expected)) != nil
   }
 }
 
