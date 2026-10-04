@@ -1,20 +1,20 @@
 # Local transcription (slice 2) implementation plan
 
-Status: approved; implementation has not started.
+Status: approved; implementation in progress.
 
 ## Orchestration record
 
 - Integration branch: `spike/local-models`
-- Starting commit: `TBD`
+- Starting commit: `79d5a900e3abbc49b8e1428d2b20675cd037dd4e`
 - Review command: `lead subagents`
 - Specification approved at commit: `a8cabe1` (both specs approved 2026-10-03)
-- Started: `TBD`
+- Started: `2026-10-04`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Parakeet Unified transcription](01-parakeet-unified.md) | Slice 1 | Not started |
+| 1 | [Parakeet Unified transcription](01-parakeet-unified.md) | Slice 1 | Accepted |
 | 2 | [Whisper Turbo transcription](02-whisper-turbo.md) | 1 | Not started |
 | 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Not started |
 | 4 | [Local provider in the app](04-app-provider.md) | 3 | Not started |
@@ -121,6 +121,12 @@ Carried from slice 1:
 - Derive paired figures (cold versus warm, counted versus excluded) from one filtered list in one
   pure function, not from two differently filtered reads, and test it with a subset run whose
   first attempt is a cancelled request.
+- A runtime that hard-codes a cache path (FluidAudio's CTC tokenizer folder) is reached by a
+  symlink to the store's verified directory, written only when missing or stale, tolerant of a
+  concurrent writer and never over a real folder. Never rewrite another tool's folder on every
+  load. Check which candidate writes it before telling workstream 4 what the app does.
+- Cite the runs made on the final source: a run whose `run.json` says `sourceDirty` before a
+  later edit is not evidence for the finished code; rerun it.
 - In `results.md`, put a run id on every figure, bullet and table row, including derived ones, and
   scope runtime claims to the sizes actually measured; derive "warm" figures with the cold request
   excluded, as `report` does.
@@ -136,3 +142,7 @@ Carried from slice 1:
 | 2026-10-04 | No new paid xAI run. The transcription baseline is `20261004T073341Z-xai`. | It exists and ran the same corpus; `report` scores it against the current references, so later reference corrections apply to it. | Planning agent | 5 |
 | 2026-10-04 | Keyterm boosting on and off are two Unified candidates sharing one implementation. Boosted text commits only after its segment is rescored; unboosted text commits at utterance end. | The spec asks for commit lag with boosting on and off before choosing; two candidates make that a measurement, not an implementation-time decision. | Planning agent | 1, 5 |
 | 2026-10-04 | The app's signed-app check is a short guided checklist Aidan follows, not the harness's app driver or `bench session`. | Neither exists yet, and building them is the harness's own later step. | Planning agent | 4 |
+| 2026-10-04 | `parakeet-unified-keyterms` loads FluidAudio's CTC model from the store and symlinks FluidAudio's hard-coded cache folder (`~/Library/Application Support/FluidAudio/Models/parakeet-ctc-110m-coreml`) to it, because `VocabularyBoostingSession` reads `tokenizer.json` only from there. Only that candidate writes it; `parakeet-unified` never touches the folder. Workstream 4 should list it in the app's check. | No directory parameter exists; the alternative duplicates FluidAudio's rescoring internals. It is not a download. | Lead (workstream 1) | 4 |
+| 2026-10-04 | Keyterm boosting uses the public `VocabularyBoostingSession.rescore` on the 15 s cadence with a local commit rule, not FluidAudio's built-in hook. Utterance boundaries and `.speech` use `VadManager` defaults (unboosted text commits only after about a 1 s pause). `utterance` is unused. `keytermLimit` is 1 (`parakeet-unified`) and 100 (`parakeet-unified-keyterms`). | FluidAudio's hook cannot say what is rescored; the spec's commit rule needs it. Details in the workstream 1 handoff. | Lead (workstream 1) | 2, 3, 5 |
+| 2026-10-04 | The Unified conversion card says CC-BY-4.0; the manifest records the NVIDIA Open Model License of the upstream `nvidia/parakeet-unified-en-0.6b`. Unresolved, not a stop. | The packet says to record a conflict, not stop. | Lead (workstream 1) | 5 |
+| 2026-10-04 | Workstream 1 edited the bench's `main.swift` usage text, which the plan assigns to workstream 3. Local slice's `LocalCleanup` is now `LocalModel`. | The usage text would otherwise document only `--candidate cleanup=`. | Lead (workstream 1) | 2, 3 |

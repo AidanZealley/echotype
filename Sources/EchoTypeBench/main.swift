@@ -4,7 +4,7 @@ import Foundation
 let usage = """
   usage: EchoTypeBench corpus status [--manifest <path>]
          EchoTypeBench record [<id>] [--manifest <path>]
-         EchoTypeBench transcribe --provider apple|xai|local [--fast] [--repeat <n>] [--synthetic] [<id>...] [--manifest <path>]
+         EchoTypeBench transcribe --provider apple|xai|local [--candidate transcription=<name>] [--fast] [--repeat <n>] [--synthetic] [<id>...] [--manifest <path>]
          EchoTypeBench cleanup --provider apple|xai|local [--candidate cleanup=<name>] [--fast] [--repeat <n>] [<id>...] [--manifest <path>]
          EchoTypeBench report <run-id-or-path>... [--manifest <path>]
   record walks through the dictation samples still missing a recording, or redoes <id>.
@@ -17,7 +17,9 @@ let usage = """
   cold and the rest as warm. Both commands also record how long the provider took to become ready
   and sample the process's memory, the thermal state and the memory pressure.
   xAI reads its key from XAI_API_KEY. The local provider downloads its pinned models on first use;
-  --candidate cleanup=qwen3-4b-2507|smollm3-3b chooses its cleanup model (default qwen3-4b-2507).
+  --candidate transcription=parakeet-unified|parakeet-unified-keyterms chooses its transcription model
+  (default parakeet-unified) and --candidate cleanup=qwen3-4b-2507|smollm3-3b its cleanup model (default
+  qwen3-4b-2507). Each command prepares only the service it measures.
   report scores transcribe runs (ids under runs/, or paths) against the reviewed references, and cleanup
   runs against the expected cleanups, and writes report.md into each run directory. Synthetic runs are
   not scored.
