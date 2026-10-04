@@ -11,8 +11,7 @@
       "source": "recorded",
       "prompt": "Read the script at a normal pace.",
       "script": "I set up the new project with Vite, Tailwind and shadcn, installed everything with pnpm, and put the shared state in Zustand with TanStack Query for the server data.",
-      "tags": ["keyterms", "scripted"],
-      "reference": null
+      "tags": ["keyterms", "scripted"]
     },
     {
       "id": "dictation-keyterms-models",
@@ -20,8 +19,7 @@
       "source": "recorded",
       "prompt": "Read the script at a normal pace.",
       "script": "EchoType could run Parakeet for transcription, Qwen for cleanup and Kokoro for reading aloud, all through MLX and Core ML on the Mac.",
-      "tags": ["keyterms", "scripted"],
-      "reference": null
+      "tags": ["keyterms", "scripted"]
     },
     {
       "id": "dictation-keyterms-apple",
@@ -29,8 +27,7 @@
       "source": "recorded",
       "prompt": "Read the script at a normal pace.",
       "script": "The SwiftUI preview crashed again, so I rebuilt it in Xcode and moved the Supabase client out of the view.",
-      "tags": ["keyterms", "scripted"],
-      "reference": null
+      "tags": ["keyterms", "scripted"]
     },
     {
       "id": "dictation-uk-vocabulary",
@@ -38,8 +35,7 @@
       "source": "recorded",
       "prompt": "Read the script at a normal pace.",
       "script": "I'll pop to the shops after lunch, grab some aluminium foil and a courgette, then sort the colour scheme for the programme tomorrow morning.",
-      "tags": ["accent", "uk-spelling", "scripted"],
-      "reference": null
+      "tags": ["accent", "uk-spelling", "scripted"]
     },
     {
       "id": "dictation-numbers-punctuation",
@@ -47,8 +43,7 @@
       "source": "recorded",
       "prompt": "Read the script, saying numbers naturally.",
       "script": "The build went from 42 seconds to about 1.5 seconds, which is roughly a 28 times speed-up. Version 3.2 ships on the 14th of October.",
-      "tags": ["numbers", "punctuation", "scripted"],
-      "reference": null
+      "tags": ["numbers", "punctuation", "scripted"]
     },
     {
       "id": "dictation-question-command",
@@ -56,32 +51,28 @@
       "source": "recorded",
       "prompt": "Read the script as if dictating a message to an agent.",
       "script": "Can you check why the tests are failing? Then delete the old branch and open a pull request.",
-      "tags": ["commands", "questions", "scripted"],
-      "reference": null
+      "tags": ["commands", "questions", "scripted"]
     },
     {
       "id": "dictation-thinking-pauses",
       "kind": "dictation",
       "source": "recorded",
       "prompt": "Describe what you'd change about your desk setup. Pause for two or three seconds mid-sentence a few times while you think, then carry on the same sentence.",
-      "tags": ["pauses", "natural"],
-      "reference": null
+      "tags": ["pauses", "natural"]
     },
     {
       "id": "dictation-self-correction",
       "kind": "dictation",
       "source": "recorded",
       "prompt": "Describe a bug you fixed recently. Halfway through, change your mind about its cause out loud, for example 'it was the cache, no actually, it was the timeout'.",
-      "tags": ["corrections", "natural"],
-      "reference": null
+      "tags": ["corrections", "natural"]
     },
     {
       "id": "dictation-false-starts",
       "kind": "dictation",
       "source": "recorded",
       "prompt": "Explain how to make your favourite drink to someone. Don't rehearse; let false starts and repeated words happen naturally.",
-      "tags": ["false-starts", "repetition", "natural"],
-      "reference": null
+      "tags": ["false-starts", "repetition", "natural"]
     },
     {
       "id": "dictation-deliberate-repetition",
@@ -89,8 +80,7 @@
       "source": "recorded",
       "prompt": "Read the script. The repetition is deliberate.",
       "script": "It's very, very important that we test it again and again before we ship. Really, really important.",
-      "tags": ["deliberate-repetition", "scripted"],
-      "reference": null
+      "tags": ["deliberate-repetition", "scripted"]
     },
     {
       "id": "dictation-short-reply",
@@ -98,24 +88,21 @@
       "source": "recorded",
       "prompt": "Read the script quickly, as a short reply.",
       "script": "Sounds good, ship it.",
-      "tags": ["short", "scripted"],
-      "reference": null
+      "tags": ["short", "scripted"]
     },
     {
       "id": "dictation-background-noise",
       "kind": "dictation",
       "source": "recorded",
       "prompt": "With music or a podcast playing at a comfortable volume nearby, describe your plans for the weekend for about twenty seconds.",
-      "tags": ["noise", "natural"],
-      "reference": null
+      "tags": ["noise", "natural"]
     },
     {
       "id": "dictation-silence",
       "kind": "dictation",
       "source": "recorded",
       "prompt": "Stay silent for ten seconds in a normal room. Nothing should be transcribed.",
-      "tags": ["silence", "hallucination"],
-      "reference": ""
+      "tags": ["silence", "hallucination"]
     },
     {
       "id": "dictation-trailing-words",
@@ -123,16 +110,14 @@
       "source": "recorded",
       "prompt": "Read the script and press Return immediately after the last word, without pausing.",
       "script": "Make sure the final words survive when I stop recording right now.",
-      "tags": ["tail", "scripted"],
-      "reference": null
+      "tags": ["tail", "scripted"]
     },
     {
       "id": "dictation-long-continuous",
       "kind": "dictation",
       "source": "recorded",
       "prompt": "Talk for about two minutes about a project you're working on: what it does, what's going well and what's hard. Speak naturally, with corrections and pauses as they come.",
-      "tags": ["long", "natural", "keyterms"],
-      "reference": null
+      "tags": ["long", "natural", "keyterms"]
     },
     {
       "id": "cleanup-clear-correction",

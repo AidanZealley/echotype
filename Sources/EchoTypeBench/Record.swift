@@ -36,7 +36,7 @@ private func recordingTargets(id: String?, in manifest: Manifest) throws -> [Dic
     return recordable.filter { !FileManager.default.fileExists(atPath: BenchData.recording($0.id).path) }
   }
   guard let sample = recordable.first(where: { $0.id == id }) else {
-    throw RecordError("\(id) is not a dictation sample with source recorded")
+    throw BenchError("\(id) is not a dictation sample with source recorded")
   }
   return [sample]
 }
@@ -65,7 +65,7 @@ private func recordTake(
   }
   try writeWAV(take.samples, to: destination)
 
-  let isSilence = sample.reference == ""
+  let isSilence = sample.tags.contains("silence")
   print(String(format: "Saved %.1fs, peak %.0f dBFS.", take.duration, take.peakDecibels))
   if take.peakDecibels < -40 && !isSilence {
     print("WARNING: this is almost silent. Mic permission may be denied or the wrong input selected.")
@@ -99,15 +99,10 @@ private func recordingSummary(of manifest: Manifest) -> String {
 
 private func requireMicrophoneAccess() async throws {
   guard await AVCaptureDevice.requestAccess(for: .audio) else {
-    throw RecordError(
+    throw BenchError(
       "Microphone access denied. Allow this terminal app in System Settings > Privacy & Security > Microphone."
     )
   }
-}
-
-struct RecordError: LocalizedError {
-  let errorDescription: String?
-  init(_ description: String) { errorDescription = description }
 }
 
 /// One capture from the default input: 16 kHz mono Int16, resampled by `AVAudioConverter`.
@@ -136,7 +131,7 @@ private final class Take: Sendable {
     let input = engine.inputNode
     let inputFormat = input.outputFormat(forBus: 0)
     guard inputFormat.sampleRate > 0, let converter = AVAudioConverter(from: inputFormat, to: format)
-    else { throw RecordError("No usable input device.") }
+    else { throw BenchError("No usable input device.") }
     // Take the first channel. Downmixing silences discrete multichannel layouts, which
     // unlabelled USB and aggregate devices report, and weights surround layouts.
     converter.channelMap = [0]
