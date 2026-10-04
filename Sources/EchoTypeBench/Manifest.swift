@@ -72,8 +72,6 @@ struct Dictation: Decodable {
   /// The words to read aloud. Natural clips have none.
   let script: String?
   let tags: [String]
-  /// The reviewed transcript. Null until Aidan has corrected the draft; empty for silence.
-  let reference: String?
 }
 
 /// Committed text as it arrives, for the `Reviser` to clean up.

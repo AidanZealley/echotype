@@ -6,6 +6,9 @@ enum BenchData {
     .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     .appending(path: "EchoTypeBench", directoryHint: .isDirectory)
 
+  /// Reviewed transcripts by sample id. They are Aidan's own words, so they stay out of git.
+  static let references = directory.appending(path: "references.json")
+
   /// Aidan's recording of a dictation sample.
   static func recording(_ id: String) -> URL {
     directory.appending(path: "audio/\(id).wav")
@@ -17,8 +20,26 @@ enum BenchData {
   }
 }
 
+/// The reviewed transcripts, none when the file is missing. A sample is reviewed once it has an entry.
+func loadReferences(from url: URL = BenchData.references) throws -> [String: String] {
+  guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+  do {
+    return try JSONDecoder().decode([String: String].self, from: Data(contentsOf: url))
+  } catch {
+    throw ReferencesError(path: url.path, underlying: error)
+  }
+}
+
+struct ReferencesError: Error, CustomStringConvertible {
+  let path: String
+  let underlying: any Error
+  var description: String {
+    "\(path) must be a JSON object mapping sample id to transcript: \(underlying)"
+  }
+}
+
 /// What to ask Aidan for, in plain text for a terminal.
-func corpusStatus(of manifest: Manifest) -> String {
+func corpusStatus(of manifest: Manifest, references: [String: String]) -> String {
   let exists = { (url: URL) in FileManager.default.fileExists(atPath: url.path) }
   var dictations: [Dictation] = []
   var cleanups = 0
@@ -34,7 +55,7 @@ func corpusStatus(of manifest: Manifest) -> String {
   let unrecorded = dictations.filter {
     $0.source == .recorded && !exists(BenchData.recording($0.id))
   }
-  let unreviewed = dictations.filter { $0.reference == nil }
+  let unreviewed = dictations.filter { references[$0.id] == nil }
   let scripted = dictations.filter { $0.script != nil }
   let synthetic = scripted.filter { exists(BenchData.syntheticAudio($0.id)) }
 
@@ -44,6 +65,9 @@ func corpusStatus(of manifest: Manifest) -> String {
   ]
   lines += section("missing a recording", unrecorded.map(\.id))
   lines += section("reference not reviewed", unreviewed.map(\.id))
+  let dictationIDs = Set(dictations.map(\.id))
+  let stale = references.keys.filter { !dictationIDs.contains($0) }.sorted()
+  if !stale.isEmpty { lines += section("references for unknown dictation samples", stale) }
   return lines.joined(separator: "\n")
 }
 

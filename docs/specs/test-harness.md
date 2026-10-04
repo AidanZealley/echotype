@@ -36,8 +36,8 @@ lists checks still verified only by reading.
 - App seams for the driver compile only in debug builds (`#if DEBUG`). Release builds
   cannot be driven or fed file audio. The driver targets the signed debug bundle that
   `scripts/run.sh` builds. Signed release checks remain a short guided session.
-- Recordings of Aidan's voice stay outside git. Only manifests, reference texts and
-  scenario code are committed.
+- Recordings and reference transcripts stay outside git, because natural samples are
+  Aidan's own words. Only manifests and scenario code are committed.
 - Calls to xAI cost money and send samples to xAI. The bench calls a paid provider only
   when explicitly asked, never by default.
 - No scenario DSL, plugin system or generic test framework. Scenarios are plain Swift
@@ -53,7 +53,7 @@ keyterms and every sample, each with an id, a kind and tags:
 
 | Kind | Fields | Reference |
 | --- | --- | --- |
-| `dictation` | `source` (`recorded` or `synthetic`), the `prompt` Aidan follows, and a `script` for scripted clips. Natural clips are scenarios, such as "describe a bug and change your mind about its cause halfway". | `reference`: null until reviewed, then the transcript. Silence has an empty reference. |
+| `dictation` | `source` (`recorded` or `synthetic`), the `prompt` Aidan follows, and a `script` for scripted clips. Natural clips are scenarios, such as "describe a bug and change your mind about its cause halfway". | Lives in `references.json` beside the audio, keyed by id and absent until reviewed. Silence's is empty. |
 | `cleanup` | `segments`: committed text in the order and at the seconds it arrives, written by hand or taken from a dictation. | `expected`: the correct cleanup, and `ambiguous` when more than one edit is reasonable. |
 | `reading` | `text`, and `checks` naming the words or features under test. | The text itself. |
 
@@ -72,9 +72,12 @@ runs that only need speech to arrive, and lets the bench be built and tested bef
 recording exists. It is never used for accuracy results: runs record whether audio was
 synthetic, and scoring skips those runs.
 
-Reference transcripts start as drafts. The agent drafts each from provider outputs and
-their disagreements; Aidan corrects the draft. A sample counts as reviewed only after
-that correction.
+Reference transcripts are personal data like the audio, so they live in
+`~/Library/Application Support/EchoTypeBench/references.json`, a flat object mapping
+sample id to transcript. The agent drafts a review document from provider outputs and
+their disagreements into the same directory; Aidan corrects it, and the corrected text is
+written to `references.json`. A sample counts as reviewed only when it has an entry; a
+missing file means none are.
 
 ## Layer 2: bench
 
