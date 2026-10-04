@@ -4,20 +4,22 @@ import Foundation
 let usage = """
   usage: EchoTypeBench corpus status [--manifest <path>]
          EchoTypeBench record [<id>] [--manifest <path>]
-         EchoTypeBench transcribe --provider apple|xai|local [--candidate transcription=<name>] [--fast] [--repeat <n>] [--synthetic] [<id>...] [--manifest <path>]
+         EchoTypeBench transcribe --provider apple|xai|local [--candidate transcription=<name>] [--cleanup] [--candidate cleanup=<name>] [--fast] [--repeat <n>] [--synthetic] [<id>...] [--manifest <path>]
          EchoTypeBench cleanup --provider apple|xai|local [--candidate cleanup=<name>] [--fast] [--repeat <n>] [<id>...] [--manifest <path>]
          EchoTypeBench report <run-id-or-path>... [--manifest <path>]
   record walks through the dictation samples still missing a recording, or redoes <id>.
   transcribe feeds each dictation sample's audio (all with audio, or the ids) through the provider's
   live transcription at real-time pace, or without waiting with --fast, and writes a run directory
   under ~/Library/Application Support/EchoTypeBench/runs/. --synthetic uses generated audio.
+  transcribe --cleanup also revises committed text live and inserts the final revision. It requires
+  paced audio and a cleanup service, and prepares both local candidates.
   cleanup replays each cleanup sample's committed text (all, or the ids) through the real Reviser at
   real-time pace, or without waiting with --fast, into a run directory like transcribe's.
   --repeat <n> runs the selected samples n times in one process; the first request is reported as
   cold and the rest as warm. Both commands also record how long the provider took to become ready
-  and sample the process's memory, the thermal state and the memory pressure.
+  and sample the process's memory, the thermal state, memory pressure and one-minute load average. run.json records debug or release.
   xAI reads its key from XAI_API_KEY. The local provider downloads its pinned models on first use;
-  --candidate transcription=parakeet-unified|parakeet-unified-keyterms chooses its transcription model
+  --candidate transcription=parakeet-unified|parakeet-unified-keyterms|whisper-turbo chooses its transcription model
   (default parakeet-unified) and --candidate cleanup=qwen3-4b-2507|smollm3-3b its cleanup model (default
   qwen3-4b-2507). Each command prepares only the service it measures.
   report scores transcribe runs (ids under runs/, or paths) against the reviewed references, and cleanup

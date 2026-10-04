@@ -4,6 +4,7 @@ import Foundation
 /// What a run directory records about where and how it ran, written as `run.json` before any
 /// sample runs so that an interrupted run is still described.
 struct RunInfo: Encodable {
+  let buildConfiguration: String
   let command: String
   let arguments: [String]
   let provider: String
@@ -36,8 +37,13 @@ struct RunInfo: Encodable {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
 
     let revision = git(["rev-parse", "HEAD"])
+    #if DEBUG
+    let buildConfiguration = "debug"
+    #else
+    let buildConfiguration = "release"
+    #endif
     let info = RunInfo(
-      command: command, arguments: arguments, provider: provider, candidates: candidates, fast: fast,
+      buildConfiguration: buildConfiguration, command: command, arguments: arguments, provider: provider, candidates: candidates, fast: fast,
       synthetic: synthetic,
       macModel: sysctlString("hw.model"),
       macOS: ProcessInfo.processInfo.operatingSystemVersionString,

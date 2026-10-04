@@ -33,6 +33,7 @@ private struct RunSettings: Decodable {
   let provider: String
   let fast: Bool
   let synthetic: Bool
+  let buildConfiguration: String?
 }
 
 /// A run is a transcribe run or a cleanup run, by which log its directory holds.
@@ -75,6 +76,7 @@ private func readSettings(of directory: URL) throws -> RunSettings {
 private struct ScoredTranscribeRun: ScoredRun {
   let name: String
   let provider: String
+  let buildConfiguration: String?
   /// Fast runs compress timings, so their latencies are not reported.
   let paced: Bool
   let samples: [(result: TranscribeResult, score: SampleScore)]
@@ -91,6 +93,7 @@ private struct ScoredTranscribeRun: ScoredRun {
     let results = try readLog("transcribe.jsonl", in: directory, as: TranscribeResult.self)
     name = directory.lastPathComponent
     provider = settings.provider
+    buildConfiguration = settings.buildConfiguration
     paced = !settings.fast
     measurements = RunMeasurements(directory: directory)
     repeated = results.contains { ($0.repeatIndex ?? 0) > 0 }
@@ -144,7 +147,7 @@ private struct ScoredTranscribeRun: ScoredRun {
   // MARK: Rendering
 
   func table() -> String {
-    var lines = ["\(name)  (\(provider), \(paced ? "paced" : "fast: latency not reported"))", ""]
+    var lines = ["\(name)  (\(provider)\(buildConfiguration.map { ", \($0) build" } ?? ""), \(paced ? "paced" : "fast: latency not reported"))", ""]
     var rows = [["sample", "WER", "formatted WER", "keyterms", "stop-to-final", "violations"]]
     for (result, score) in samples {
       rows.append([
@@ -155,6 +158,24 @@ private struct ScoredTranscribeRun: ScoredRun {
       ])
     }
     lines += pad(rows)
+    let dictations = samples.compactMap { sample -> (TranscribeResult, CleanupResult)? in
+      sample.result.dictation.map { (sample.result, $0) }
+    }
+    if !dictations.isEmpty {
+      var revisionRows = [["sample", "stop-to-insert", "transcription", "cleanup", "cancel", "deadline", "revising"]]
+      for (result, revision) in dictations {
+        let deadline = deadlineOutcome(of: revision.attempts)
+        revisionRows.append([
+          label(result.id, result.repeatIndex, repeated), milliseconds(result.stopToInsert?.totalMs),
+          milliseconds(result.stopToInsert?.transcriptionMs), milliseconds(result.stopToInsert?.cleanupMs),
+          milliseconds(revision.finishCalledAt.flatMap { cancellationLatencyMs(of: revision.attempts, finishCalledAt: $0) }),
+          [deadline.fellBack ? "fallback" : nil, deadline.overran ? "overrun" : nil].compactMap { $0 }.joined(separator: ", ").nonEmpty ?? "—",
+          percent(revision.revisingShare),
+        ])
+      }
+      lines += [""] + pad(revisionRows)
+      for (result, revision) in dictations { lines += ["", "\(label(result.id, result.repeatIndex, repeated)) inserted: \(revision.finalText)"] }
+    }
     lines += ["", "totals: \(totals())"]
     lines += skipped.map { "skipped \($0)" }
     return lines.joined(separator: "\n")
@@ -172,7 +193,27 @@ private struct ScoredTranscribeRun: ScoredRun {
         parts.append("cold stop-to-final \(milliseconds(cold.stopToFinalMs)), first committed \(milliseconds(cold.firstCommittedMs))")
       }
     }
-    return ([parts.joined(separator: ", ")] + measurementLines(measurements)).joined(separator: "\n  ")
+    return ([parts.joined(separator: ", ")] + dictationLines() + measurementLines(measurements)).joined(separator: "\n  ")
+  }
+
+  private func dictationLines() -> [String] {
+    let counted = samples.compactMap { sample in sample.result.error == nil ? sample.result.dictation : nil }
+    guard !counted.isEmpty else { return [] }
+    let deadlines = counted.map { deadlineOutcome(of: $0.attempts) }
+    let revisions = requestDurations(cold: cold?.dictation?.attempts ?? [], warm: warm.compactMap { $0.dictation?.attempts })
+    let cancellations = counted.compactMap { result in
+      result.finishCalledAt.flatMap { cancellationLatencyMs(of: result.attempts, finishCalledAt: $0) }
+    }
+    let shares = counted.map(\.revisingShare)
+    var lines = [
+      "deadline fallbacks \(deadlines.filter(\.fellBack).count), deadline overruns \(deadlines.filter(\.overran).count)",
+      "warm stop-to-insert \(percentiles(warm.compactMap { $0.stopToInsert?.totalMs })), transcription \(percentiles(warm.compactMap { $0.stopToInsert?.transcriptionMs })), cleanup \(percentiles(warm.compactMap { $0.stopToInsert?.cleanupMs }))",
+      "warm revision \(percentiles(revisions.warm.map { $0 * 1000 })), cancellation latency \(percentiles(cancellations)), revising \(percent(shares.reduce(0, +) / Double(shares.count))) of the time",
+    ]
+    if let timing = cold?.stopToInsert {
+      lines.append("cold stop-to-insert \(milliseconds(timing.totalMs)), transcription \(milliseconds(timing.transcriptionMs)), cleanup \(milliseconds(timing.cleanupMs)), first revision \(milliseconds(revisions.cold.map { $0 * 1000 }))")
+    }
+    return lines
   }
 
   /// Per sample, what the alignments disagree on, so a human can see what went wrong.
@@ -191,6 +232,7 @@ private struct ScoredTranscribeRun: ScoredRun {
 private struct ScoredCleanupRun: ScoredRun {
   let name: String
   let provider: String
+  let buildConfiguration: String?
   /// Fast runs compress timings, so their latencies are not reported.
   let paced: Bool
   let samples: [(result: CleanupResult, score: CleanupScore)]
@@ -207,6 +249,7 @@ private struct ScoredCleanupRun: ScoredRun {
     let results = try readLog("cleanup.jsonl", in: directory, as: CleanupResult.self)
     name = directory.lastPathComponent
     provider = settings.provider
+    buildConfiguration = settings.buildConfiguration
     paced = !settings.fast
     measurements = RunMeasurements(directory: directory)
     repeated = results.contains { ($0.repeatIndex ?? 0) > 0 }
@@ -277,7 +320,7 @@ private struct ScoredCleanupRun: ScoredRun {
   // MARK: Rendering
 
   func table() -> String {
-    var lines = ["\(name)  (\(provider), \(paced ? "paced" : "fast: timing not reported"))", ""]
+    var lines = ["\(name)  (\(provider)\(buildConfiguration.map { ", \($0) build" } ?? ""), \(paced ? "paced" : "fast: timing not reported"))", ""]
     var rows = [["sample", "exact", "wrong deletions", "missed edits", "stop-to-insert", "revising", "fallbacks", "cancel", "deadline"]]
     for (result, score) in samples {
       let cancellation = result.finishCalledAt.flatMap { cancellationLatencyMs(of: result.attempts, finishCalledAt: $0) }

@@ -16,7 +16,7 @@ Status: approved; implementation in progress.
 |---:|---|---|---|
 | 1 | [Parakeet Unified transcription](01-parakeet-unified.md) | Slice 1 | Accepted |
 | 2 | [Whisper Turbo transcription](02-whisper-turbo.md) | 1 | Accepted |
-| 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Not started |
+| 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Accepted |
 | 4 | [Local provider in the app](04-app-provider.md) | 3 | Not started |
 | 5 | [Transcription evaluation and results](05-transcription-evaluation.md) | 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
@@ -149,3 +149,4 @@ Carried from slice 1:
 | 2026-10-04 | The Unified conversion card says CC-BY-4.0; the manifest records the NVIDIA Open Model License of the upstream `nvidia/parakeet-unified-en-0.6b`. Unresolved, not a stop. | The packet says to record a conflict, not stop. | Lead (workstream 1) | 5 |
 | 2026-10-04 | Workstream 1 edited the bench's `main.swift` usage text, which the plan assigns to workstream 3. Local slice's `LocalCleanup` is now `LocalModel`. | The usage text would otherwise document only `--candidate cleanup=`. | Lead (workstream 1) | 2, 3 |
 | 2026-10-04 | Whisper uses one-second decode cadence, agreement or pause commitment, a 28-second unsettled-audio bound, Silero speech evidence and a 64-token keyterm prompt with limit 12. A local tokenizer adapter prevents WhisperKit's Hub fallback. | The public wrapper initializer is internal in pinned WhisperKit 1.1.0; local failures must propagate. Final paced and offline runs pass without contract violations. No specification drift. Speech events wait for batch inference; observe pause behaviour in the app check. | Lead (workstream 2) | 3, 4, 5 |
+| 2026-10-04 | Bench dictation is `transcribe --cleanup`, prepares both selected services, scores only the transcript and reports inserted text and split stop-to-insert. Load average and debug/release metadata are recorded with backward-compatible reports. No specification drift. | Three-sample local and Apple evidence, legacy reports, independent review and focused closure all pass. | Lead (workstream 3) | 4, 5 |
