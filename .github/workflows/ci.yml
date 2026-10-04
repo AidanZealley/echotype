@@ -37,6 +37,10 @@ jobs:
           path: .build
           key: build-debug-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-${{ github.sha }}
           restore-keys: build-debug-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-
+      # The cached build descriptions record the Metal toolchain's mount path, which changes every
+      # run. Dropping them makes SwiftPM replan while keeping the compiled objects.
+      - name: Drop stale build descriptions
+        run: rm -rf .build/out/Intermediates.noindex/XCBuildData/*.xcbuilddata .build/out/Intermediates.noindex/XCBuildData/prior-build-descriptions.txt
       - name: Run deterministic tests
         run: swift test
 
@@ -53,5 +57,9 @@ jobs:
           path: .build
           key: build-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-${{ github.sha }}
           restore-keys: build-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-
+      # The cached build descriptions record the Metal toolchain's mount path, which changes every
+      # run. Dropping them makes SwiftPM replan while keeping the compiled objects.
+      - name: Drop stale build descriptions
+        run: rm -rf .build/out/Intermediates.noindex/XCBuildData/*.xcbuilddata .build/out/Intermediates.noindex/XCBuildData/prior-build-descriptions.txt
       - name: Build unsigned release executable
         run: swift build -c release --product EchoTypeApp
