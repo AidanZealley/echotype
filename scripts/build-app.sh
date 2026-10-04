@@ -13,9 +13,15 @@ swift build -c "$configuration" --product EchoTypeApp
 staged=$(mktemp -d .build/EchoType-XXXXXX)
 trap 'rm -rf "$staged"' EXIT
 mkdir -p "$staged/EchoType.app/Contents/MacOS" "$staged/EchoType.app/Contents/Resources"
-cp "$(swift build -c "$configuration" --show-bin-path)/EchoTypeApp" "$staged/EchoType.app/Contents/MacOS/"
+bin=$(swift build -c "$configuration" --show-bin-path)
+cp "$bin/EchoTypeApp" "$staged/EchoType.app/Contents/MacOS/"
 cp Resources/Info.plist "$staged/EchoType.app/Contents/"
 cp Resources/AppIcon.icns "$staged/EchoType.app/Contents/Resources/"
+
+# Dependencies ship their resources as bundles beside the executable, such as MLX's compiled
+# Metal shaders. Bundle.module finds them only in Contents/Resources, and a missing one fails at
+# the first use rather than at build time, so every bundle is staged before signing.
+cp -R "$bin"/*.bundle "$staged/EchoType.app/Contents/Resources/"
 
 # The same hardened runtime and microphone entitlement apply to local and release builds.
 # Developer ID signing can replace the default identity when one is available.

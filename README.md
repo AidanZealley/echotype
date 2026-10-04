@@ -88,7 +88,9 @@ file to make spoken replies more reliable without shortening written answers.
 
 You need macOS 26 or later, Xcode 27, and an Apple Development signing certificate in
 your keychain. EchoType has to run as a signed app bundle so macOS can keep its
-microphone and accessibility permissions between builds.
+microphone and accessibility permissions between builds. MLX compiles its Metal shaders during
+the build, so install Xcode's Metal Toolchain once with
+`xcodebuild -downloadComponent MetalToolchain`.
 
 ```sh
 ./scripts/run.sh              # build, sign and launch .build/EchoType.app
