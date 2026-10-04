@@ -19,7 +19,7 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
 
   let directory = try RunInfo.begin(
     command: "transcribe", arguments: options.arguments, provider: provider.id.rawValue,
-    fast: options.fast, synthetic: options.synthetic)
+    candidates: options.recordedSelection, fast: options.fast, synthetic: options.synthetic)
   let log = directory.appending(path: "transcribe.jsonl")
   FileManager.default.createFile(atPath: log.path, contents: nil)
   let logFile = try FileHandle(forWritingTo: log)

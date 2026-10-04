@@ -6,6 +6,8 @@ import Foundation
 struct RunOptions {
   let arguments: [String]
   var providerID: String?
+  /// Cleanup is the only local service so far; `--candidate cleanup=<name>` chooses its model.
+  var localSelection = LocalSelection.build
   var fast = false
   /// Only `transcribe` takes it; `cleanup` rejects it.
   var synthetic = false
@@ -19,6 +21,11 @@ struct RunOptions {
       case "--provider":
         guard let value = rest.popFirst() else { throw BenchError("--provider needs a value") }
         providerID = value
+      case "--candidate":
+        guard let value = rest.popFirst(), value.hasPrefix("cleanup=") else {
+          throw BenchError("--candidate needs cleanup=<name>")
+        }
+        localSelection.cleanup = String(value.dropFirst("cleanup=".count))
       case "--fast": fast = true
       case "--synthetic": synthetic = true
       case _ where argument.hasPrefix("--"): throw BenchError("unknown option \(argument)")
@@ -27,11 +34,19 @@ struct RunOptions {
     }
   }
 
+  /// The provider for `--provider`. The local provider is not in `Providers.all`, so it is
+  /// built here, from the build's selection or `--candidate`.
   func provider() throws -> Provider {
-    let known = Providers.all.map(\.id.rawValue)
+    if providerID == Provider.local.id.rawValue { return try .local(localSelection) }
+    let known = (Providers.all + [.local]).map(\.id.rawValue)
     guard let providerID, let provider = Providers.all.first(where: { $0.id.rawValue == providerID })
     else { throw BenchError("--provider must be one of: \(known.joined(separator: ", "))") }
     return provider
+  }
+
+  /// What `run.json` records: the local provider's candidates, and nothing for the others.
+  var recordedSelection: LocalSelection? {
+    providerID == Provider.local.id.rawValue ? localSelection : nil
   }
 }
 

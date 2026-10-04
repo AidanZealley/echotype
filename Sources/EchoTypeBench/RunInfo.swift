@@ -1,3 +1,4 @@
+import EchoTypeCore
 import Foundation
 
 /// What a run directory records about where and how it ran, written as `run.json` before any
@@ -6,6 +7,8 @@ struct RunInfo: Encodable {
   let command: String
   let arguments: [String]
   let provider: String
+  /// The candidates a local run used. Nil for providers without any.
+  let candidates: LocalSelection?
   let fast: Bool
   let synthetic: Bool
   let macModel: String?
@@ -19,7 +22,8 @@ struct RunInfo: Encodable {
   /// Creates `runs/<UTC timestamp>-<provider>/` under the bench data directory and writes its
   /// `run.json`. The Swift toolchain is not recorded: asking for it means spawning `swift`.
   static func begin(
-    command: String, arguments: [String], provider: String, fast: Bool, synthetic: Bool
+    command: String, arguments: [String], provider: String, candidates: LocalSelection?, fast: Bool,
+    synthetic: Bool
   ) throws -> URL {
     let now = Date()
     let stamp = DateFormatter()
@@ -33,7 +37,8 @@ struct RunInfo: Encodable {
 
     let revision = git(["rev-parse", "HEAD"])
     let info = RunInfo(
-      command: command, arguments: arguments, provider: provider, fast: fast, synthetic: synthetic,
+      command: command, arguments: arguments, provider: provider, candidates: candidates, fast: fast,
+      synthetic: synthetic,
       macModel: sysctlString("hw.model"),
       macOS: ProcessInfo.processInfo.operatingSystemVersionString,
       sourceRevision: revision,

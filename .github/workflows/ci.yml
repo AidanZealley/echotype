@@ -25,6 +25,9 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+      # MLX compiles its Metal shaders during the build, and Xcode ships without the compiler.
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
       - name: Run deterministic tests with coverage
         run: swift test --enable-code-coverage
       - name: Build unsigned release executable

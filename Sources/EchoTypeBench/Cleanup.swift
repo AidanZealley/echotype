@@ -16,7 +16,7 @@ func cleanup(_ options: RunOptions, in manifest: Manifest) async throws {
 
   let directory = try RunInfo.begin(
     command: "cleanup", arguments: options.arguments, provider: provider.id.rawValue,
-    fast: options.fast, synthetic: false)
+    candidates: options.recordedSelection, fast: options.fast, synthetic: false)
   let log = directory.appending(path: "cleanup.jsonl")
   FileManager.default.createFile(atPath: log.path, contents: nil)
   let logFile = try FileHandle(forWritingTo: log)
