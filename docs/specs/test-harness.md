@@ -106,6 +106,10 @@ EchoType's Keychain item. Apple's transcription, voice and cleanup all ran from
 command-line processes on 2026-10-03 without permission prompts, so the bench can use
 them directly.
 
+`cleanup` joins segments with a space, as the speech assembler appends final segments, and
+calls `finish` straight after the last one. A fallback is a request after which `Reviser`
+keeps the streamed words: failed, empty, unfaithful or dropping a reply request.
+
 Local candidates can be selected with `--candidate <service>=<name>`. This is a bench
 argument, not a product setting; app builds still select candidates in one file.
 
@@ -120,14 +124,17 @@ during every run. `powermetrics` needs root, so energy measurement is a guided s
 Scoring is automatic where the reference allows:
 
 - Word error rate and keyterm accuracy against reviewed transcripts, using `Prose`'s
-  word normalisation.
+  word normalisation, plus a formatted word error rate over whitespace tokens that keeps
+  case and punctuation. Corpus rates sum errors over all samples; silence reports
+  insertions instead of a rate.
 - Cleanup wrong deletions and missed edits, comparing the words a reply deleted with
   those the expected cleanup deletes. Both are subsequences of the input, so aligning
   each against it is enough. Ambiguous samples go to manual judgement.
 - Read-aloud round trip: transcribe each generated reading and compare it with the source
   to catch skipped, repeated or invented words. It cannot hear heteronyms or prosody.
 
-`report` writes a draft results document and a local HTML listening page. The page plays
+`report` writes a Markdown report into each run directory; the listening page is still to
+come. It will also write a draft results document and a local HTML listening page. The page plays
 each passage from every voice under shuffled labels and saves ratings as JSON, so voices
 are judged blind.
 
