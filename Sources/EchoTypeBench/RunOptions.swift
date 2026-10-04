@@ -15,6 +15,7 @@ struct RunOptions {
   /// `--candidate <service>=<name>`: the local candidate to measure, where the build's is not.
   var candidates: [LocalService: String] = [:]
   var fast = false
+  var withCleanup = false
   /// How many times the selected samples run in one process. Repeats make warm distributions.
   var repeats = 1
   /// Only `transcribe` takes it; `cleanup` rejects it.
@@ -36,6 +37,7 @@ struct RunOptions {
         }
         candidates[service] = parts[1]
       case "--fast": fast = true
+      case "--cleanup": withCleanup = true
       case "--repeat":
         guard let value = rest.popFirst(), let count = Int(value), count >= 1 else {
           throw BenchError("--repeat needs a whole number of at least 1")
@@ -67,12 +69,14 @@ struct RunOptions {
   /// The `--candidate` for `service`, or the build's. A candidate for another service is an
   /// error rather than ignored, since the run would not use it.
   private func localSelection(measuring service: LocalService) throws -> LocalSelection {
-    if let other = candidates.keys.first(where: { $0 != service }) {
+    if let other = candidates.keys.first(where: { $0 != service && !(service == .transcription && withCleanup) }) {
       throw BenchError("--candidate \(other.rawValue)=<name> does not apply to this command.")
     }
     switch service {
     case .transcription:
-      return LocalSelection(transcription: candidates[service] ?? LocalSelection.build.transcription)
+      return LocalSelection(
+        transcription: candidates[service] ?? LocalSelection.build.transcription,
+        cleanup: withCleanup ? candidates[.cleanup] ?? LocalSelection.build.cleanup : nil)
     case .cleanup:
       return LocalSelection(cleanup: candidates[service] ?? LocalSelection.build.cleanup)
     }

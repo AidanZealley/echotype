@@ -21,6 +21,7 @@ struct Preparation: Codable {
   let startedAt: Date
   let readyAt: Date
   let messages: [Message]
+  var services: [String]? = nil
 
   var waitMs: Double { readyAt.timeIntervalSince(startedAt) * 1000 }
 
@@ -53,6 +54,7 @@ struct MachineSample: Codable {
   let thermalState: String
   /// A name from `memoryPressureLevels`, in order of severity.
   let memoryPressure: String
+  let loadAverage: Double?
 }
 
 let thermalStates = ["nominal", "fair", "serious", "critical"]
@@ -77,7 +79,7 @@ final class Sampler: Sendable {
   func sampleNow() {
     let sample = MachineSample(
       at: Date(), footprintBytes: physFootprint(), thermalState: thermalStateName(),
-      memoryPressure: memoryPressureName())
+      memoryPressure: memoryPressureName(), loadAverage: oneMinuteLoadAverage())
     samples.withLock { $0.append(sample) }
   }
 
@@ -87,6 +89,11 @@ final class Sampler: Sendable {
     sampleNow()
     try writeJSON(samples.withLock { $0 }, to: directory.appending(path: "sampler.json"))
   }
+}
+
+private func oneMinuteLoadAverage() -> Double? {
+  var load = 0.0
+  return getloadavg(&load, 1) == 1 ? load : nil
 }
 
 private func physFootprint() -> UInt64 {
@@ -237,6 +244,19 @@ struct RunMeasurements {
     }
     parts.append("thermal worst " + worst(samples.map(\.thermalState), thermalStates))
     parts.append("memory pressure worst " + worst(samples.map(\.memoryPressure), memoryPressureLevels))
+    let loads = samples.compactMap(\.loadAverage).sorted()
+    if !loads.isEmpty {
+      let middle = loads.count / 2
+      let median = loads.count.isMultiple(of: 2) ? (loads[middle - 1] + loads[middle]) / 2 : loads[middle]
+      parts.append(String(format: "load average median %.2f, max %.2f", median, loads.last!))
+    }
     return parts.joined(separator: ", ")
   }
+}
+
+/// Total time from end of audio to insertion, split at the transcriber's finished event.
+struct StopToInsert: Codable, Equatable {
+  let transcriptionMs: Double
+  let cleanupMs: Double
+  var totalMs: Double { transcriptionMs + cleanupMs }
 }

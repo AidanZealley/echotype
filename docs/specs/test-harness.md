@@ -110,6 +110,12 @@ them directly.
 calls `finish` straight after the last one. A fallback is a request after which `Reviser`
 keeps the streamed words: failed, empty, unfaithful or dropping a reply request.
 
+`transcribe --cleanup` streams paced audio through the transcriber while a real `Reviser`
+revises each committed transcript, then finishes on `.finished`; it rejects `--fast` and
+providers without cleanup. It records both local candidates, the revision trace and inserted
+text, and reports stop-to-insert split into transcription tail and cleanup, with cleanup's
+deadline, cancellation and revising measures; WER and keyterms still score the transcript.
+
 Local candidates can be selected with `--candidate <service>=<name>`. This is a bench
 argument, not a product setting; app builds still select candidates in one file.
 
@@ -127,6 +133,10 @@ warm p50/p95 from the rest. `cleanup` also records when `finish` was called, fro
 derives cancellation latency, deadline fallbacks and overruns (a final revision ending over
 250 ms after the three-second deadline). `powermetrics` needs root, so energy measurement is a
 guided step.
+
+The sampler also records the one-minute load average using `getloadavg`, and `report` gives
+its median and maximum. `run.json` records the bench's debug or release build configuration,
+shown by `report`; older runs report without fields they did not record.
 
 Scoring is automatic where the reference allows:
 

@@ -7,6 +7,7 @@ import Foundation
 /// Everything that can be wrong with the request is checked before the run directory exists.
 /// Samples then run one at a time, each with a fresh `Reviser`.
 func cleanup(_ options: RunOptions, in manifest: Manifest) async throws {
+  guard !options.withCleanup else { throw BenchError("--cleanup only applies to transcribe") }
   guard !options.synthetic else { throw BenchError("--synthetic only applies to transcribe") }
   let provider = try options.provider(measuring: .cleanup)
   guard let service = provider.cleanup else { throw BenchError("\(provider.name) has no cleanup.") }

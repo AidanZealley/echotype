@@ -85,3 +85,21 @@ func preparationPhasesGroupMessagesByTheirText() {
   #expect(phases.map(\.name) == ["Downloading models", "Loading the cleanup model"])
   #expect(phases.map(\.ms) == [1200, 800])
 }
+
+@Test("Stop-to-insert includes transcription tail and cleanup")
+func stopToInsertIncludesBothParts() {
+  let timing = StopToInsert(transcriptionMs: 125, cleanupMs: 3000)
+  #expect(timing.totalMs == 3125)
+  #expect(StopToInsert(transcriptionMs: 0, cleanupMs: 0).totalMs == 0)
+}
+
+@Test("Dictation rejects fast timing and a provider without cleanup before setup")
+func dictationRequiresPacedAudioAndCleanup() throws {
+  let fast = try RunOptions(parsing: ["--cleanup", "--fast"])
+  #expect(throws: BenchError.self) { try validateDictation(fast, provider: .apple) }
+  let paced = try RunOptions(parsing: ["--cleanup"])
+  var provider = Provider.apple
+  provider.cleanup = nil
+  #expect(throws: BenchError.self) { try validateDictation(paced, provider: provider) }
+  #expect(throws: Never.self) { try validateDictation(paced, provider: .apple) }
+}

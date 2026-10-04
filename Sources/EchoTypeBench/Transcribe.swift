@@ -10,13 +10,22 @@ import Foundation
 /// run goes on.
 func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
   let provider = try options.provider(measuring: .transcription)
+  try validateDictation(options, provider: provider)
   let credential = try credential(for: provider)
   let samples = try transcriptionTargets(options, in: manifest)
   let request = TranscriptionRequest(
     settings: Settings(provider: provider.id, keyterms: manifest.keyterms, language: Language.english.tag),
     provider: provider, credential: credential)
   let sampler = Sampler()
-  let preparation = try await requireReady(provider, "transcription", state: \.transcription)
+  var preparation = try await requireReady(provider, options.withCleanup ? "dictation" : "transcription") { states in
+    guard options.withCleanup else { return states.transcription }
+    guard let cleanup = states.cleanup else { return nil }
+    let services = [states.transcription, cleanup]
+    if let unavailable = services.first(where: { $0.status == .unavailable }) { return unavailable }
+    let messages = services.filter { $0.status == .waiting }.compactMap(\.message)
+    return messages.isEmpty ? .ready : .waiting(messages.joined(separator: "; "))
+  }
+  preparation.services = options.withCleanup ? ["transcription", "cleanup"] : ["transcription"]
   sampler.sampleNow()
 
   let directory = try RunInfo.begin(
@@ -30,12 +39,13 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
   defer { try? logFile.close() }
   let encoder = JSONEncoder()
   encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+  encoder.dateEncodingStrategy = .milliseconds
 
   for repeatIndex in 0..<options.repeats {
     for sample in samples {
       let result = await transcribe(
         sample, repeatIndex: repeatIndex, provider: provider, request: request, fast: options.fast,
-        synthetic: options.synthetic)
+        synthetic: options.synthetic, withCleanup: options.withCleanup)
       try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
       print(summaryLine(for: result))
     }
@@ -73,6 +83,12 @@ private func transcriptionTargets(
   return chosen.map { ($0, audio($0.id)) }
 }
 
+/// Validate dictation before credentials, readiness or run-directory creation.
+func validateDictation(_ options: RunOptions, provider: Provider) throws {
+  guard !options.withCleanup || !options.fast else { throw BenchError("--cleanup requires paced audio; remove --fast") }
+  guard !options.withCleanup || provider.cleanup != nil else { throw BenchError("\(provider.name) has no cleanup.") }
+}
+
 // MARK: One sample
 
 /// How long to wait for `.ready`, and for `.finished` after `finish()`, before closing the
@@ -105,6 +121,9 @@ struct TranscribeResult: Codable, RepeatedResult {
   let violations: [String]
   /// A thrown error, or a transcriber that never answered.
   let error: String?
+  /// Present only for paced dictation runs. The nested record shares cleanup's trace and measures.
+  let dictation: CleanupResult?
+  let stopToInsert: StopToInsert?
 }
 
 /// What the event reader saw, with the time of each event.
@@ -112,11 +131,13 @@ private struct Observed {
   var events: [(at: ContinuousClock.Instant, event: TranscriptionEvent)] = []
   var check = ContractCheck()
   var error: String?
+  var dictation: CleanupResult?
+  var insertedAt: ContinuousClock.Instant?
 }
 
 private func transcribe(
   _ target: (sample: Dictation, audio: URL), repeatIndex: Int, provider: Provider, request: TranscriptionRequest,
-  fast: Bool, synthetic: Bool
+  fast: Bool, synthetic: Bool, withCleanup: Bool
 ) async -> TranscribeResult {
   var origin: ContinuousClock.Instant?
   var finishCalledAt: ContinuousClock.Instant?
@@ -125,13 +146,14 @@ private func transcribe(
   var transcriber: (any LiveTranscriber)?
   var reader: Task<Observed, Never>?
   var observed: Observed?
+  let reviser = withCleanup ? provider.cleanup.map { Reviser(cleanup: $0, credential: request.credential) } : nil
 
   do {
     let recording = try WAVRecording(contentsOf: target.audio)
     audioSeconds = recording.duration(ofInterleaved: recording.samples)
     let session = try await provider.transcription.start(request)
     transcriber = session
-    let (events, ready) = readEvents(of: session)
+    let (events, ready) = readEvents(of: session, reviser: reviser, id: target.sample.id, repeatIndex: repeatIndex)
     reader = events
 
     try await waitForReady(ready, closing: session)
@@ -145,6 +167,7 @@ private func transcribe(
 
   transcriber?.close()
   await transcriber?.waitForClose()
+  await reviser?.stop()
   if observed == nil { observed = await reader?.value }
   var seen = observed ?? Observed()
   if finishCalledAt != nil && error == nil { seen.check.finishWasCalled() }
@@ -158,16 +181,35 @@ private func transcribe(
 /// Reads the event stream on its own task so events are stamped as they arrive, whatever the
 /// sender is doing. The second value yields once on `.ready` and finishes when the stream ends.
 private func readEvents(
-  of transcriber: any LiveTranscriber
+  of transcriber: any LiveTranscriber, reviser: Reviser?, id: String, repeatIndex: Int
 ) -> (Task<Observed, Never>, AsyncStream<Void>) {
   let (ready, signal) = AsyncStream.makeStream(of: Void.self)
   let reader = Task {
     var observed = Observed()
+    var committed = ""
     do {
       for try await event in transcriber.events {
         observed.events.append((.now, event))
         observed.check.observe(event)
         if event == .ready { signal.yield() }
+        if case .transcript(let transcript) = event {
+          committed = transcript.committed
+          await reviser?.submit(committed: committed)
+        }
+        if event == .finished, let reviser {
+          let finishCalledAt = Date()
+          let clock = ContinuousClock.now
+          let inserted = await reviser.finish(committed: committed)
+          let end = ContinuousClock.now
+          let attempts = await reviser.attempts
+          let timeline = end - (observed.events.first?.at ?? clock)
+          observed.insertedAt = end
+          observed.dictation = CleanupResult(
+            id: id, repeatIndex: repeatIndex, input: committed, finalText: inserted, attempts: attempts,
+            finishCalledAt: finishCalledAt, stopToInsertMs: milliseconds(end - clock),
+            revisingShare: attempts.map(\.duration).reduce(0, +) / max(timeline / .seconds(1), 0.001),
+            fallbacks: attempts.filter(\.result.isFallback).count, error: nil)
+        }
       }
     } catch {
       observed.error = "events failed: \(error)"
@@ -238,7 +280,12 @@ private func result(
     firstProvisionalMs: transcripts.first { $0.provisional?.isEmpty == false }?.ms,
     firstCommittedMs: transcripts.first { $0.committed?.isEmpty == false }?.ms,
     stopToFinalMs: finishCalledAt.flatMap { stop in finished.map { milliseconds($0.at - stop) } },
-    violations: observed.check.violations, error: error)
+    violations: observed.check.violations, error: error, dictation: observed.dictation,
+    stopToInsert: finishCalledAt.flatMap { stop in
+      finished.flatMap { final in
+        observed.insertedAt.map { StopToInsert(transcriptionMs: milliseconds(final.at - stop), cleanupMs: milliseconds($0 - final.at)) }
+      }
+    })
 }
 
 private func milliseconds(_ duration: Duration) -> Double {
