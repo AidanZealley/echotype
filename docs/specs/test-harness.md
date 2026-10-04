@@ -119,7 +119,14 @@ after finish, chunks of at most 100 ms at one sample rate, bounded generation wh
 paused, and prompt cancellation.
 
 A background sampler records `phys_footprint`, thermal state and system memory pressure
-during every run. `powermetrics` needs root, so energy measurement is a guided step.
+during every `transcribe` and `cleanup` run, every 250 ms from before the provider is ready
+until the run ends, into `sampler.json`. `preparation.json` records how long the provider took
+to become ready and the readiness messages with their times. `--repeat <n>` runs the selected
+samples `n` times in one process; the run's first result is the cold request and `report` gives
+warm p50/p95 from the rest. `cleanup` also records when `finish` was called, from which `report`
+derives cancellation latency, deadline fallbacks and overruns (a final revision ending over
+250 ms after the three-second deadline). `powermetrics` needs root, so energy measurement is a
+guided step.
 
 Scoring is automatic where the reference allows:
 

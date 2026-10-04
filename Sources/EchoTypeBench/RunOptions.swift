@@ -9,6 +9,8 @@ struct RunOptions {
   /// Cleanup is the only local service so far; `--candidate cleanup=<name>` chooses its model.
   var localSelection = LocalSelection.build
   var fast = false
+  /// How many times the selected samples run in one process. Repeats make warm distributions.
+  var repeats = 1
   /// Only `transcribe` takes it; `cleanup` rejects it.
   var synthetic = false
   var ids: [String] = []
@@ -27,6 +29,11 @@ struct RunOptions {
         }
         localSelection.cleanup = String(value.dropFirst("cleanup=".count))
       case "--fast": fast = true
+      case "--repeat":
+        guard let value = rest.popFirst(), let count = Int(value), count >= 1 else {
+          throw BenchError("--repeat needs a whole number of at least 1")
+        }
+        repeats = count
       case "--synthetic": synthetic = true
       case _ where argument.hasPrefix("--"): throw BenchError("unknown option \(argument)")
       default: ids.append(argument)
@@ -61,23 +68,32 @@ func credential(for provider: Provider) throws -> String? {
   return key
 }
 
-/// Waits while the provider is setting up a service, such as downloading a speech model. `state`
-/// picks the service from the provider's readiness; nil means the provider has no such service.
+/// Waits while the provider is setting up a service, such as downloading a speech model, and
+/// records how long that took and what it said. `state` picks the service from the provider's
+/// readiness; nil means the provider has no such service.
 func requireReady(
   _ provider: Provider, _ service: String, state select: (ServiceReadiness) -> ServiceState?
-) async throws {
+) async throws -> Preparation {
   let request = ReadinessRequest(language: Language.english.tag, voice: provider.voice.voices[0].id)
   let check = { await provider.readiness.check(request) }
+  let startedAt = Date()
+  let clock = ContinuousClock.now
+  var messages: [Preparation.Message] = []
   // Subscribed before the first check, so a change in between is not missed.
   let changes = provider.readiness.changes()
   var state = await select(check())
   var updates = changes.makeAsyncIterator()
   while state?.status == .waiting {
-    print("Waiting: \(state?.message ?? "\(service) is setting up")")
+    let message = state?.message ?? "\(service) is setting up"
+    print("Waiting: \(message)")
+    if messages.last?.message != message {
+      messages.append(.init(ms: (ContinuousClock.now - clock) / .milliseconds(1), message: message))
+    }
     guard await updates.next() != nil else { break }
     state = await select(check())
   }
   guard state?.status == .ready else {
     throw BenchError("\(provider.name) \(service) is not ready: \(state?.message ?? "unavailable")")
   }
+  return Preparation(startedAt: startedAt, readyAt: Date(), messages: messages)
 }

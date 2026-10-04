@@ -1,6 +1,6 @@
 # Local cleanup (slice 1) implementation plan
 
-Status: draft; workstreams 1-2 accepted.
+Status: draft; workstreams 1-3 accepted.
 
 ## Orchestration record
 
@@ -16,7 +16,7 @@ Status: draft; workstreams 1-2 accepted.
 |---:|---|---|---|
 | 1 | [Pinned model downloads](01-model-assets.md) | Approved spec | Accepted |
 | 2 | [Local cleanup candidates](02-local-cleanup.md) | 1 | Accepted |
-| 3 | [Bench measurement for local services](03-bench-measurement.md) | 2 | Not started |
+| 3 | [Bench measurement for local services](03-bench-measurement.md) | 2 | Accepted |
 | 4 | [Cleanup evaluation and results](04-cleanup-evaluation.md) | 3 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-4 | Not started |
 
@@ -98,6 +98,10 @@ None.
 - `Readiness.check` calls `ModelStore.start` only when the state is `.missing`. `start` restarts a
   failed model and every state change yields on `changes()`, so starting a failed one would loop
   while offline. A failed model stays failed until relaunch. Hold one shared store per process.
+- Derive paired figures (cold versus warm, counted versus excluded) from one filtered list in one
+  pure function, not from two differently filtered reads, and test it with a subset run whose
+  first attempt is a cancelled live revision. Report fields workstream 4 cites: see the handoff
+  in `03-bench-measurement.md`.
 
 ## Decision and drift log
 
