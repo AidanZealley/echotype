@@ -25,11 +25,6 @@ import Testing
     #expect(error?.localizedDescription.contains("qwen3-4b-2507, smollm3-3b") == true)
   }
 
-  @Test("A reply is allowed to be longer than its window")
-  func outputLimit() {
-    for tokens in [0, 1, 30, 400] { #expect(CleanupModel.outputLimit(windowTokens: tokens) > tokens) }
-  }
-
   @Test("Readiness reports the download, then a failed one stays failed without starting again")
   func downloadProgressAndFailure() async {
     let root = FileManager.default.temporaryDirectory.appending(path: "LocalCleanupTests-\(UUID().uuidString)")

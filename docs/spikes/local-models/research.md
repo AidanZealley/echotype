@@ -115,8 +115,8 @@ Task-specific editing accuracy therefore matters more than general reasoning sco
 
 | Candidate | Potential quality | Download and estimated runtime memory | Integration cost |
 | --- | --- | --- | --- |
-| [Qwen3-4B-Instruct-2507, four-bit](https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit) | Best starting balance. Explicitly nonthinking, with strong vendor-reported instruction following. Faithful cleanup is untested. | 2.28 GB download; estimate 3-4 GB RAM for short contexts. | Low to medium. Supported architecture, native system prompt and no reasoning-mode parser. Apache 2.0. |
-| [SmolLM3-3B, four-bit](https://huggingface.co/mlx-community/SmolLM3-3B-4bit) | Smaller comparison. Worth checking whether reduced capability affects conservative editing. | 1.75 GB download; estimate 2.5-3.5 GB RAM. | Low to medium. Native support exists. Disable thinking through the actual chat-template flag. Apache 2.0. |
+| [Qwen3-4B-Instruct-2507, four-bit](https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit) | Best starting balance. Explicitly nonthinking, with strong vendor-reported instruction following. Faithful cleanup is untested. | 2.28 GB download; estimate 3-4 GB RAM for short contexts (measured peak 2.6 GiB; see `results.md`). | Low to medium. Supported architecture, native system prompt and no reasoning-mode parser. Apache 2.0. |
+| [SmolLM3-3B, four-bit](https://huggingface.co/mlx-community/SmolLM3-3B-4bit) | Smaller comparison. Worth checking whether reduced capability affects conservative editing. | 1.75 GB download; estimate 2.5-3.5 GB RAM (measured peak 2.1 GiB; see `results.md`). | Low to medium. Native support exists. Disable thinking through the actual chat-template flag. Apache 2.0. |
 | [Qwen3.5-4B, four-bit](https://huggingface.co/mlx-community/Qwen3.5-4B-4bit) | Newer challenger. Broad improvements do not establish better nonthinking cleanup. | 3.06 GB including multimodal weights; estimate 4-5 GB RAM pending text-only loading checks. | Medium. Hybrid architecture, text-only loading and thinking configuration need verification. Apache 2.0. |
 | [Gemma4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) | Interesting on-device challenger without directly comparable editing evidence. | Four-bit artifact about 3.58 GB; estimate 4.5-6 GB RAM. E2B means effective compute, with 5.1B total parameters including embeddings. | Medium to high. New architecture and multimodal loading increase version sensitivity. Apache 2.0. |
 | [Llama-3.2-3B-Instruct, four-bit](https://huggingface.co/mlx-community/Llama-3.2-3B-Instruct-4bit) | Mature nonthinking baseline. Less compelling evidence for choosing it over Qwen or SmolLM. | 1.82 GB download; estimate 2.5-3.5 GB RAM. | Lower technical cost, additional distribution considerations. Meta's upstream repository is gated and uses custom terms. |
@@ -136,7 +136,7 @@ while transcription runs. Cold loading belongs in readiness preparation.
 The budget does not bound the whole stop-to-insert wait. `Reviser.finish` cancels the
 in-flight live revision and awaits it before starting the three-second timer. A cloud
 request cancels at once; local generation stops only between steps, and a long prompt
-prefill may not be interruptible. `Reviser` also starts a new live revision whenever
+prefill may not be interruptible (measured: prefill is interruptible between 128-token chunks, one chunk is not; see `results.md`). `Reviser` also starts a new live revision whenever
 committed text grows, so a local model may run almost continuously during dictation.
 
 Local inference allows optimisations a hosted API does not. Verified in MLX Swift LM's
