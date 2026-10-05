@@ -36,3 +36,42 @@ struct ContractCheck {
     if !sawFinished { violations.append("no .finished after finish()") }
   }
 }
+
+/// Checks one reading's `SpeechStream` against its contract, collecting every violation as a
+/// sentence for the run's record. Pure, like `ContractCheck`.
+struct SpeechContractCheck {
+  /// The longest chunk the contract allows, in seconds.
+  static let maximumChunkSeconds = 0.1
+  /// How long `cancel()` may leave a pending `next()` running, in seconds.
+  static let maximumCancelSeconds = 1.0
+
+  private(set) var violations: [String] = []
+  private var sampleRate: Int?
+  private var chunkCount = 0
+
+  mutating func observe(_ chunk: SpeechAudio) {
+    chunkCount += 1
+    if let sampleRate, chunk.sampleRate != sampleRate {
+      violations.append("sample rate changed from \(sampleRate) to \(chunk.sampleRate) Hz")
+    }
+    sampleRate = chunk.sampleRate
+    let seconds = Double(chunk.samples.count) / Double(chunk.sampleRate)
+    if seconds > Self.maximumChunkSeconds {
+      violations.append("chunk \(chunkCount) was \(Int((seconds * 1000).rounded())) ms")
+    }
+  }
+
+  /// Called when the stream returned nil, for the text that was spoken.
+  mutating func streamEnded(spoken text: String) {
+    if chunkCount == 0, !text.isEmpty { violations.append("the stream ended without audio") }
+  }
+
+  mutating func threw(_ error: any Error) { violations.append("next() threw: \(error)") }
+
+  /// Called with how long `next()` took to end after `cancel()`, nil if it never did.
+  mutating func cancellationTook(seconds: Double?) {
+    if (seconds ?? .infinity) > Self.maximumCancelSeconds {
+      violations.append("cancel() did not end next() within \(Int(Self.maximumCancelSeconds)) s")
+    }
+  }
+}

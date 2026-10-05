@@ -22,7 +22,7 @@ func report(_ runs: [String], in manifest: Manifest) throws {
 }
 
 /// A run id names a directory under the bench's runs; anything else is taken as a path.
-private func runDirectory(_ argument: String) -> URL {
+func runDirectory(_ argument: String) -> URL {
   let path = URL(fileURLWithPath: argument)
   if argument.contains("/") { return path }
   return BenchData.directory.appending(path: "runs/\(argument)")
@@ -34,14 +34,20 @@ private struct RunSettings: Decodable {
   let fast: Bool
   let synthetic: Bool
   let buildConfiguration: String?
+  let speech: Speech?
+
+  struct Speech: Decodable {
+    let voice: String
+    let speed: Double
+  }
 }
 
-/// A run is a transcribe run or a cleanup run, by which log its directory holds.
+/// A run is a speak, cleanup or transcribe run, by which log its directory holds.
 private func scoredRun(in directory: URL, manifest: Manifest, references: [String: String]) throws -> any ScoredRun {
-  let isCleanup = FileManager.default.fileExists(atPath: directory.appending(path: "cleanup.jsonl").path)
-  return isCleanup
-    ? try ScoredCleanupRun(directory: directory, manifest: manifest)
-    : try ScoredTranscribeRun(directory: directory, manifest: manifest, references: references)
+  let has = { (log: String) in FileManager.default.fileExists(atPath: directory.appending(path: log).path) }
+  if has("speak.jsonl") { return try ScoredSpeakRun(directory: directory, manifest: manifest) }
+  if has("cleanup.jsonl") { return try ScoredCleanupRun(directory: directory, manifest: manifest) }
+  return try ScoredTranscribeRun(directory: directory, manifest: manifest, references: references)
 }
 
 /// What `report` prints and writes for one run.
@@ -357,6 +363,117 @@ private struct ScoredCleanupRun: ScoredRun {
   }
 }
 
+/// The first audio target for short passages, in milliseconds.
+private let firstAudioTargetMs = 500.0
+
+private struct ScoredSpeakRun: ScoredRun {
+  let name: String
+  let provider: String
+  let buildConfiguration: String?
+  let voice: String
+  let speed: Double
+  /// Fast runs do not model the player, so they have no gaps, pause or cancellation.
+  let paced: Bool
+  let results: [SpeakResult]
+  let trials: [CancellationTrial]
+  let measurements: RunMeasurements
+  /// The run's first reading, apart from the warm ones after it. Both leave out failed readings.
+  let cold: SpeakResult?
+  let warm: [SpeakResult]
+  /// The passages tagged `short`, which the first audio target applies to.
+  let shortIDs: Set<String>
+  let repeated: Bool
+
+  init(directory: URL, manifest: Manifest) throws {
+    let settings = try readSettings(of: directory)
+    results = try readLog("speak.jsonl", in: directory, as: SpeakResult.self)
+    let hasTrials = FileManager.default.fileExists(atPath: directory.appending(path: "cancellation.jsonl").path)
+    trials = hasTrials ? try readLog("cancellation.jsonl", in: directory, as: CancellationTrial.self) : []
+    name = directory.lastPathComponent
+    provider = settings.provider
+    buildConfiguration = settings.buildConfiguration
+    voice = settings.speech?.voice ?? "unknown voice"
+    speed = settings.speech?.speed ?? 1
+    paced = !settings.fast
+    measurements = RunMeasurements(directory: directory)
+    repeated = results.contains { ($0.repeatIndex ?? 0) > 0 }
+    shortIDs = Set(manifest.samples.compactMap { sample in
+      if case .reading(let reading) = sample, reading.tags.contains("short") { reading.id } else { nil }
+    })
+    let (first, rest) = splitCold(results)
+    cold = first.flatMap { $0.error == nil ? $0 : nil }
+    warm = rest.filter { $0.error == nil }
+  }
+
+  private var violations: Int { results.map(\.violations.count).reduce(0, +) + trials.map(\.violations.count).reduce(0, +) }
+
+  func totals() -> String {
+    var lines = [
+      "voice \(voice) at \(speed)x, \(results.count) readings, \(results.filter { $0.error != nil }.count) failed, violations \(violations)",
+      "warm first audio \(percentiles(warm.compactMap(\.firstAudioMs))), cold first audio \(milliseconds(cold?.firstAudioMs))",
+      "short passages, warm first audio \(percentiles(warm.filter { shortIDs.contains($0.id) }.compactMap(\.firstAudioMs))) (target \(Int(firstAudioTargetMs)) ms)",
+      "warm real-time factor \(ratioPercentiles(warm.compactMap(\.realTimeFactor)))",
+    ]
+    if paced {
+      let gapped = results.filter { ($0.gapCount ?? 0) > 0 }
+      lines.append(
+        "gaps \(results.compactMap(\.gapCount).reduce(0, +)) totalling \(Int(results.compactMap(\.gapMs).reduce(0, +).rounded())) ms in \(gapped.count) of \(results.count) readings")
+      lines += results.compactMap { result in
+        result.pause.map { "pause in \(result.id): audio after resume \(String(format: "%.1f", $0.audioAfterResumeSeconds)) s, \(footprintText(across: $0))" }
+      }
+      let latencies = trials.compactMap(\.latencyMs)
+      lines.append("cancellation latency \(percentiles(latencies)), next() already ended in \(trials.filter { !$0.pending }.count) of \(trials.count) trials")
+    }
+    return (lines + measurementLines(measurements)).joined(separator: "\n  ")
+  }
+
+  /// The footprint when the pause began and when it ended, which shows whether the stream kept
+  /// generating while the player was paused.
+  private func footprintText(across pause: SpeakResult.Pause) -> String {
+    let samples = measurements.samples.filter { $0.at >= pause.pausedAt && $0.at <= pause.resumedAt }
+    guard let first = samples.first, let last = samples.last else { return "no footprint sampled" }
+    return "footprint \(first.footprintBytes / 1_048_576) to \(last.footprintBytes / 1_048_576) MiB across the pause"
+  }
+
+  func table() -> String {
+    var lines = ["\(name)  (\(provider)\(buildConfiguration.map { ", \($0) build" } ?? ""), \(paced ? "paced" : "fast: gaps, pause and cancellation not recorded"))", ""]
+    var rows = [["sample", "first audio", "gaps", "synthesis", "audio", "real-time", "chunks", "largest", "rate", "after resume", "violations"]]
+    for result in results {
+      rows.append([
+        label(result.id, result.repeatIndex, repeated), milliseconds(result.firstAudioMs),
+        result.gapCount.map { "\($0) (\(Int((result.gapMs ?? 0).rounded())) ms)" } ?? "—",
+        String(format: "%.1f s", result.synthesisSeconds), String(format: "%.1f s", result.audioSeconds),
+        result.realTimeFactor.map { String(format: "%.2f", $0) } ?? "—", "\(result.chunks)",
+        milliseconds(result.largestChunkMs), result.sampleRate.map { "\($0) Hz" } ?? "—",
+        result.pause.map { String(format: "%.1f s", $0.audioAfterResumeSeconds) } ?? "—",
+        result.error == nil ? "\(result.violations.count)" : "ERROR: \(result.error ?? "")",
+      ])
+    }
+    lines += pad(rows)
+    if !trials.isEmpty {
+      var trialRows = [["cancellation trial", "audio before", "pending", "latency", "violations"]]
+      for trial in trials {
+        trialRows.append([
+          label(trial.id, trial.repeatIndex, repeated), String(format: "%.1f s", trial.audioSeconds),
+          trial.pending ? "yes" : "no", milliseconds(trial.latencyMs), "\(trial.violations.count)",
+        ])
+      }
+      lines += [""] + pad(trialRows)
+    }
+    lines += ["", "totals: \(totals())"]
+    return lines.joined(separator: "\n")
+  }
+
+  func detailSection() -> String {
+    let problems = results.filter { !$0.violations.isEmpty }.map { ($0.id, $0.violations) }
+      + trials.filter { !$0.violations.isEmpty }.map { ("cancellation trial on \($0.id)", $0.violations) }
+    var lines = ["", "", "## Contract violations"]
+    for (id, violations) in problems { lines += ["", "### \(id)"] + violations.map { "- \($0)" } }
+    if problems.isEmpty { lines += ["", "None."] }
+    return lines.joined(separator: "\n") + "\n"
+  }
+}
+
 extension DictationTrace.Result {
   /// A reply `Reviser` refused because it added, reordered or lost words.
   var isValidationRejection: Bool {
@@ -400,10 +517,21 @@ private func percent(_ value: Double?) -> String {
 
 /// Nearest-rank p50 and p95 in milliseconds.
 private func percentiles(_ values: [Double]) -> String {
-  guard !values.isEmpty else { return "—" }
+  guard let (p50, p95) = nearestRanks(values) else { return "—" }
+  return "p50 \(Int(p50.rounded())) / p95 \(Int(p95.rounded())) ms (n=\(values.count))"
+}
+
+/// Nearest-rank p50 and p95 of a ratio.
+private func ratioPercentiles(_ values: [Double]) -> String {
+  guard let (p50, p95) = nearestRanks(values) else { return "—" }
+  return String(format: "p50 %.2f / p95 %.2f (n=%d)", p50, p95, values.count)
+}
+
+private func nearestRanks(_ values: [Double]) -> (p50: Double, p95: Double)? {
+  guard !values.isEmpty else { return nil }
   let sorted = values.sorted()
-  let at = { (p: Double) in Int(sorted[Int((p * Double(sorted.count)).rounded(.up)) - 1].rounded()) }
-  return "p50 \(at(0.5)) / p95 \(at(0.95)) ms (n=\(sorted.count))"
+  let at = { (p: Double) in sorted[Int((p * Double(sorted.count)).rounded(.up)) - 1] }
+  return (at(0.5), at(0.95))
 }
 
 /// Left-aligned columns, with the header underlined.

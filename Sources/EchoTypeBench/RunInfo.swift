@@ -12,6 +12,8 @@ struct RunInfo: Encodable {
   let candidates: LocalSelection?
   let fast: Bool
   let synthetic: Bool
+  /// What `speak` read with. Nil for the other commands.
+  let speech: Speech?
   let macModel: String?
   let macOS: String
   /// Nil when the bench is not run from a git checkout.
@@ -20,18 +22,19 @@ struct RunInfo: Encodable {
   let sourceDirty: Bool?
   let startedAt: Date
 
+  struct Speech: Encodable {
+    let voice: String
+    let speed: Double
+  }
+
   /// Creates `runs/<UTC timestamp>-<provider>/` under the bench data directory and writes its
   /// `run.json`. The Swift toolchain is not recorded: asking for it means spawning `swift`.
   static func begin(
     command: String, arguments: [String], provider: String, candidates: LocalSelection?, fast: Bool,
-    synthetic: Bool
+    synthetic: Bool, speech: Speech? = nil
   ) throws -> URL {
     let now = Date()
-    let stamp = DateFormatter()
-    stamp.locale = Locale(identifier: "en_US_POSIX")
-    stamp.timeZone = TimeZone(identifier: "UTC")
-    stamp.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-    let directory = BenchData.directory.appending(path: "runs/\(stamp.string(from: now))-\(provider)")
+    let directory = BenchData.directory.appending(path: "runs/\(utcStamp(now))-\(provider)")
     try FileManager.default.createDirectory(
       at: directory.deletingLastPathComponent(), withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -44,7 +47,7 @@ struct RunInfo: Encodable {
     #endif
     let info = RunInfo(
       buildConfiguration: buildConfiguration, command: command, arguments: arguments, provider: provider, candidates: candidates, fast: fast,
-      synthetic: synthetic,
+      synthetic: synthetic, speech: speech,
       macModel: sysctlString("hw.model"),
       macOS: ProcessInfo.processInfo.operatingSystemVersionString,
       sourceRevision: revision,
@@ -57,6 +60,15 @@ struct RunInfo: Encodable {
     try encoder.encode(info).write(to: directory.appending(path: "run.json"))
     return directory
   }
+}
+
+/// A UTC timestamp that sorts, such as `20261005T064539Z`, for naming run and listening directories.
+func utcStamp(_ date: Date) -> String {
+  let stamp = DateFormatter()
+  stamp.locale = Locale(identifier: "en_US_POSIX")
+  stamp.timeZone = TimeZone(identifier: "UTC")
+  stamp.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+  return stamp.string(from: date)
 }
 
 private func sysctlString(_ name: String) -> String? {

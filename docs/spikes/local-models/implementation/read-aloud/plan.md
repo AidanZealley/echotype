@@ -5,16 +5,16 @@ Status: approved; implementation has not started.
 ## Orchestration record
 
 - Integration branch: `spike/local-models`
-- Starting commit: `TBD`
+- Starting commit: `20afdf511b42f343a206f816778884b8b05a7633`
 - Review command: `lead subagents`
 - Specification approved at commit: `a8cabe1` (both specs approved 2026-10-03)
-- Started: `TBD`
+- Started: `2026-10-05`
 
 ## Workstream order
 
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
-| 1 | [Bench reading and listening page](01-bench-speak.md) | Slice 2 | Not started |
+| 1 | [Bench reading and listening page](01-bench-speak.md) | Slice 2 | Accepted |
 | 2 | [Kokoro read aloud](02-kokoro.md) | 1 | Not started |
 | 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Not started |
 | 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Not started |
@@ -145,6 +145,9 @@ Carried from slices 1 and 2:
 - In `results.md`, put a run id on every figure, bullet and table row, including derived ones,
   and scope runtime claims to what was measured. Derive "warm" figures with the cold request
   excluded, as `report` does.
+- Apple's `speak` run proves the harness, not cancellation or paused generation: it produces the
+  whole stream ahead, so its cancellation trial is never pending. Treat a missing pause line on
+  `reading-long-selection` (pause estimated at 15 characters per second) as a failed measurement.
 - Model preparation can take minutes before readiness. Do not call a Loading state a hang without
   runtime evidence. Use `/usr/bin/log` on this Mac to avoid zsh's `log` builtin.
 
