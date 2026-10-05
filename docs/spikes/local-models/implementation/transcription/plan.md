@@ -1,6 +1,6 @@
 # Local transcription (slice 2) implementation plan
 
-Status: approved; implementation in progress.
+Status: complete; accepted, 2026-10-05.
 
 ## Orchestration record
 
@@ -19,7 +19,7 @@ Status: approved; implementation in progress.
 | 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Accepted |
 | 4 | [Local provider in the app](04-app-provider.md) | 3 | Accepted |
 | 5 | [Transcription evaluation and results](05-transcription-evaluation.md) | 4 | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1-5 | Accepted |
 
 ## Why these boundaries
 
@@ -91,12 +91,31 @@ Sequential throughout. Workstreams 1 and 2 both edit `Package.swift`, `LocalCand
 
 ## Whole-feature acceptance
 
-- Workstreams 1-5 accepted, with the signed-app gate passed.
+- Workstreams 1-5 and final whole-feature review accepted, with the signed-app gate passed.
+- Delivered local Unified and Whisper transcription, candidate selection in the bench, concurrent
+  dictation through the real Reviser, Local in Settings, verified model delivery and release
+  comparison results. Recommended boosted Unified with Qwen cleanup; Aidan chose to record it
+  while leaving the build at unboosted Unified. Productionising is separate.
+- Concurrent cleanup recorded 0 deadline fallbacks and 0 overruns. Warm stop-to-insert p50/p95
+  was 1240/2716 ms, n=14, in `20261005T064539Z-local`.
+- Final verification passed twice, in independent whole-feature review and fresh focused closure:
+  235 tests, comprising 140 core, 19 bench and 76 app tests; release app build; signed bundle
+  build; strict signature verification. All 34 cited runs exist and regenerated reports passed.
+- Signed-app gate passed on the reviewed unboosted Unified/Qwen and Whisper candidate; item 4,
+  switching during download, remains explicitly waived. No boosted follow-up gate is authorized.
+- Deferred optional observations: Whisper batch speech-event timing and fast-run variation, the
+  small stop-to-insert arithmetic test, and the recorded Unified conversion/upstream licence
+  conflict. None blocks this accepted spike; distribution readiness belongs to productionising.
+- Final review introduced no specification drift. Recorded transient incomplete-file bytes are
+  an observed snapshot; a whole-download allocated peak was not measured.
 - `swift test` and `swift build -c release --product EchoTypeApp` pass.
 - Pending outside this workflow, recorded in the completion report:
   - CI runs only when the branch is pushed; FluidAudio and WhisperKit change its build time.
   - First model load after a reboot or OS update (an evicted Core ML cache) is not measured.
   - Energy (`powermetrics` needs root) is not measured.
+  - Whole-download peak disk usage, including URLSession temporary storage, was not sampled.
+    The observed interrupted-download snapshot records five incomplete files and 14444100
+    logical bytes; installed/cache figures are post-install snapshots.
   - Nested dependency bundles keep SwiftPM's ad hoc signatures; Developer ID notarisation of
     them is untested (carried from slice 1).
   - Read aloud, and therefore the voice comparison build and its worst-case memory, is slice 3.
@@ -161,3 +180,5 @@ Carried from slice 1:
 | 2026-10-05 | Signed-app gate passed on the unchanged reviewed candidate. Installation, exact correction cleanup, offline dictation and Whisper dictation are confirmed; item 4 remains waived. | Aidan's retry answer completed the required checks. Fresh Unified files match all pinned sizes and hashes; the set-aside copy and Whisper check bundle were removed. | Aidan; lead, workstream 4 | 4, 5 |
 | 2026-10-05 | Aidan authorized temporarily stopping the identified GUI and MCP processes for exclusive delivery experiments, then restoring operation. Delivery evidence and both reviews now pass; ET-T5-01 is resolved as an access decision. | Fresh and paired installed loads for all selections plus real interrupted recovery are verified. Installed GUI restored; original MCP client transports need reconnect or a new session because exposed tools cannot reattach stdio. | Aidan; lead, workstream 5 | 5, Final |
 | 2026-10-05 | Aidan accepted the completed evaluation with boosted Unified/Qwen recommended and the build selection unchanged. Productionising is a separate task; no boosted build follow-up or new signed-app gate is authorized in this workflow. ET-T5-02 is resolved. No specification drift. | Delivery checks, independent review and focused closure passed. Concurrent cleanup recorded 0 deadline fallbacks/overruns; warm insertion 1240/2716 ms, n=14 (`20261005T064539Z-local`). Whisper variation and speech-event timing remain deferred observations. | Aidan; lead, workstream 5 | 5, Final |
+
+| 2026-10-05 | Final whole-feature review accepted after fresh focused closure. Transient disk wording now distinguishes the observed interruption snapshot from the unmeasured whole-download peak. No specification drift introduced. | All four verification commands passed twice; all cited runs and reports verified. Spec requires a transient record without prescribing a sampled maximum. | Lead, final review | Final |
