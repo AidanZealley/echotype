@@ -1,6 +1,6 @@
 # Local model provider research
 
-Status: initial findings, 2026-10-03. No models downloaded or benchmarked locally.
+Status: research updated with measured cleanup and transcription, 2026-10-05. Read aloud is not measured.
 
 ## Purpose
 
@@ -64,7 +64,7 @@ can decide when words are settled without delaying the transcript excessively.
 | [Parakeet Unified EN 0.6B, 640 ms INT8](https://huggingface.co/FluidInference/parakeet-unified-en-0.6b-coreml) | Best first live-English trial. Joint offline/streaming training, punctuation and capitalisation. Accent and coding vocabulary need local evaluation. | About 609 MB selected files. ANE/CPU inference. Recomputes overlapping left context, increasing sustained work. | Medium. Swift streaming manager exists. Add speech evidence, utterance boundaries, final flushing and safe commitment. Vocabulary rescoring can revise earlier provisional text. |
 | [Nemotron Speech Streaming EN 0.6B, 560 ms INT8](https://huggingface.co/FluidInference/nemotron-speech-streaming-en-0.6b-coreml) | Promising cache-aware alternative. Conversion authors report 2.12% word error rate on 100 LibriSpeech clean files. This is narrow preliminary evidence. | About 600 MB per selected variant. Reuses encoder state. Authors report 8.5 times realtime on M2. | Medium. Native Swift streaming and flush APIs exist. Still needs commitment and lifecycle handling. Documentation and licence inconsistencies need reconciliation. |
 | [Parakeet Ultra 0.6B](https://huggingface.co/FluidInference/parakeet-ultra-coreml) | Quality-oriented batch option. Published paired Core ML results improve on Parakeet v3; upstream evaluations include difficult English recordings. | About 632 MB. INT8 encoder with Core ML support. Published server throughput is not a Mac estimate. | Higher for live use. Needs segmentation, rolling windows, overlap deduplication and stability handling. |
-| [Whisper large-v3-turbo, 626 MB Core ML variant](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB) | Established independent comparison with broad training. Silence hallucination, repetition and uneven accent performance remain risks. | About 627 MB plus tokenizer resources. Live use repeatedly decodes audio windows. No verified M1 Pro measurement found. | Medium to high. WhisperKit handles native inference. Window merging, speech detection, settled text and the final tail remain adapter responsibilities. |
+| [Whisper large-v3-turbo, 626 MB Core ML variant](https://huggingface.co/argmaxinc/whisperkit-coreml/tree/main/openai_whisper-large-v3-v20240930_626MB) | Established independent comparison with broad training. Silence hallucination, repetition and uneven accent performance remain risks. | About 627 MB plus tokenizer resources. Live use repeatedly decodes audio windows. On the M1 Pro release bench, WER is 2.7% but warm stop-to-final p50/p95 is 3383/5099 ms (`20261005T062416Z-local`); see `results.md`. | Medium to high. WhisperKit handles native inference. Window merging, speech detection, settled text and the final tail remain adapter responsibilities. |
 | [Parakeet Realtime EOU 120M, 320 ms](https://huggingface.co/FluidInference/parakeet-realtime-eou-120m-coreml) | Simpler live option with a likely accuracy compromise. Conversion evaluation reports 4.87% word error rate on the full LibriSpeech test-clean set. | About 449 MB selected files. Smaller cache-aware model. Reported 12.48 times realtime on M2. | Lowest relative cost. Explicit end-of-utterance events fit provisional and committed text naturally. Still verify flushing and cancellation. |
 
 The 640 ms Unified configuration is an initial accuracy/latency compromise, not a
@@ -72,10 +72,12 @@ measured end-to-end response time. NVIDIA supports multiple chunk/context choice
 the Swift conversion supplies selected variants. Avoid comparing word error rates
 across different evaluation subsets as if they were a paired test.
 
-Unified's [Swift manager](https://github.com/FluidInference/FluidAudio/blob/main/Sources/FluidAudio/ASR/Parakeet/Unified/StreamingUnifiedAsrManager.swift)
+Unified's [Swift
+manager](https://github.com/FluidInference/FluidAudio/blob/main/Sources/FluidAudio/ASR/Parakeet/Unified/StreamingUnifiedAsrManager.swift)
 supports audio appends, processing, final flushing and partial callbacks. Its vocabulary
 rescoring can change earlier partial text, so token arrival alone is not permission
-to insert words. Inspect the [benchmark notes](https://github.com/FluidInference/FluidAudio/blob/main/Sources/FluidAudio/ASR/Parakeet/Unified/benchmark.md)
+to insert words. Inspect the [benchmark
+notes](https://github.com/FluidInference/FluidAudio/blob/main/Sources/FluidAudio/ASR/Parakeet/Unified/benchmark.md)
 before reusing its quality or throughput figures.
 
 Verified in FluidAudio's source:
@@ -106,6 +108,19 @@ and [Core ML evaluation](https://github.com/FluidInference/FluidAudio/blob/main/
 support keeping Ultra as a later quality challenger. Distil-Whisper would not remove
 Whisper's live-window integration work.
 
+
+Release corpus evidence now favours boosted Unified for live use. Keyterm accuracy rises from
+57.9% to 84.2% and WER falls from 6.9% to 6.1%, while first committed p50 moves from 6742 ms
+to 8397 ms and stop-to-final p50 from 47 ms to 283 ms (`20261005T061114Z-local`,
+`20261005T061642Z-local`). Whisper is more accurate but much slower to settle text
+(`20261005T062416Z-local`). These are one-pass measurements on Aidan's corpus, not a general
+model ranking. Its offline fast pass completed but differed on three samples from the online
+fast pass (`20261005T063149Z-local`, `20261005T063537Z-local`, paired derived log).
+Fresh-download cost, paired installed loading and real interruption recovery are now measured
+in `results.md`. The recovery run `20261005T072301Z-local` installed and verified Unified after a real
+process kill. The first-download runs retain existing system Core ML caches; they do not measure
+first load after a reboot or OS update.
+
 ## Cleanup candidates
 
 EchoType removes clear corrections, false starts and accidental repetitions while
@@ -123,7 +138,8 @@ Task-specific editing accuracy therefore matters more than general reasoning sco
 
 The [Qwen model card](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) and
 [SmolLM card](https://huggingface.co/HuggingFaceTB/SmolLM3-3B) provide instruction-following
-evidence, not transcript-editing results. [MLX's published benchmark](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/BENCHMARKS.md)
+evidence, not transcript-editing results. [MLX's published
+benchmark](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/BENCHMARKS.md)
 reports Qwen3-2507 four-bit at 3.35 GB memory and 134.5 generated tokens per second on
 an M4 Max with 64 GB. Those measurements do not establish M1 Pro performance.
 
@@ -136,7 +152,8 @@ while transcription runs. Cold loading belongs in readiness preparation.
 The budget does not bound the whole stop-to-insert wait. `Reviser.finish` cancels the
 in-flight live revision and awaits it before starting the three-second timer. A cloud
 request cancels at once; local generation stops only between steps, and a long prompt
-prefill may not be interruptible (measured: prefill is interruptible between 128-token chunks, one chunk is not; see `results.md`). `Reviser` also starts a new live revision whenever
+prefill may not be interruptible (measured: prefill is interruptible between 128-token chunks, one
+chunk is not; see `results.md`). `Reviser` also starts a new live revision whenever
 committed text grows, so a local model may run almost continuously during dictation.
 
 Local inference allows optimisations a hosted API does not. Verified in MLX Swift LM's
@@ -191,15 +208,18 @@ Verify UK pronunciation in the selected pipeline.
 
 Pocket's [native documentation](https://github.com/FluidInference/FluidAudio/blob/main/Documentation/TTS/PocketTTS.md)
 describes mixed GPU, CPU and ANE execution. Do not assume the whole pipeline runs on
-ANE. Its [session implementation](https://github.com/FluidInference/FluidAudio/blob/main/Sources/FluidAudio/TTS/PocketTTS/Pipeline/PocketTtsSession.swift)
+ANE. Its [session
+implementation](https://github.com/FluidInference/FluidAudio/blob/main/Sources/FluidAudio/TTS/PocketTTS/Pipeline/PocketTtsSession.swift)
 uses an unbounded AsyncThrowingStream. Bound work to short utterances or provide an
 awaited producer/consumer boundary; dropping frames is not acceptable.
 
 [FluidAudio's TTS benchmarks](https://github.com/FluidInference/FluidAudio/blob/main/Documentation/TTS/Benchmarks.md)
 are mostly on M5 Pro with 24 GB. Kyutai's familiar 200 ms first-audio and six-times-realtime
 figures describe its Python implementation on M4 MacBook Air. Neither predicts this
-Mac's native performance. See also the [Supertonic pipeline](https://github.com/FluidInference/FluidAudio/blob/main/Documentation/TTS/Supertonic3.md)
-and [Qwen Swift implementation](https://github.com/Blaizzy/mlx-audio-swift/blob/main/Sources/MLXAudioTTS/Models/Qwen3TTS/README.md).
+Mac's native performance. See also the [Supertonic
+pipeline](https://github.com/FluidInference/FluidAudio/blob/main/Documentation/TTS/Supertonic3.md)
+and [Qwen Swift
+implementation](https://github.com/Blaizzy/mlx-audio-swift/blob/main/Sources/MLXAudioTTS/Models/Qwen3TTS/README.md).
 
 Piper is not a first choice. Its [maintained implementation](https://github.com/OHF-Voice/piper1-gpl)
 is GPL-3.0 and commonly uses eSpeak. Archived MIT code does not remove phonemizer or

@@ -18,7 +18,7 @@ Status: approved; implementation in progress.
 | 2 | [Whisper Turbo transcription](02-whisper-turbo.md) | 1 | Accepted |
 | 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Accepted |
 | 4 | [Local provider in the app](04-app-provider.md) | 3 | Accepted |
-| 5 | [Transcription evaluation and results](05-transcription-evaluation.md) | 4 | Not started |
+| 5 | [Transcription evaluation and results](05-transcription-evaluation.md) | 4 | Accepted |
 | Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
 
 ## Why these boundaries
@@ -100,6 +100,10 @@ Sequential throughout. Workstreams 1 and 2 both edit `Package.swift`, `LocalCand
   - Nested dependency bundles keep SwiftPM's ad hoc signatures; Developer ID notarisation of
     them is untested (carried from slice 1).
   - Read aloud, and therefore the voice comparison build and its worst-case memory, is slice 3.
+  - The installed GUI was restored after workstream 5 delivery experiments. Original harness-owned
+    MCP stdio transports still need connector reconnection or a new agent session; standalone
+    protocol verification passed but did not reconnect them. This is separate from Local read
+    aloud, which is unavailable in this slice. Do not start duplicate MCP clients to replace them.
 
 ## External validation gates
 
@@ -155,3 +159,5 @@ Carried from slice 1:
 | 2026-10-05 | Aidan deferred signed-app checklist item 4; acceptance preserves his other passed checks and requires only unanswered or failed checks. Escape dismissal remains outside scope. | Explicit user waiver and scope limit. | Aidan | 4 |
 | 2026-10-05 | Diagnostic retry retains the reviewed candidate. Whisper's reported Loading state resolved to ready during read-only inspection; loading stage duration is not isolated. | No persistent hang or adapter defect established. Use `/usr/bin/log` in zsh to bypass its `log` builtin. | Lead, workstream 4 | 4, 5 |
 | 2026-10-05 | Signed-app gate passed on the unchanged reviewed candidate. Installation, exact correction cleanup, offline dictation and Whisper dictation are confirmed; item 4 remains waived. | Aidan's retry answer completed the required checks. Fresh Unified files match all pinned sizes and hashes; the set-aside copy and Whisper check bundle were removed. | Aidan; lead, workstream 4 | 4, 5 |
+| 2026-10-05 | Aidan authorized temporarily stopping the identified GUI and MCP processes for exclusive delivery experiments, then restoring operation. Delivery evidence and both reviews now pass; ET-T5-01 is resolved as an access decision. | Fresh and paired installed loads for all selections plus real interrupted recovery are verified. Installed GUI restored; original MCP client transports need reconnect or a new session because exposed tools cannot reattach stdio. | Aidan; lead, workstream 5 | 5, Final |
+| 2026-10-05 | Aidan accepted the completed evaluation with boosted Unified/Qwen recommended and the build selection unchanged. Productionising is a separate task; no boosted build follow-up or new signed-app gate is authorized in this workflow. ET-T5-02 is resolved. No specification drift. | Delivery checks, independent review and focused closure passed. Concurrent cleanup recorded 0 deadline fallbacks/overruns; warm insertion 1240/2716 ms, n=14 (`20261005T064539Z-local`). Whisper variation and speech-event timing remain deferred observations. | Aidan; lead, workstream 5 | 5, Final |

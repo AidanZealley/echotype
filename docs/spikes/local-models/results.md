@@ -1,10 +1,11 @@
 # Local models spike results
 
-Status: cleanup section only (slice 1, workstream 4). Transcription and read aloud are not run yet.
+Status: cleanup measured in debug and release; transcription measured in release, including fresh
+downloads and recovery. Read aloud is not measured.
 
 Every figure is from `swift run EchoTypeBench report <run id>` and was rechecked against its
-output. Figures marked "derived" come from the run's `cleanup.jsonl` rather than `report`.
-Runs are under `~/Library/Application Support/EchoTypeBench/runs/`, from source revision
+output. Figures marked "derived" come from the run's raw logs and the derived logs named in each section.
+Runs are under `~/Library/Application Support/EchoTypeBench/runs/`. Slice 1 runs are from source revision
 `6eb5351` (dirty tree, documentation edits only per the workstream handoff), on a MacBookPro18,3 (M1 Pro, 16 GiB),
 macOS 27.2 (26B5091g), Xcode 27.0, Swift 6.4, **debug build** of the bench.
 
@@ -66,7 +67,8 @@ at `6eb5351`.
 Download time and transient disk usage were not measured in this slice: no cited run's
 `preparation.json` records a download (every one shows only "Loading the cleanup model"). Recovery
 after an interrupted download was exercised only with the injected download source
-(`ModelStoreTests`), not by killing a live download.
+(`ModelStoreTests`), not by killing a live download. Slice 2 now measures Qwen delivery and a real
+Unified interruption below, without replacing these slice 1 observations.
 
 Integration changes the spec expects recorded: `swift-transformers` 1.3.4 is a third direct
 dependency of `EchoTypeCore` (the MLX Swift LM revision no longer bundles a tokenizer; plan.md
@@ -194,7 +196,8 @@ probably in the OS page cache. They are not a first load after reboot or an OS u
 not included.
 
 Like for like, the cold request is the short `clear-correction` sample, whose warm median in the paced
-runs (first, cold request excluded) is 452 ms for qwen3 and 464 ms for smollm3, so cold is about 19% and 5% slower (`…110130Z-local`,
+runs (first, cold request excluded) is 452 ms for qwen3 and 464 ms for smollm3, so cold is about 19%
+and 5% slower (`…110130Z-local`,
 `…110916Z-local`). The cost of "cold" is preparation. Over the four runs of each candidate (n=4: cold,
 paced, `--fast`, offline; `…111652Z-local`, `…110130Z-local`, `…105222Z-local`, `…111803Z-local` and
 `…111730Z-local`, `…110916Z-local`, `…105256Z-local`, `…111816Z-local`) it is 2.8 to 4.2 s for qwen3 and
@@ -254,15 +257,16 @@ windows were not measured. Enforceability is reasoning from cancellation latency
 | Thermal worst | nominal | nominal | nominal | nominal |
 | Memory pressure worst | normal | normal | warning | normal |
 
-Across all cited qwen3 runs the highest peak is 2649 MiB (about 2.6 GiB, `…111803Z-local`, offline
+Across slice 1's qwen3 runs the highest peak is 2649 MiB (about 2.6 GiB, `…111803Z-local`, offline
 `--fast`), with 2638 MiB in `…105222Z-local` (`--fast`); smollm3's highest is 2171 MiB
 (`…105256Z-local`). The cold-start runs peak at 2571 MiB and 2169 MiB, ready 2381 and 1829 MiB, with pressure normal
 (`…111652Z-local`, `…111730Z-local`). Memory pressure `warning` also appeared in `…105222Z-local`
 (qwen3 `--fast`) but in no other run, on a busy 16 GiB machine; I cannot attribute it to the
 model alone. Apple's and xAI's footprints describe the bench only, not Apple's out-of-process
 model. The planning estimate of 3 to 4 GB for qwen3 in `research.md` is high against the 2649 MiB
-peak (`…111803Z-local`) for this window size; the buffer cache limit was 64 MiB. Concurrent memory with transcription and
-read aloud is the later slices' question.
+peak (`…111803Z-local`) for this window size; the buffer cache limit was 64 MiB. Concurrent
+transcription memory is now recorded below (`20261005T064539Z-local`); read aloud memory remains
+unmeasured.
 
 ### Offline
 
@@ -287,7 +291,8 @@ only, within the load-time ranges under Cold start.
 
 Remaining gap to xAI, stated plainly: no measurable difference in word-level quality on 11 samples that
 cannot tell them apart, a tail latency roughly twice xAI's on long windows (2198 vs 992 ms for xAI (paid) on the
-long sample; `…110130Z-local`, `…121048Z-xai`), one command-following failure that falls back safely, and a local cost of about 2.6 GiB
+long sample; `…110130Z-local`, `…121048Z-xai`), one command-following failure that falls back
+safely, and a local cost of about 2.6 GiB
 of memory and a 3 s load that xAI does not have. smollm3-3b is rejected: 60 validation rejections, 15
 wrong-deleted words and the most missed edits, for 0.5 GiB less memory (`…110916Z-local`).
 
@@ -296,16 +301,15 @@ limit under the spec's rule of sending Reviser's prompt unchanged, and it is the
 It is not a reason to reject Qwen but means "cleanup" here is conservative tidying, not full
 disfluency removal.
 
-Conditions before treating this as a product direction: repeat on a quiet machine with a release
-build; measure cleanup running alongside local transcription (the spec's concurrent check); grow the
-corpus beyond 11 inputs with real dictation.
+Release and concurrent figures are now recorded below and in Transcription (`20261005T063709Z-local`,
+`20261005T064539Z-local`). No quiet-machine requirement applies. Grow the cleanup corpus beyond the
+hand-written inputs before treating this as general dictation quality.
 
 **Follow-ups, proposed and not built:**
 
 - **Draft-model speculation: not triggered by anything measured.** The spec's condition is that warm
   latency misses the budget. It never did alone: longest stop-to-insert 2.23 s, longest final request
-  1.85 s against a 3 s budget (`…110130Z-local`). The concurrent run with local transcription is still to
-  decide.
+  1.85 s against a 3 s budget (`…110130Z-local`). The release concurrent dictation pass also records no deadline fallback or overrun (`20261005T064539Z-local`).
 - **Constrained decoding: not worth it for qwen3.** The spec's condition is that validation rejections
   prove common, and I read it that way. qwen3 had 0 rejections in 255 non-cancelled requests
   (`…110130Z-local`). smollm3 had 60 of 255 non-cancelled requests (30 of 165 final requests, on 2 of 11
@@ -315,3 +319,346 @@ corpus beyond 11 inputs with real dictation.
   different check (the output cap), safe fallbacks on one sample, and constrained decoding would arguably
   prevent them. They do not meet the spec's condition, and cost a 945 ms median stop-to-insert on that
   sample.
+
+### Release cleanup timing
+
+The release paced `--repeat 15` run `20261005T063709Z-local` retains the debug run
+`20261004T110130Z-local` above. Both use the same conservative prompt and Qwen weights.
+Their machine loads differ, so this comparison does not isolate compiler configuration.
+The ambiguous sample stays outside quality and timing totals.
+
+- exact 120/165, wrong deletions 0, missed edits 150, not a deletion 0, fallbacks 15 (validation rejections 0), deadline fallbacks 0, deadline overruns 0 (`20261005T063709Z-local`).
+- warm stop-to-insert p50 561 / p95 1699 ms (n=164), warm revision p50 452 / p95 1626 ms (n=254), cancellation latency p50 143 / p95 213 ms (n=165), revising 79.9% of the time, cold stop-to-insert 516 ms, first revision 265 ms (`20261005T063709Z-local`).
+- preparation 4043 ms (Loading the cleanup model 4043 ms) (`20261005T063709Z-local`).
+- footprint peak 2591 MiB, ready 2397 MiB, thermal worst nominal, memory pressure worst warning, load average median 3.23, max 9.92 (`20261005T063709Z-local`).
+
+Warm revision p50/p95 changes from 497/1766 ms in debug to 452/1626 ms in release;
+warm stop-to-insert changes from 616/2194 ms to 561/1699 ms. These are separate runs on a busy Mac,
+not a paired compiler benchmark (`20261004T110130Z-local`, `20261005T063709Z-local`).
+
+## Transcription
+
+### Conditions and evidence
+
+The release evaluation covers standalone performance, offline use, fresh downloads, paired installed
+loads and interrupted-download recovery. The recommendation remains a proposal; the build selection
+is unchanged.
+
+The new runs below use `swift run -c release EchoTypeBench` at source
+`6c779359fe0035fed7fcc127dac606c37b7594e0`, with documentation-only changes in the tree.
+Network-denied runs use the built release binary under `sandbox-exec` with `deny network*`.
+All reviewed recordings were included. Load average is measured per run; the machine was used as
+it was, without a quiet-machine requirement.
+
+Apple and xAI reuse the existing paced debug runs. They predate cold splitting and the sampler,
+so their rows have no preparation, footprint or load measurements. Apple's recogniser runs
+outside the bench process. xAI includes network latency and was paid when the existing run was
+made. No new xAI call was made.
+
+The references began as xAI drafts that Aidan corrected. That flatters xAI's error rates.
+Treat every quality comparison with xAI below as a comparison against those biased references.
+
+Each paced local pass has a cold first sample and about fourteen warm samples. The first-text
+figures omit silence, so their warm n is thirteen. Their p95 is the slowest observation, not a
+stable estimate of rare delays. The candidates have a clear quality-versus-latency tradeoff,
+so no extra repeat runs were needed. The paced evidence is `20261005T061114Z-local`,
+`20261005T061642Z-local` and `20261005T062416Z-local`.
+
+Derived first-provisional and speech-to-commit figures use nearest-rank percentiles from
+`transcribe.jsonl`, with the cold row excluded for new runs. The derivations are saved beside each
+run in `evaluation-derived.json`. Asset sizes are in `evaluation-assets.json` and the final disk
+snapshot, including the shared
+compiled cache, is in `evaluation-disk.json`;
+paired offline checks are in the offline run's `evaluation-offline-comparison.json`.
+
+### Runs, load and process cost
+
+Preparation is a load from installed files in these runs. Footprint is `phys_footprint` for the
+bench process. Core ML work on the Neural Engine can be charged to system processes, so these
+small transcription figures can understate total model cost. Thermal state and pressure are reported per row.
+Pressure is system-wide and cannot be attributed to a candidate on this busy Mac. Apple's footprint
+covers the bench, not its out-of-process models
+(`20261005T065030Z-apple`).
+
+| Run id | Purpose | Preparation ms | Peak / ready MiB | Load average median / max | Thermal / pressure |
+|---|---|---:|---:|---:|---|
+| `20261005T061114Z-local` | parakeet-unified-paced | 23157 | 59 / 43 | 5.39 / 8.86 | nominal / warning |
+| `20261005T061546Z-local` | parakeet-unified-online-fast | 325 | 53 / 43 | 2.39 / 2.65 | nominal / warning |
+| `20261005T061600Z-local` | parakeet-unified-offline | 310 | 50 / 43 | 2.18 / 2.20 | nominal / warning |
+| `20261005T061642Z-local` | parakeet-unified-keyterms-paced | 24295 | 59 / 56 | 5.76 / 8.83 | nominal / warning |
+| `20261005T062117Z-local` | parakeet-unified-keyterms-online-fast | 806 | 60 / 56 | 3.82 / 4.15 | nominal / warning |
+| `20261005T062139Z-local` | parakeet-unified-keyterms-offline | 728 | 61 / 57 | 3.27 / 3.50 | nominal / warning |
+| `20261005T062416Z-local` | whisper-turbo-paced | 132191 | 119 / 94 | 2.70 / 4.22 | nominal / warning |
+| `20261005T063149Z-local` | whisper-turbo-online-fast | 131921 | 120 / 98 | 3.60 / 6.31 | nominal / warning |
+| `20261005T063537Z-local` | whisper-turbo-offline | 139485 | 124 / 97 | 4.17 / 7.15 | nominal / warning |
+| `20261005T063709Z-local` | qwen-release | 4043 | 2591 / 2397 | 3.23 / 9.92 | nominal / warning |
+| `20261005T064539Z-local` | local-dictation | 48096 | 2781 / 2478 | 4.66 / 6.88 | nominal / warning |
+| `20261005T065030Z-apple` | apple-dictation | 272 | 35 / 8 | 3.93 / 5.77 | nominal / normal |
+
+### Models and integration
+
+The measured build uses the same adapters as the signed app. FluidAudio is pinned to
+`0b1f46289fe27d95b5e66ad8be46e64f5ee02ae7`; WhisperKit, product of argmax-oss-swift 1.1.0,
+is pinned to `1e2a163736dfa5a198e637ae44c114e1c6d5cc2d`. Cleanup uses MLX Swift 0.32.3 at
+`19601207e9a0de51e03ee6ec0c3c5f3784275075`, MLX Swift LM at
+`5e46681b2adcef2db158e7b949aeae3896778e23`, and swift-transformers 1.3.4 at
+`c21fdcde390313a6d98d8e33a346f2c3486c3ab0`. `Package.resolved` holds the transitive pins.
+The run source revision and dependency handoffs identify these configurations for
+`20261005T061114Z-local`, `20261005T061642Z-local`, `20261005T062416Z-local`
+and `20261005T063709Z-local`.
+
+| Candidate | Pinned assets and licence | Transfer payload / installed disk bytes | Keyterm limit | Evidence |
+|---|---|---:|---:|---|
+| Unified, boosting off | `FluidInference/parakeet-unified-en-0.6b-coreml@d32e972dd4315f1dc3f6be28fb2aab0ab3e80358`, NVIDIA Open Model License; conversion card conflicts with CC-BY-4.0. Silero below is included. | 609592802 / 625172480 | 1, built-in term only | `20261005T061114Z-local`, asset log |
+| Unified, boosting on | Same Unified and Silero, plus `FluidInference/parakeet-ctc-110m-coreml@accdafd8cf8a2ff1cabe3c11e54416b405d409aa`, CC-BY-4.0 | 712395257 / 728006656 | 100 | `20261005T061642Z-local`, asset log |
+| Whisper Turbo | `argmaxinc/whisperkit-coreml@0f63a7800b00dd0226abd051b906c246e1907482`, `openai_whisper-large-v3-v20240930_626MB`, MIT; tokenizer `openai/whisper-large-v3@06f233fe06e710322aca913c1bc4249a0d71fce1`, Apache-2.0; Silero included | 630541207 / 645521408 | 12, prompt token budget can cut the list earlier | `20261005T062416Z-local`, asset log |
+
+Every candidate uses `FluidInference/silero-vad-coreml@b419383c55c110e2c9271fa6ee0ea83d03c70d96`,
+MIT. The transfer column sums the pinned required files, not an observed fresh transfer. Disk is
+allocated disk use at the verified installed snapshot, including runtime-created files inside
+the model directories. The separate bench Core ML cache used 20172800 bytes at that snapshot;
+it is shared across candidates and cannot be assigned to one model. See
+`20261005T061114Z-local` and its asset and disk logs.
+
+Unified uses the INT8 `70_7_1` encoder, with 560 ms chunks and 80 ms lookahead. Silero's defaults
+provide speech evidence and end an utterance after 0.75 s below its threshold. Unboosted text
+commits on utterance end; boosted text commits only after rescoring segments on the 15 s cadence,
+with a final tail rescore. The CTC tokenizer symlink is written only for boosting. These are the
+configurations behind `20261005T061114Z-local` and
+`20261005T061642Z-local`, not tuning from this evaluation.
+
+Whisper decodes after one second of new audio and settles leading segments by agreement or
+pause. It flushes unsettled audio at 28 seconds, uses one second of preroll and pads short final
+inputs. Keyterms are a 64-token prompt; decoding is greedy without temperature fallback.
+The pinned local tokenizer prevents Hub fallback. This configuration produced
+`20261005T062416Z-local`. Loaded models are reused within each run; fresh sessions
+retain no preceding transcript or cleanup conversation.
+
+### Accuracy
+
+xAI's references began as its own drafts and were corrected by Aidan, so its error rates below
+are flattering. These are corpus results, not a general accuracy ranking.
+
+| Candidate | WER | Formatted WER | Keyterms | Silence insertions | Contract violations / errors | Run |
+|---|---:|---:|---:|---:|---:|---|
+| Unified, boosting off | 6.9% | 18.8% | 57.9% | 0 | 0 / 0 | `20261005T061114Z-local` |
+| Unified, boosting on | 6.1% | 16.5% | 84.2% | 0 | 0 / 0 | `20261005T061642Z-local` |
+| Whisper Turbo | 2.7% | 12.5% | 94.7% | 0 | 0 / 0 | `20261005T062416Z-local` |
+| Apple, legacy debug | 10.0% | 19.0% | 31.6% | 0 | 0 / 0 | `20261004T083627Z-apple` |
+| xAI, paid legacy debug, biased references | 0.4% | 12.9% | 100.0% | 0 | 0 / 0 | `20261004T073341Z-xai` |
+
+Boosting improves the coding vocabulary but can replace correct ordinary words. On
+`dictation-keyterms-apple`, WER falls from 15.0% to 0.0% and keyterms rise from 1/3 to 3/3;
+on `dictation-keyterms-models`, they rise from 4/5 to 5/5. On `dictation-question-command`,
+WER rises from 0.0% to 5.6%; on `dictation-background-noise`, from 6.2% to 9.4%.
+See `20261005T061114Z-local` and `20261005T061642Z-local`.
+
+Whisper is the strongest local recogniser here, but its live handling is slow. The accuracy
+advantage is material. On `dictation-keyterms-stack`, Whisper has WER 0.0% and keyterms 6/6,
+versus boosted Unified's 6.9% and 4/6. Its latency cost is also clear enough that more repeat
+runs would not settle a close decision. See `20261005T062416Z-local`
+and `20261005T061642Z-local`.
+
+All rows above have zero changed committed prefixes, checked by the grow-only contract
+and the saved event logs for those cited runs.
+
+### Latency and the cost of boosting
+
+Milliseconds are p50 / p95 / n. Apple and xAI have no cold split. xAI's quality references are
+biased in its favour; this timing comparison also uses its older debug run and includes network.
+First provisional is derived from the event log; committed and tail figures are from `report`.
+
+| Candidate | First provisional | First committed | Stop-to-final | Cold stop-to-final / first committed ms | Run |
+|---|---:|---:|---:|---:|---|
+| Unified, boosting off | 1299 / 2415 / 13 | p50 6742 / p95 16361 ms (n=13) | p50 47 / p95 54 ms (n=14) | 41 / 9847 | `20261005T061114Z-local` |
+| Unified, boosting on | 1267 / 2350 / 13 | p50 8397 / p95 16471 ms (n=13) | p50 283 / p95 307 ms (n=14) | 315 / 10126 | `20261005T061642Z-local` |
+| Whisper Turbo | 3428 / 6158 / 13 | p50 11546 / p95 32450 ms (n=13) | p50 3383 / p95 5099 ms (n=14) | 4181 / 13987 | `20261005T062416Z-local` |
+| Apple, legacy debug | 1069 / 1933 / 14 | p50 5964 / p95 16730 ms (n=14) | p50 173 / p95 276 ms (n=15) | not recorded / not recorded | `20261004T083627Z-apple` |
+| xAI, paid legacy debug, biased references | 1088 / 2097 / 14 | p50 8329 / p95 29320 ms (n=14) | p50 194 / p95 296 ms (n=15) | not recorded / not recorded | `20261004T073341Z-xai` |
+
+Boosting leaves provisional arrival essentially unchanged, but first committed text moves from
+6742 ms to 8397 ms at the median, and the stop tail from 47 ms to 283 ms. On
+`dictation-thinking-pauses`, first commitment moves from 8911 ms to 16471 ms; on
+`dictation-long-continuous`, from 9911 ms to 15473 ms. These per-sample figures are derived from
+`20261005T061114Z-local` and `20261005T061642Z-local`.
+
+The following speech-to-commit gaps use the first speech evidence event to first commitment and
+the last evidence event to the last commitment, with warm samples only. They are derived from
+event timestamps. They are not word alignment: evidence can arrive after inference, particularly
+with Whisper, and continuous speech can conceal lag for older words. Exact per-word acoustic lag
+was not measured.
+
+| Candidate | First speech to first commit ms, p50 / p95 / n | Last speech to last commit ms, p50 / p95 / n | Run |
+|---|---:|---:|---|
+| Unified, boosting off | 5952 / 15658 / 13 | 550 / 1258 / 13 | `20261005T061114Z-local`, derived |
+| Unified, boosting on | 7688 / 15201 / 13 | 777 / 3353 / 13 | `20261005T061642Z-local`, derived |
+| Whisper Turbo | 10840 / 31745 / 13 | 2030 / 2172 / 13 | `20261005T062416Z-local`, derived |
+
+### First downloads and paired installed loading
+
+Each fresh run moved every required installed directory aside, including shared Silero, then
+downloaded the pinned files and loaded one sample. Its paired run loaded the same installed files in
+a fresh process. Transcription used `dictation-short-reply`; Qwen used `cleanup-clear-correction`.
+Download time is readiness start to the loading message, including transfer, file verification and
+installation. First load includes runtime loading and warm-up. These phases overlap across
+manifests, so they are elapsed service preparation, not summed file-transfer times. The preserved
+copies remain under `~/Library/Application Support/EchoType/Evaluation-20261005-exclusive/`.
+
+| Selection | Fresh / paired run | Payload bytes | Download ms | First load ms | Paired installed load ms | Installed / shared bench cache bytes |
+|---|---|---:|---:|---:|---:|---:|
+| parakeet-unified | `20261005T071509Z-local` / `20261005T071516Z-local` | 609592802 | 29295 | 20987 | 299 | 626429952 / 19521536 |
+| parakeet-unified-keyterms | `20261005T071635Z-local` / `20261005T071726Z-local` | 712395257 | 27874 | 43978 | 44176 | 728633344 / 20148224 |
+| whisper-turbo | `20261005T072008Z-local` / `20261005T072029Z-local` | 630541207 | 28072 | 128242 | 11076 | 662065152 / 136376320 |
+| qwen3-4b-2507 | `20261005T072145Z-local` / `20261005T072155Z-local` | 2274455727 | 64326 | 2271 | 1627 | 2274467840 / 136785920 |
+
+Payload is the pinned selected-file sum, independently verified after delivery. Installed disk
+includes runtime-created files inside the model directories. The cache column is the whole shared
+bench Core ML cache at that run, not a per-model charge. These are first loads after clean
+transfers, with existing system caches; first load after reboot or an OS update remains unmeasured.
+
+The Core ML artifacts already ship as `.mlmodelc`. No source `.mlmodel` compilation is required by
+these loaders. Core ML generated executable cache output such as ANE `.e5` and BNNS program files
+while loading
+the fresh directories, recorded in each run's `evaluation-delivery.json`. Runtime compilation
+or specialization therefore occurred, but its duration is not isolated from loading and warm-up.
+Qwen uses MLX, so its loading phase has no Core ML compilation. Evidence is the fresh transcription
+runs
+`20261005T071509Z-local`, `20261005T071635Z-local`, `20261005T072008Z-local`
+and Qwen `20261005T072145Z-local`.
+
+| Run | Preparation ms | Peak / ready MiB | Load average median / max | Thermal / pressure |
+|---|---:|---:|---:|---|
+| `20261005T071509Z-local` | 50282 | 632 / 68 | 2.66 / 3.51 | nominal / normal |
+| `20261005T071516Z-local` | 299 | 43 / 43 | 3.72 / 3.72 | nominal / normal |
+| `20261005T071635Z-local` | 71852 | 605 / 52 | 3.94 / 4.41 | nominal / normal |
+| `20261005T071726Z-local` | 44176 | 115 / 45 | 4.30 / 4.59 | nominal / normal |
+| `20261005T072008Z-local` | 156314 | 494 / 95 | 3.45 / 4.50 | nominal / normal |
+| `20261005T072029Z-local` | 11076 | 110 / 93 | 3.92 / 4.01 | nominal / normal |
+| `20261005T072145Z-local` | 66597 | 4442 / 2378 | 3.72 / 3.93 | nominal / warning |
+| `20261005T072155Z-local` | 1627 | 2649 / 2393 | 3.35 / 3.57 | nominal / normal |
+| `20261005T072301Z-local` | 54235 | 627 / 66 | 3.71 / 4.04 | nominal / normal |
+
+These single paired loads are observations, not a startup distribution. Boosted Unified still
+took 44176 ms in its paired installed load, while Whisper fell from 128242 ms first loading to
+11076 ms paired loading (`20261005T071635Z-local`, `20261005T071726Z-local`,
+`20261005T072008Z-local`, `20261005T072029Z-local`). Cache creation and specialization
+continued during both installed loads. Qwen's fresh peak of 4442 MiB includes delivery and
+verification, compared with 2649 MiB for its paired installed process
+(`20261005T072145Z-local`, `20261005T072155Z-local`). Neither figure measures only inference.
+
+A separate real Unified download was killed after four seconds. The installed Unified directory was
+absent, with 5 files and 14444100 bytes left under `Incomplete/`. The retry completed and installed
+every pinned file with matching sizes and SHA-256 values (`20261005T072301Z-local`,
+`evaluation-interruption.json` and `evaluation-delivery.json`). The loader entered its loading phase
+only after installation; no incomplete directory was passed to the runtime. This proves recovery
+from this interruption, not every possible network failure.
+
+The earlier failed interruption remains preserved in `.build/transcription-evaluation/`; it had no
+run id because readiness failed. Aidan authorized closing the GUI and MCP processes for the
+replacement experiment. Read-only source inspection established that `--mcp` itself never creates
+readiness or model services; the GUI can start shared-store downloads. No existing installed model,
+set-aside copy or run was deleted. The installed GUI was restored.
+The original MCP stdio clients require reconnection because the exposed tools cannot reattach
+their transports. A standalone protocol check passed; it does not prove harness reconnection.
+See the workstream 5 handoff for restoration evidence. Local read aloud is unavailable in this
+slice and belongs to the next workflow; that is separate from the original MCP transport limitation.
+
+### Offline use
+
+Every network-denied pass completed without errors or contract violations. A curl request also
+failed under the same deny-network profile. Fast runs provide quality and offline evidence,
+not latency figures.
+
+| Candidate | Online / offline WER | Online / offline formatted WER | Identical final texts | Runs |
+|---|---:|---:|---:|---|
+| parakeet-unified | 6.9% / 6.9% | 18.8% / 18.8% | 15/15 | `20261005T061546Z-local`, `20261005T061600Z-local`, paired derived log |
+| parakeet-unified-keyterms | 6.1% / 6.1% | 16.5% / 16.5% | 15/15 | `20261005T062117Z-local`, `20261005T062139Z-local`, paired derived log |
+| whisper-turbo | 2.5% / 3.6% | 12.5% / 13.1% | 12/15 | `20261005T063149Z-local`, `20261005T063537Z-local`, paired derived log |
+
+Whisper's differing samples are `dictation-thinking-pauses`, `dictation-false-starts` and
+`dictation-long-continuous`. The false-starts WER changes from 9.2% online to 18.5% offline.
+Its paced and fast online outputs also differ. Queue timing and rolling-window segmentation are
+plausible causes, not a demonstrated effect of network denial. No second offline pass was run to
+isolate the cause. See `20261005T063149Z-local`,
+`20261005T063537Z-local` and the latter's paired derived log.
+
+### Concurrent dictation and cleanup
+
+Unified with boosting was selected before these passes, with Qwen3-4B-Instruct-2507 cleanup.
+The selection record is `.build/transcription-evaluation/preferred-candidate.json` and is copied
+into the local dictation run. The later delivery runs also completed successfully.
+The bench prepares both models, feeds the actual Reviser live, and scores the raw transcript;
+inserted text is not scored as a cleanup reference. The final revision timer starts after the
+cancelled live revision joins, so end-to-end insertion and the final deadline are separate
+measurements in `20261005T064539Z-local` and `20261005T065030Z-apple`.
+
+Unified with boosting and Qwen, `20261005T064539Z-local`:
+
+- deadline fallbacks 0, deadline overruns 0 (`20261005T064539Z-local`).
+- warm stop-to-insert p50 1240 / p95 2716 ms (n=14), transcription p50 295 / p95 341 ms (n=14), cleanup p50 938 / p95 2415 ms (n=14) (`20261005T064539Z-local`).
+- warm revision p50 1161 / p95 2775 ms (n=25), cancellation latency p50 2 / p95 407 ms (n=14), revising 11.8% of the time (`20261005T064539Z-local`).
+- cold stop-to-insert 2004 ms, transcription 307 ms, cleanup 1697 ms, first revision 1695 ms (`20261005T064539Z-local`).
+
+Apple with Apple cleanup, `20261005T065030Z-apple`:
+
+- deadline fallbacks 1, deadline overruns 0 (`20261005T065030Z-apple`).
+- warm stop-to-insert p50 1929 / p95 2922 ms (n=14), transcription p50 176 / p95 280 ms (n=14), cleanup p50 1740 / p95 2642 ms (n=14) (`20261005T065030Z-apple`).
+- warm revision p50 1915 / p95 3524 ms (n=38), cancellation latency p50 0 / p95 1 ms (n=13), revising 23.8% of the time (`20261005T065030Z-apple`).
+- cold stop-to-insert 3361 ms, transcription 232 ms, cleanup 3128 ms, first revision 3127 ms (`20261005T065030Z-apple`).
+
+The local concurrent final requests stayed inside the deadline: maximum final revision
+2008 ms and maximum stop-to-insert 2716 ms (`20261005T064539Z-local`, derived).
+This does not prove cancellation during an over-budget request. Joint preparation took
+48096 ms and peak footprint was 2781 MiB, versus standalone Qwen's 4043 ms and 2591 MiB
+(`20261005T064539Z-local`, `20261005T063709Z-local`). The joint readiness phases do
+not isolate download-free compilation, specialization or each service's load.
+
+The standalone release cleanup corpus has different, hand-written windows, so its revision
+latency and revising share are context, not a controlled slowdown estimate. Revising is the
+arithmetic mean of each counted sample's share, not a duration-weighted total. It reports warm
+revision p50/p95 452/1626 ms and revising 79.9% in `20261005T063709Z-local`. The concurrent rows above
+measure real recognised windows, including the delay until boosted text first commits. Footprint
+covers both loaded local services but still omits Core ML cost charged outside the process.
+
+### Signed app and remaining checks
+
+The [workstream 4 signed-app record](implementation/transcription/04-app-provider.md#external-validation)
+passed on the unchanged reviewed candidate. Aidan confirmed the installed app, model progress and
+ready states, corrected-content cleanup, long dictation, quick stop, final-tail insertion,
+read-aloud unavailability, offline dictation and the Whisper comparison. Switching away during
+download was explicitly waived and remains untested in the signed app. The keyterms recommendation
+was not a separate signed-app build in that gate.
+
+First load after reboot or an OS update, energy and read aloud were not measured. Neither was the
+voice comparison's combined memory. Developer ID notarisation of nested dependency bundles remains
+untested. The corpus is one person's speech, and the same few coding terms recur across samples.
+
+### Recommendation
+
+Take forward `parakeet-unified-keyterms` for local live dictation, with Qwen cleanup. It trades a
+later stable transcript for markedly better coding vocabulary than unboosted Unified, without
+Whisper's multi-second tail. The supporting standalone runs are
+`20261005T061114Z-local`, `20261005T061642Z-local` and
+`20261005T062416Z-local`; concurrent behaviour is `20261005T064539Z-local`.
+Aidan chose to record this recommendation and leave the spike's build selection at unboosted
+Unified. Productionising belongs to a separate task. No boosted build follow-up or new signed-app
+gate is authorized in this workflow; the normal provider default is unchanged.
+
+The remaining quality gap is real. Boosted Unified has WER 6.1% and keyterms 84.2%, versus xAI's
+0.4% and 100.0% on references that began as xAI drafts and therefore flatter it
+(`20261005T061642Z-local`, `20261004T073341Z-xai`).
+It beats Apple's corpus WER and keyterms, 10.0% and 31.6%, but commits later and has a slower
+standalone tail (`20261005T061642Z-local`, `20261004T083627Z-apple`).
+Whisper improves local quality to WER 2.7% and keyterms 94.7%, but its warm tail is 3383/5099 ms
+and its first committed p95 is 32450 ms (`20261005T062416Z-local`). It is a useful
+quality comparison, not the preferred live adapter under these settings.
+
+Unified's remaining recognition and formatted-text gap warrants the spec's offline re-decoding
+experiment, and Ultra is a justified later quality challenger. This is a proposal, not measured
+proof that either helps (`20261005T061642Z-local`,
+`20261005T062416Z-local`). Nemotron's sustained-cost condition is not established by these paced runs
+(`20261005T061114Z-local`, `20261005T061642Z-local`): the adapters kept up,
+but process footprint can understate Core ML cost and energy was not measured.
+Fresh-download and real interruption recovery passed in the delivery runs above. Independent
+review and focused closure passed. The evaluation is accepted with the recommendation recorded
+and the current build selection unchanged.
