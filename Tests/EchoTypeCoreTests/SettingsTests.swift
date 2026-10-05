@@ -65,12 +65,14 @@ func unknownProvider() {
   #expect(Settings(decoding: stored).provider == Providers.all[0].id)
 }
 
-@Test("xAI stays the default, and a stored Apple selection loads as Apple")
+@Test("xAI stays the default, and stored Apple and Local selections load")
 func registeredProviders() {
-  let stored = Data(#"{"provider":"apple"}"#.utf8)
-
-  #expect(Providers.all.map(\.id) == ["xai", "apple"])
-  #expect(Settings(decoding: stored).provider == Provider.apple.id)
+  #expect(Providers.all.map(\.id) == ["xai", "apple", "local"])
+  #expect(Settings(decoding: nil).provider == Provider.xAI.id)
+  for provider in [Provider.apple, .local] {
+    let settings = Settings(provider: provider.id)
+    #expect(Settings(decoding: settings.encoded()).provider == provider.id)
+  }
 }
 
 @Test("A malformed sendReplyRequests falls back to on without discarding other settings")

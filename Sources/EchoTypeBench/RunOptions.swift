@@ -50,15 +50,13 @@ struct RunOptions {
     }
   }
 
-  /// The provider for `--provider`. The local provider is not in `Providers.all`, so it is
-  /// built here. Its candidates are those of `service`, the one this command measures, so only
-  /// that service's models are prepared and its memory and preparation figures are its own.
+  /// The provider for `--provider`. For Local, build only the measured services, with the
+  /// selected candidates, so standalone memory and preparation figures belong to one service.
   func provider(measuring service: LocalService) throws -> Provider {
-    if providerID == Provider.local.id.rawValue { return try .local(localSelection(measuring: service)) }
-    let known = (Providers.all + [.local]).map(\.id.rawValue)
+    let known = Providers.all.map(\.id.rawValue)
     guard let providerID, let provider = Providers.all.first(where: { $0.id.rawValue == providerID })
     else { throw BenchError("--provider must be one of: \(known.joined(separator: ", "))") }
-    return provider
+    return provider.id == Provider.local.id ? try .local(localSelection(measuring: service)) : provider
   }
 
   /// What `run.json` records: the local provider's candidate, and nothing for the others.

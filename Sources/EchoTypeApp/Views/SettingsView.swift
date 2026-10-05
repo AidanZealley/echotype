@@ -195,18 +195,25 @@ private struct ReadAloudTab: View {
           Text(verbatim: hotkey.label).tag(hotkey)
         }
       }
-      Picker("Voice", selection: reading.voice) {
-        ForEach(provider.voice.voices) { voice in
-          Text(verbatim: voice.name).tag(voice.id)
+      if voiceState?.status != .unavailable {
+        Picker("Voice", selection: reading.voice) {
+          ForEach(provider.voice.voices) { voice in
+            Text(verbatim: voice.name).tag(voice.id)
+          }
         }
       }
       if let voiceState { ServiceNote(state: voiceState) }
-      LabeledContent("Speed") {
-        HStack {
-          Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
-          Text(reading.wrappedValue.speed, format: .number.precision(.fractionLength(1)))
-            .monospacedDigit()
-            .frame(width: 28, alignment: .trailing)
+      // A fixed rate has no choice to make and cannot supply a Slider's non-empty range.
+      if voiceState?.status != .unavailable,
+        provider.voice.speedRange.lowerBound < provider.voice.speedRange.upperBound
+      {
+        LabeledContent("Speed") {
+          HStack {
+            Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
+            Text(reading.wrappedValue.speed, format: .number.precision(.fractionLength(1)))
+              .monospacedDigit()
+              .frame(width: 28, alignment: .trailing)
+          }
         }
       }
     }
