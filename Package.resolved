@@ -1,5 +1,5 @@
 {
-  "originHash" : "54ac8720213539f0ff60bce74f6653031c7548c833142b21a5ec4a99290b2127",
+  "originHash" : "e9b9a582ebb4090d64cc2d7176e2a53f839c44a99b69c12d38ff5c4aaf3f76d0",
   "pins" : [
     {
       "identity" : "argmax-oss-swift",
@@ -28,12 +28,20 @@
       }
     },
     {
+      "identity" : "mlx-audio-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Blaizzy/mlx-audio-swift",
+      "state" : {
+        "revision" : "bf14ae0c26e4e85553dd989571cae29d70fa6735"
+      }
+    },
+    {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift",
       "state" : {
-        "revision" : "19601207e9a0de51e03ee6ec0c3c5f3784275075",
-        "version" : "0.32.3"
+        "revision" : "0bb916c67f4b9e5c682cbe02a42c701c93ab5021",
+        "version" : "0.31.6"
       }
     },
     {
@@ -41,7 +49,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift-lm",
       "state" : {
-        "revision" : "5e46681b2adcef2db158e7b949aeae3896778e23"
+        "revision" : "bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57",
+        "version" : "3.31.4"
       }
     },
     {
