@@ -17,7 +17,7 @@ Status: approved; implementation in progress.
 | 1 | [Parakeet Unified transcription](01-parakeet-unified.md) | Slice 1 | Accepted |
 | 2 | [Whisper Turbo transcription](02-whisper-turbo.md) | 1 | Accepted |
 | 3 | [Bench dictation with cleanup](03-bench-dictation.md) | 2 | Accepted |
-| 4 | [Local provider in the app](04-app-provider.md) | 3 | Not started |
+| 4 | [Local provider in the app](04-app-provider.md) | 3 | Accepted |
 | 5 | [Transcription evaluation and results](05-transcription-evaluation.md) | 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
 
@@ -105,7 +105,7 @@ Sequential throughout. Workstreams 1 and 2 both edit `Package.swift`, `LocalCand
 
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
-| Signed-app check | Workstream 4 | After closure, before acceptance | Pending | `TBD` | Aidan's answer gives a verdict for every checklist item, and every item has passed |
+| Signed-app check | Workstream 4 | After closure, before acceptance | Passed, 2026-10-05 | Unchanged reviewed candidate; see record | Satisfied; all required items passed, item 4 explicitly waived |
 
 ## Escalations
 
@@ -131,6 +131,8 @@ Carried from slice 1:
   scope runtime claims to the sizes actually measured; derive "warm" figures with the cold request
   excluded, as `report` does.
 
+- Whisper preparation can take several minutes before readiness. Aidan's signed-app retry passed without a source correction; do not label a Loading state a hang without runtime evidence. Use `/usr/bin/log` on this Mac to avoid zsh's `log` builtin.
+
 - Runtime downloader switches may leave tokenizer Hub fallback enabled. Load the pinned local tokenizer explicitly and propagate local errors, so failed preparation cannot fetch outside the store.
 
 ## Decision and drift log
@@ -150,3 +152,6 @@ Carried from slice 1:
 | 2026-10-04 | Workstream 1 edited the bench's `main.swift` usage text, which the plan assigns to workstream 3. Local slice's `LocalCleanup` is now `LocalModel`. | The usage text would otherwise document only `--candidate cleanup=`. | Lead (workstream 1) | 2, 3 |
 | 2026-10-04 | Whisper uses one-second decode cadence, agreement or pause commitment, a 28-second unsettled-audio bound, Silero speech evidence and a 64-token keyterm prompt with limit 12. A local tokenizer adapter prevents WhisperKit's Hub fallback. | The public wrapper initializer is internal in pinned WhisperKit 1.1.0; local failures must propagate. Final paced and offline runs pass without contract violations. No specification drift. Speech events wait for batch inference; observe pause behaviour in the app check. | Lead (workstream 2) | 3, 4, 5 |
 | 2026-10-04 | Bench dictation is `transcribe --cleanup`, prepares both selected services, scores only the transcript and reports inserted text and split stop-to-insert. Load average and debug/release metadata are recorded with backward-compatible reports. No specification drift. | Three-sample local and Apple evidence, legacy reports, independent review and focused closure all pass. | Lead (workstream 3) | 4, 5 |
+| 2026-10-05 | Aidan deferred signed-app checklist item 4; acceptance preserves his other passed checks and requires only unanswered or failed checks. Escape dismissal remains outside scope. | Explicit user waiver and scope limit. | Aidan | 4 |
+| 2026-10-05 | Diagnostic retry retains the reviewed candidate. Whisper's reported Loading state resolved to ready during read-only inspection; loading stage duration is not isolated. | No persistent hang or adapter defect established. Use `/usr/bin/log` in zsh to bypass its `log` builtin. | Lead, workstream 4 | 4, 5 |
+| 2026-10-05 | Signed-app gate passed on the unchanged reviewed candidate. Installation, exact correction cleanup, offline dictation and Whisper dictation are confirmed; item 4 remains waived. | Aidan's retry answer completed the required checks. Fresh Unified files match all pinned sizes and hashes; the set-aside copy and Whisper check bundle were removed. | Aidan; lead, workstream 4 | 4, 5 |

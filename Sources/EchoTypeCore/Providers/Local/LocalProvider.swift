@@ -36,7 +36,7 @@ enum LocalProvider {
         check: { _ in
           ServiceReadiness(
             transcription: transcriber?.check() ?? .unavailable("No transcription model is selected."),
-            voice: .unavailable("Local models for this arrive in a later release."),
+            voice: .unavailable("Local read aloud is not available yet."),
             cleanup: reviser?.check())
         },
         changes: { merged([transcriber?.changes(), reviser?.changes()].compactMap { $0 }) }))

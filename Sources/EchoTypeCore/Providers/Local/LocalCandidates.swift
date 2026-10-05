@@ -153,8 +153,7 @@ private struct UnknownCandidate: LocalizedError {
 }
 
 extension Provider {
-  /// The experimental local provider with the build's candidates. Not in `Providers.all` until
-  /// the app lists it.
+  /// The experimental local provider with the build's candidates.
   public static let local = try! local(.build)  // The build's names are candidates.
 
   /// The local provider with `selection`'s candidates, which only the bench uses. Throws when a
