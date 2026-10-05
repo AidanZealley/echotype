@@ -16,7 +16,7 @@ Status: approved; implementation has not started.
 |---:|---|---|---|
 | 1 | [Bench reading and listening page](01-bench-speak.md) | Slice 2 | Accepted |
 | 2 | [Kokoro read aloud](02-kokoro.md) | 1 | Accepted |
-| 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Not started |
+| 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Accepted |
 | 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Not started |
 | 5 | [Voice evaluation and spike recommendation](05-voice-evaluation.md) | 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
@@ -151,6 +151,7 @@ Carried from slices 1 and 2:
 - Model preparation can take minutes before readiness. Do not call a Loading state a hang without
   runtime evidence. Use `/usr/bin/log` on this Mac to avoid zsh's `log` builtin.
 - Bench measurement code records a stream's thrown error with the contract check; never swallow it with `try?`, or a failure reads as a clean end.
+- A runtime whose cancelled generation cannot be awaited (MLX Audio Swift's Qwen3-TTS) keeps running MLX work after `cancel()`: it can overlap the next reading on the shared model, and crashes MLX's teardown if the process exits meanwhile (ET-R3-01). The bench only waits 1 s after its cancellation trial, a heuristic; the app has no such wait. The signed-app check must stop a Qwen reading and immediately start another, several times, then stop one and quit at once, checking the app log for MLX errors and `~/Library/Logs/DiagnosticReports` for a crash. Check every bench command's exit status, not only its run directory.
 
 ## Decision and drift log
 
@@ -167,3 +168,6 @@ Carried from slices 1 and 2:
 | 2026-10-05 | The app never reads and dictates at once: starting dictation stops a reading. "Read aloud alongside dictation" is all three models loaded and used in turn, measured by the bench with every service prepared and checked in the signed app. | That is the concurrency the app permits. | Planning agent | 1, 4, 5 |
 | 2026-10-05 | `speak`'s cancellation trial plays about 2 s of audio paced, then pulls unpaced until a `next()` waits, and cancels there. Drift from the harness spec and `01-bench-speak.md`, which say it cancels after about 2 s of audio. A stream that has everything ready first (Apple, short passages) ends and is recorded as not pending. | A stream that stays one utterance ahead never has a `next()` pending at 2 s of paced audio, so the old trial could not measure local cancellation. | Workstream 2 lead | 3, 5 |
 | 2026-10-05 | Kokoro's Emma voice pack is converted from the pinned JSON by our loader with FluidAudio's converter, not by FluidAudio itself. Drift from the packet's "let it convert". | FluidAudio's `ensureVoicePack` fetches the JSON over the network and never reads a local one. | Workstream 2 lead | 3 |
+| 2026-10-05 | MLX Swift moved from 0.32.3 to 0.31.6 and MLX Swift LM from `5e46681b` (3.32.3 plus nine) to 3.31.4. Drift from the packet's "resolve against the existing pins" and from the revision research verified for cleanup. Cleanup's figures in `results.md` were measured on the old pins; only single exactness samples (`20261005T203204Z-local`, `20261005T212053Z-local`) have run on the new ones. Workstream 5 remeasures cleanup in its combination runs and scopes the old figures. | MLX Audio Swift calls `makePromptCache` without `try`, which MLX Swift LM 3.32 made throwing, so it does not compile on the old pins; 3.31.4 needs MLX Swift 0.31. No fork. | Workstream 3 lead | 5 |
+| 2026-10-05 | Qwen3-TTS reads at speed 1 only (`speedRange` `1...1`), and `qwen3-tts-0.6b` offers plain presets only. | The model has no native speed control and time-stretching would change the voice being judged; upstream ignores instructions on 0.6B. | Workstream 3 lead | 4, 5 |
+| 2026-10-05 | ET-R3-01: Qwen3-TTS's cancelled generation stays unawaitable for the spike. The bench's `speak` waits 1 s after its cancellation trial so the next reading and process exit start after it settles; the app has no such wait. No fork of MLX Audio Swift. Fixing it (a fork exposing awaitable streaming, or another runtime) is a blocker before productionising Qwen. Drift from the plan's speech stream contract, whose `cancel()` stops generation but cannot be awaited here. | MLX Audio Swift runs each generation in an unstructured task it cancels but never exposes; Aidan wants the minimal option that lets Qwen be evaluated, and will decide on a proper fix only if Qwen is worth productionising. | Aidan | 4, 5 |

@@ -256,6 +256,11 @@ private struct Speech {
     }
 
     check.cancellationTook(seconds: pending ? latency.map { $0 / 1000 } : 0)
+    // MLX Audio Swift stops a cancelled Qwen3-TTS generation at its next step, in a task nothing
+    // can await, so MLX work can outlive `next()` throwing. Left running, it overlaps the next
+    // pass's first reading or crashes MLX's teardown when the process exits. Waiting a second, many
+    // generation steps, is a heuristic for that unawaitable task, not a fix (ET-R3-01).
+    try? await Task.sleep(for: .seconds(1))
     return CancellationTrial(
       id: reading.id, repeatIndex: repeatIndex, audioSeconds: pulledSeconds, pending: pending,
       latencyMs: latency, violations: check.violations)

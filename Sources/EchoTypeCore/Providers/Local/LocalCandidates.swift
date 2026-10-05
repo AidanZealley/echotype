@@ -167,7 +167,25 @@ enum LocalCandidates {
     try await KokoroModel.load(from: directories[0]).speak
   }
 
-  static let voice = [kokoro]
+  /// Qwen3-TTS-12Hz-1.7B-CustomVoice, MLX four-bit, through MLX Audio Swift: every preset, plain
+  /// and with the fixed style prompt. It has no speed control, and time-stretching would change
+  /// the voice being judged, so it reads at normal speed only.
+  static let qwen3TTS = qwenTTS(name: "qwen3-tts", manifest: QwenTTSManifests.large, styled: true)
+
+  /// The same implementation with the 0.6B weights, which have no instruction control, so its
+  /// presets read plain only.
+  static let qwen3TTSSmall = qwenTTS(name: "qwen3-tts-0.6b", manifest: QwenTTSManifests.small, styled: false)
+
+  private static func qwenTTS(name: String, manifest: ModelManifest, styled: Bool) -> VoiceCandidate {
+    let voices = QwenTTSModel.voices(styled: styled)
+    return VoiceCandidate(
+      name: name, manifests: [manifest], voices: voices, speedRange: 1...1, maximumCharacters: 60_000
+    ) { directories in
+      try await QwenTTSModel.load(from: directories[0], voices: voices).speak
+    }
+  }
+
+  static let voice = [kokoro, qwen3TTS, qwen3TTSSmall]
 
   /// The one store in the process, so a download is never started twice.
   static let store = ModelStore()
