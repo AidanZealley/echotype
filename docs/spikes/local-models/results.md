@@ -547,9 +547,14 @@ verification, compared with 2649 MiB for its paired installed process
 (`20261005T072145Z-local`, `20261005T072155Z-local`). Neither figure measures only inference.
 
 A separate real Unified download was killed after four seconds. The installed Unified directory was
-absent, with 5 files and 14444100 bytes left under `Incomplete/`. The retry completed and installed
-every pinned file with matching sizes and SHA-256 values (`20261005T072301Z-local`,
-`evaluation-interruption.json` and `evaluation-delivery.json`). The loader entered its loading phase
+absent, with 5 files totaling 14444100 logical bytes left under `Incomplete/`
+(`20261005T072301Z-local`, `evaluation-interruption.json`). This records an observed transient
+snapshot after the kill, not peak transient allocated disk usage. The whole-download peak,
+including URLSession's temporary storage, was not sampled. The installed disk and shared cache
+totals above are post-install snapshots, not peak measurements.
+
+The retry completed and installed every pinned file with matching sizes and SHA-256 values
+(`20261005T072301Z-local`, `evaluation-delivery.json`). The loader entered its loading phase
 only after installation; no incomplete directory was passed to the runtime. This proves recovery
 from this interruption, not every possible network failure.
 
