@@ -209,8 +209,10 @@ private struct Speech {
       sampleRate: sampleRate, pause: pause, violations: check.violations, error: error)
   }
 
-  /// Plays the passage at the paced pace until about 2 s of audio were pulled, then cancels
-  /// while a `next()` is pending and times how long it takes to end.
+  /// Plays the passage at the paced pace until about 2 s of audio were pulled, then pulls on
+  /// without pacing until a `next()` waits on the model, cancels it there and times how long it
+  /// takes to end. A stream that keeps audio ready, as a local one does, would otherwise answer at
+  /// once and leave nothing pending. A stream that ends or throws first was not pending.
   func cancellationTrial(on reading: Reading, repeatIndex: Int) async -> CancellationTrial {
     let request = request(for: reading)
     let clock = ContinuousClock()
@@ -220,42 +222,59 @@ private struct Speech {
     var check = SpeechContractCheck()
     var player = PlayerModel()
     var pulledSeconds = 0.0
-    do {
-      while pulledSeconds < 2, let chunk = try await stream.next() {
+    var pending = false
+    var latency: Double?
+
+    pulling: while true {
+      let draining = pulledSeconds >= 2
+      let pull = Task { () -> (endedAt: ContinuousClock.Instant, result: Result<SpeechAudio?, any Error>) in
+        do { return (clock.now, .success(try await stream.next())) } catch { return (clock.now, .failure(error)) }
+      }
+      // Still waiting after 50 ms means it waits on the model: cancel there.
+      if draining, await value(of: pull, within: .milliseconds(50)) == nil {
+        let cancelledAt = clock.now
+        stream.cancel()
+        let ended = await value(of: pull, within: .seconds(SpeechContractCheck.maximumCancelSeconds))?.endedAt
+        pending = ended.map { $0 >= cancelledAt } ?? true
+        latency = pending ? ended.map { ($0 - cancelledAt) / .milliseconds(1) } : nil
+        break
+      }
+      switch await pull.value.result {
+      case .failure(let thrown):
+        check.threw(thrown)
+        break pulling
+      case .success(nil):
+        break pulling
+      case .success(let chunk?):
+        check.observe(chunk)
         let chunkSeconds = Double(chunk.samples.count) / Double(chunk.sampleRate)
         pulledSeconds += chunkSeconds
+        guard !draining else { continue }
         let scheduledAt = player.schedule(seconds: chunkSeconds, pulledAt: (clock.now - start) / .seconds(1))
-        try await clock.sleep(until: start + .seconds(scheduledAt))
+        try? await clock.sleep(until: start + .seconds(scheduledAt))
       }
-    } catch let thrown {
-      check.threw(thrown)
     }
 
-    // Whichever ends first: the pending `next()`, or the contract's limit.
-    let (ends, signal) = AsyncStream.makeStream(of: ContinuousClock.Instant?.self)
-    let pending = Task {
-      _ = try? await stream.next()
-      signal.yield(clock.now)
-    }
-    let limit = Task {
-      try? await clock.sleep(for: .seconds(SpeechContractCheck.maximumCancelSeconds))
-      signal.yield(nil)
-    }
-    // Long enough for `next()` to be waiting on the model.
-    try? await clock.sleep(for: .milliseconds(50))
-    let cancelledAt = clock.now
-    stream.cancel()
-    let ended = await ends.first { _ in true } ?? nil
-    pending.cancel()
-    limit.cancel()
-
-    let wasPending = ended.map { $0 >= cancelledAt } ?? true
-    let latency = wasPending ? ended.map { ($0 - cancelledAt) / .milliseconds(1) } : nil
-    check.cancellationTook(seconds: wasPending ? latency.map { $0 / 1000 } : 0)
+    check.cancellationTook(seconds: pending ? latency.map { $0 / 1000 } : 0)
     return CancellationTrial(
-      id: reading.id, repeatIndex: repeatIndex, audioSeconds: pulledSeconds, pending: wasPending,
+      id: reading.id, repeatIndex: repeatIndex, audioSeconds: pulledSeconds, pending: pending,
       latencyMs: latency, violations: check.violations)
   }
+}
+
+/// The task's value, or nil if it has not finished within `limit`. The task keeps running.
+private func value<T: Sendable>(of task: Task<T, Never>, within limit: Duration) async -> T? {
+  let (first, signal) = AsyncStream.makeStream(of: T?.self)
+  let waiter = Task { signal.yield(await task.value) }
+  let timer = Task {
+    try? await Task.sleep(for: limit)
+    signal.yield(nil)
+  }
+  defer {
+    waiter.cancel()
+    timer.cancel()
+  }
+  return await first.first { _ in true } ?? nil
 }
 
 // MARK: Records

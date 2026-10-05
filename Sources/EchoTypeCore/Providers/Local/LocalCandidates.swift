@@ -7,13 +7,15 @@ import Foundation
 public struct LocalSelection: Codable, Equatable, Sendable {
   public var transcription: String?
   public var cleanup: String?
+  public var voice: String?
 
-  public init(transcription: String? = nil, cleanup: String? = nil) {
+  public init(transcription: String? = nil, cleanup: String? = nil, voice: String? = nil) {
     self.transcription = transcription
     self.cleanup = cleanup
+    self.voice = voice
   }
 
-  public static let build = LocalSelection(transcription: "parakeet-unified", cleanup: "qwen3-4b-2507")
+  public static let build = LocalSelection(transcription: "parakeet-unified", cleanup: "qwen3-4b-2507", voice: "kokoro")
 }
 
 /// A transcription model: the pinned files it loads from and the runtime that loads them. A new
@@ -38,6 +40,23 @@ struct CleanupCandidate: Sendable {
   let manifest: ModelManifest
   /// Extra variables for the chat template, such as the flag that turns thinking off.
   let templateContext: [String: any Sendable]
+}
+
+/// A read-aloud model: the pinned files it loads from, what its voice service offers, and the
+/// runtime that loads them.
+struct VoiceCandidate: Sendable {
+  /// Starts one reading on the loaded model.
+  typealias Speak = @Sendable (SpeechRequest) -> any SpeechStream
+
+  let name: String
+  /// Every model the candidate needs, downloaded together and passed to `load` in this order.
+  let manifests: [ModelManifest]
+  /// The first is the default.
+  let voices: [Voice]
+  let speedRange: ClosedRange<Double>
+  let maximumCharacters: Int
+  /// Loads and warms the models from their installed directories.
+  let load: @Sendable ([URL]) async throws -> Speak
 }
 
 enum LocalCandidates {
@@ -138,6 +157,18 @@ enum LocalCandidates {
 
   static let cleanup = [qwen3, smollm3]
 
+  /// Kokoro-82M v1.0 through FluidAudio's Core ML chain. The speed range is the one Kokoro's own
+  /// demo offers. Text is synthesised as it is pulled, so the limit only guards against a runaway
+  /// selection, matching the other providers'.
+  static let kokoro = VoiceCandidate(
+    name: "kokoro", manifests: [KokoroManifests.english], voices: KokoroModel.voices, speedRange: 0.5...2,
+    maximumCharacters: 60_000
+  ) { directories in
+    try await KokoroModel.load(from: directories[0]).speak
+  }
+
+  static let voice = [kokoro]
+
   /// The one store in the process, so a download is never started twice.
   static let store = ModelStore()
 }
@@ -171,6 +202,7 @@ extension Provider {
     return LocalProvider.make(
       transcription: try find(
         "transcription", selection.transcription, in: LocalCandidates.transcription, named: \.name),
-      cleanup: try find("cleanup", selection.cleanup, in: LocalCandidates.cleanup, named: \.name))
+      cleanup: try find("cleanup", selection.cleanup, in: LocalCandidates.cleanup, named: \.name),
+      voice: try find("voice", selection.voice, in: LocalCandidates.voice, named: \.name))
   }
 }

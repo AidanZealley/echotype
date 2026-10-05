@@ -22,9 +22,10 @@ let usage = """
   and sample the process's memory, the thermal state, memory pressure and one-minute load average. run.json records debug or release.
   xAI reads its key from XAI_API_KEY. The local provider downloads its pinned models on first use;
   --candidate transcription=parakeet-unified|parakeet-unified-keyterms|whisper-turbo chooses its transcription model
-  (default parakeet-unified) and --candidate cleanup=qwen3-4b-2507|smollm3-3b its cleanup model (default
-  qwen3-4b-2507). A local run prepares the service it measures and every service named with
-  --candidate, and keeps them loaded, so a combination's memory can be measured.
+  (default parakeet-unified), --candidate cleanup=qwen3-4b-2507|smollm3-3b its cleanup model (default
+  qwen3-4b-2507) and --candidate voice=kokoro its voice model (default kokoro). A local run prepares
+  the service it measures and every service named with --candidate, and keeps them loaded, so a
+  combination's memory can be measured.
   speak reads each reading sample (all, or the ids) through the provider's voice, with --voice (default
   the first) at --speed (default 1), without making sound. A paced run models the app's player: it
   starts on the first chunk, holds 500 ms and drains in real time, pauses once for 5 s partway through

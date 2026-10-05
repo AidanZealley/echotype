@@ -9,6 +9,7 @@ import Testing
   func manifestsArePinned() {
     let manifests =
       LocalCandidates.cleanup.map(\.manifest) + LocalCandidates.transcription.flatMap(\.manifests)
+      + LocalCandidates.voice.flatMap(\.manifests)
     for manifest in manifests {
       #expect(manifest.revision.count == 40 && manifest.revision.allSatisfy(\.isHexDigit), "\(manifest.name)")
       #expect(!manifest.license.isEmpty)
@@ -31,9 +32,12 @@ import Testing
   }
 
   @Test("A service with no candidate is not offered")
-  func unselectedServiceIsNotOffered() throws {
+  func unselectedServiceIsNotOffered() async throws {
     #expect(try Provider.local(LocalSelection(transcription: "parakeet-unified")).cleanup == nil)
     #expect(try Provider.local(LocalSelection(cleanup: "qwen3-4b-2507")).cleanup != nil)
+    let readiness = try await Provider.local(LocalSelection()).readiness.check(
+      ReadinessRequest(language: "en", voice: "bf_emma"))
+    #expect(readiness.voice.status == .unavailable)
   }
 
   @Test("Readiness reports the download, then a failed one stays failed without starting again")
