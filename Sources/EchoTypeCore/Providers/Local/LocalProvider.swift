@@ -1,10 +1,11 @@
 import Foundation
 
 /// The experimental local provider: models that run on this Mac with no key or account.
-/// Transcription and cleanup exist so far; read aloud arrives in a later slice. A service with no
-/// candidate is neither prepared nor offered.
+/// A service with no candidate is neither prepared nor offered.
 enum LocalProvider {
-  static func make(transcription: TranscriptionCandidate?, cleanup: CleanupCandidate?) -> Provider {
+  static func make(
+    transcription: TranscriptionCandidate?, cleanup: CleanupCandidate?, voice: VoiceCandidate?
+  ) -> Provider {
     let store = LocalCandidates.store
     let transcriber = transcription.map {
       LocalModel(
@@ -18,6 +19,9 @@ enum LocalProvider {
         try await CleanupModel.load(from: directories[0], templateContext: candidate.templateContext)
       }
     }
+    let speaker = voice.map {
+      LocalModel(manifests: $0.manifests, loadingMessage: "Loading the voice model", store: store, load: $0.load)
+    }
     return Provider(
       id: "local", name: "Local", summary: "Experimental. Runs models on this Mac.",
       credential: .none, languages: [.english],
@@ -25,7 +29,14 @@ enum LocalProvider {
         guard let start = transcriber?.loaded else { throw ProviderError.unavailable }
         return try await start(request)
       },
-      voice: voice,
+      voice: voice.map { candidate in
+        VoiceService(
+          voices: candidate.voices, speedRange: candidate.speedRange, maximumCharacters: candidate.maximumCharacters
+        ) { request in
+          guard let speak = speaker?.loaded else { return Unavailable() }
+          return speak(request)
+        }
+      } ?? unavailableVoice,
       cleanup: reviser.map { reviser in
         CleanupService { request in
           guard let model = reviser.loaded else { throw ProviderError.unavailable }
@@ -36,10 +47,10 @@ enum LocalProvider {
         check: { _ in
           ServiceReadiness(
             transcription: transcriber?.check() ?? .unavailable("No transcription model is selected."),
-            voice: .unavailable("Local read aloud is not available yet."),
+            voice: speaker?.check() ?? .unavailable("No voice model is selected."),
             cleanup: reviser?.check())
         },
-        changes: { merged([transcriber?.changes(), reviser?.changes()].compactMap { $0 }) }))
+        changes: { merged([transcriber?.changes(), reviser?.changes(), speaker?.changes()].compactMap { $0 }) }))
   }
 
   /// One stream that yields when any of `streams` does.
@@ -50,8 +61,8 @@ enum LocalProvider {
     return merged
   }
 
-  private static let voice = VoiceService(
-    voices: [Voice(id: "unavailable", name: "Not available yet")], speedRange: 1...1,
+  private static let unavailableVoice = VoiceService(
+    voices: [Voice(id: "unavailable", name: "Not available")], speedRange: 1...1,
     maximumCharacters: 1
   ) { _ in Unavailable() }
 

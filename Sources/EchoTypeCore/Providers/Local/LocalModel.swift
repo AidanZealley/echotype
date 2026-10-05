@@ -112,3 +112,23 @@ final class LocalModel<Loaded: Sendable>: Sendable {
     return result
   }
 }
+
+/// Points `link`, a folder a runtime reads from a fixed path, at a model's verified `directory`,
+/// so the runtime finds the store's copy instead of downloading its own. A link already there is
+/// left alone, and a real folder, from another tool using the same runtime, is never touched. Only
+/// a missing or stale link is written, so two processes loading at once do not fight over it:
+/// whoever loses finds the link already right.
+func linkFolder(at link: URL, to directory: URL) throws {
+  let files = FileManager.default
+  func pointsAtStore() -> Bool {
+    (try? files.destinationOfSymbolicLink(atPath: link.path)) == directory.path
+  }
+  if let type = try? files.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType {
+    guard type == .typeSymbolicLink, !pointsAtStore() else { return }
+    try? files.removeItem(at: link)
+  }
+  try files.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+  do {
+    try files.createSymbolicLink(at: link, withDestinationURL: directory)
+  } catch where pointsAtStore() {}
+}

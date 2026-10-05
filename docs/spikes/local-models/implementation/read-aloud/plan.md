@@ -15,7 +15,7 @@ Status: approved; implementation has not started.
 | # | Workstream | Depends on | Status |
 |---:|---|---|---|
 | 1 | [Bench reading and listening page](01-bench-speak.md) | Slice 2 | Accepted |
-| 2 | [Kokoro read aloud](02-kokoro.md) | 1 | Not started |
+| 2 | [Kokoro read aloud](02-kokoro.md) | 1 | Accepted |
 | 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Not started |
 | 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Not started |
 | 5 | [Voice evaluation and spike recommendation](05-voice-evaluation.md) | 4 | Not started |
@@ -150,6 +150,7 @@ Carried from slices 1 and 2:
   `reading-long-selection` (pause estimated at 15 characters per second) as a failed measurement.
 - Model preparation can take minutes before readiness. Do not call a Loading state a hang without
   runtime evidence. Use `/usr/bin/log` on this Mac to avoid zsh's `log` builtin.
+- Bench measurement code records a stream's thrown error with the contract check; never swallow it with `try?`, or a failure reads as a clean end.
 
 ## Decision and drift log
 
@@ -164,3 +165,5 @@ Carried from slices 1 and 2:
 | 2026-10-05 | `qwen3-tts-0.6b` is built with 1.7B but measured only if 1.7B misses the warm first-audio target, per the spec's conditional follow-up. | It is a manifest on the same implementation. Building it in workstream 3 keeps workstream 5 free of product code. | Planning agent | 3, 5 |
 | 2026-10-05 | Read-aloud round-trip transcription scoring is not built. Skipped, repeated or invented words are caught by Aidan's listening and noted in their ratings. | Eight passages are few enough to hear in full; the round trip cannot hear pronunciation, which decides the comparison. | Planning agent | 1, 5 |
 | 2026-10-05 | The app never reads and dictates at once: starting dictation stops a reading. "Read aloud alongside dictation" is all three models loaded and used in turn, measured by the bench with every service prepared and checked in the signed app. | That is the concurrency the app permits. | Planning agent | 1, 4, 5 |
+| 2026-10-05 | `speak`'s cancellation trial plays about 2 s of audio paced, then pulls unpaced until a `next()` waits, and cancels there. Drift from the harness spec and `01-bench-speak.md`, which say it cancels after about 2 s of audio. A stream that has everything ready first (Apple, short passages) ends and is recorded as not pending. | A stream that stays one utterance ahead never has a `next()` pending at 2 s of paced audio, so the old trial could not measure local cancellation. | Workstream 2 lead | 3, 5 |
+| 2026-10-05 | Kokoro's Emma voice pack is converted from the pinned JSON by our loader with FluidAudio's converter, not by FluidAudio itself. Drift from the packet's "let it convert". | FluidAudio's `ensureVoicePack` fetches the JSON over the network and never reads a local one. | Workstream 2 lead | 3 |

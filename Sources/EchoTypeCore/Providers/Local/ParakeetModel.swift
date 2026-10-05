@@ -37,7 +37,9 @@ final class ParakeetModel: Sendable {
 
     var ctc: CtcModels?
     if let keywordSpotting {
-      try linkTokenizer(of: keywordSpotting)
+      // Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache
+      // folder, whichever way the model was loaded, so that folder points at the store's copy.
+      try linkFolder(at: CtcModels.defaultCacheDirectory(), to: keywordSpotting)
       ctc = try await CtcModels.loadDirect(from: keywordSpotting)
     }
     let model = ParakeetModel(asr: asr, vad: vad, ctc: ctc)
@@ -78,26 +80,5 @@ final class ParakeetModel: Sendable {
       let boosting = try await Self.boosting(["EchoType"], models: ctc)
       _ = await boosting.rescore(text: " echo", tokenTimings: [word], audioSamples: silence)
     }
-  }
-
-  /// Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache folder,
-  /// whichever way the model was loaded. Pointing that folder at the store's verified copy avoids
-  /// a second download. A link already there is left alone, and a real folder, from another
-  /// FluidAudio tool, is never touched. Only a missing or stale link is written, so two processes
-  /// loading at once do not fight over it: whoever loses finds the link already right.
-  private static func linkTokenizer(of directory: URL) throws {
-    let link = CtcModels.defaultCacheDirectory()
-    let files = FileManager.default
-    func pointsAtStore() -> Bool {
-      (try? files.destinationOfSymbolicLink(atPath: link.path)) == directory.path
-    }
-    if let type = try? files.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType {
-      guard type == .typeSymbolicLink, !pointsAtStore() else { return }
-      try? files.removeItem(at: link)
-    }
-    try files.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
-    do {
-      try files.createSymbolicLink(at: link, withDestinationURL: directory)
-    } catch where pointsAtStore() {}
   }
 }

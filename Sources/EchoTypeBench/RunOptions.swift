@@ -7,9 +7,6 @@ enum LocalService: String, CaseIterable {
   case cleanup
   case voice
 
-  /// The services `--candidate` can name. Read aloud has no local candidate yet.
-  static let candidates: [LocalService] = [.transcription, .cleanup]
-
   /// How a provider's readiness reports this service.
   var state: (ServiceReadiness) -> ServiceState? {
     switch self {
@@ -49,10 +46,8 @@ struct RunOptions {
         providerID = value
       case "--candidate":
         let parts = rest.popFirst()?.split(separator: "=", maxSplits: 1).map(String.init) ?? []
-        guard parts.count == 2, let service = LocalService(rawValue: parts[0]),
-          LocalService.candidates.contains(service)
-        else {
-          let accepted = LocalService.candidates.map { "\($0.rawValue)=<name>" }.joined(separator: " or ")
+        guard parts.count == 2, let service = LocalService(rawValue: parts[0]) else {
+          let accepted = LocalService.allCases.map { "\($0.rawValue)=<name>" }.joined(separator: " or ")
           throw BenchError("--candidate takes \(accepted)")
         }
         candidates[service] = parts[1]
@@ -107,7 +102,8 @@ struct RunOptions {
     return LocalSelection(
       transcription: services.contains(.transcription)
         ? candidates[.transcription] ?? LocalSelection.build.transcription : nil,
-      cleanup: services.contains(.cleanup) ? candidates[.cleanup] ?? LocalSelection.build.cleanup : nil)
+      cleanup: services.contains(.cleanup) ? candidates[.cleanup] ?? LocalSelection.build.cleanup : nil,
+      voice: services.contains(.voice) ? candidates[.voice] ?? LocalSelection.build.voice : nil)
   }
 }
 
