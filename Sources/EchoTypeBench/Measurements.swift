@@ -21,6 +21,7 @@ struct Preparation: Codable {
   let startedAt: Date
   let readyAt: Date
   let messages: [Message]
+  /// The services the run waited for. Nil in runs from before they were recorded.
   var services: [String]? = nil
 
   var waitMs: Double { readyAt.timeIntervalSince(startedAt) * 1000 }
@@ -208,6 +209,25 @@ func writeJSON(_ value: some Encodable, to file: URL) throws {
   encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
   encoder.dateEncodingStrategy = .milliseconds
   try encoder.encode(value).write(to: file)
+}
+
+/// A run's results, one JSON line each, written as they happen so an interrupted run keeps them.
+final class ResultLog {
+  private let file: FileHandle
+  private let encoder = JSONEncoder()
+
+  init(_ url: URL) throws {
+    FileManager.default.createFile(atPath: url.path, contents: nil)
+    file = try FileHandle(forWritingTo: url)
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    encoder.dateEncodingStrategy = .milliseconds
+  }
+
+  func append(_ result: some Encodable) throws {
+    try file.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
+  }
+
+  deinit { try? file.close() }
 }
 
 /// A run's `preparation.json` and `sampler.json`, each absent from runs before they existed.

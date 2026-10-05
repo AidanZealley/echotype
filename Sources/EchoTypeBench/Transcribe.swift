@@ -17,36 +17,22 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
     settings: Settings(provider: provider.id, keyterms: manifest.keyterms, language: Language.english.tag),
     provider: provider, credential: credential)
   let sampler = Sampler()
-  var preparation = try await requireReady(provider, options.withCleanup ? "dictation" : "transcription") { states in
-    guard options.withCleanup else { return states.transcription }
-    guard let cleanup = states.cleanup else { return nil }
-    let services = [states.transcription, cleanup]
-    if let unavailable = services.first(where: { $0.status == .unavailable }) { return unavailable }
-    let messages = services.filter { $0.status == .waiting }.compactMap(\.message)
-    return messages.isEmpty ? .ready : .waiting(messages.joined(separator: "; "))
-  }
-  preparation.services = options.withCleanup ? ["transcription", "cleanup"] : ["transcription"]
+  let preparation = try await requireReady(provider, services: options.services(measuring: .transcription))
   sampler.sampleNow()
 
   let directory = try RunInfo.begin(
     command: "transcribe", arguments: options.arguments, provider: provider.id.rawValue,
-    candidates: try options.recordedSelection(measuring: .transcription), fast: options.fast,
+    candidates: options.recordedSelection(measuring: .transcription), fast: options.fast,
     synthetic: options.synthetic)
   try writeJSON(preparation, to: directory.appending(path: "preparation.json"))
-  let log = directory.appending(path: "transcribe.jsonl")
-  FileManager.default.createFile(atPath: log.path, contents: nil)
-  let logFile = try FileHandle(forWritingTo: log)
-  defer { try? logFile.close() }
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-  encoder.dateEncodingStrategy = .milliseconds
+  let log = try ResultLog(directory.appending(path: "transcribe.jsonl"))
 
   for repeatIndex in 0..<options.repeats {
     for sample in samples {
       let result = await transcribe(
         sample, repeatIndex: repeatIndex, provider: provider, request: request, fast: options.fast,
         synthetic: options.synthetic, withCleanup: options.withCleanup)
-      try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
+      try log.append(result)
       print(summaryLine(for: result))
     }
   }

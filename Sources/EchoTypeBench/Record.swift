@@ -182,22 +182,24 @@ private final class Take: Sendable {
   }
 }
 
-/// Writes 16 kHz mono 16-bit PCM WAV, which is what `WAVRecording` reads.
+/// Writes mono 16-bit PCM WAV, 16 kHz by default, which is what `WAVRecording` reads.
 ///
 /// The file is written beside its destination and moved into place, so an interrupted take
 /// never leaves a partial WAV under the real name.
-func writeWAV(_ samples: [Int16], to destination: URL) throws {
+func writeWAV(_ samples: [Int16], sampleRate: Int = 16_000, to destination: URL) throws {
   let directory = destination.deletingLastPathComponent()
   try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
   // The extension tells AVAudioFile to write WAV.
+  let format = AVAudioFormat(
+    commonFormat: .pcmFormatInt16, sampleRate: Double(sampleRate), channels: 1, interleaved: true)!
   let partial = directory.appending(path: ".\(destination.lastPathComponent).partial.wav")
   defer { try? FileManager.default.removeItem(at: partial) }
 
   do {
     let file = try AVAudioFile(
-      forWriting: partial, settings: Take.format.settings,
+      forWriting: partial, settings: format.settings,
       commonFormat: .pcmFormatInt16, interleaved: true)
-    let buffer = AVAudioPCMBuffer(pcmFormat: Take.format, frameCapacity: AVAudioFrameCount(max(samples.count, 1)))!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(samples.count, 1)))!
     buffer.frameLength = AVAudioFrameCount(samples.count)
     for (index, sample) in samples.enumerated() { buffer.int16ChannelData![0][index] = sample }
     try file.write(from: buffer)

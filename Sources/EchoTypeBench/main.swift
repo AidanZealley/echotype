@@ -1,12 +1,14 @@
 import Foundation
 
-/// The bench's commands: `corpus status`, `record`, `transcribe`, `cleanup` and `report`.
+/// The bench's commands: `corpus status`, `record`, `transcribe`, `cleanup`, `speak` and `report`.
 let usage = """
   usage: EchoTypeBench corpus status [--manifest <path>]
          EchoTypeBench record [<id>] [--manifest <path>]
          EchoTypeBench transcribe --provider apple|xai|local [--candidate transcription=<name>] [--cleanup] [--candidate cleanup=<name>] [--fast] [--repeat <n>] [--synthetic] [<id>...] [--manifest <path>]
          EchoTypeBench cleanup --provider apple|xai|local [--candidate cleanup=<name>] [--fast] [--repeat <n>] [<id>...] [--manifest <path>]
+         EchoTypeBench speak --provider apple|xai|local [--voice <id>] [--speed <x>] [--candidate <service>=<name>] [--fast] [--repeat <n>] [<id>...] [--manifest <path>]
          EchoTypeBench report <run-id-or-path>... [--manifest <path>]
+         EchoTypeBench report --listen <run-id-or-path> <run-id-or-path>... [--manifest <path>]
   record walks through the dictation samples still missing a recording, or redoes <id>.
   transcribe feeds each dictation sample's audio (all with audio, or the ids) through the provider's
   live transcription at real-time pace, or without waiting with --fast, and writes a run directory
@@ -16,15 +18,24 @@ let usage = """
   cleanup replays each cleanup sample's committed text (all, or the ids) through the real Reviser at
   real-time pace, or without waiting with --fast, into a run directory like transcribe's.
   --repeat <n> runs the selected samples n times in one process; the first request is reported as
-  cold and the rest as warm. Both commands also record how long the provider took to become ready
+  cold and the rest as warm. The commands also record how long the provider took to become ready
   and sample the process's memory, the thermal state, memory pressure and one-minute load average. run.json records debug or release.
   xAI reads its key from XAI_API_KEY. The local provider downloads its pinned models on first use;
   --candidate transcription=parakeet-unified|parakeet-unified-keyterms|whisper-turbo chooses its transcription model
   (default parakeet-unified) and --candidate cleanup=qwen3-4b-2507|smollm3-3b its cleanup model (default
-  qwen3-4b-2507). Each command prepares only the service it measures.
+  qwen3-4b-2507). A local run prepares the service it measures and every service named with
+  --candidate, and keeps them loaded, so a combination's memory can be measured.
+  speak reads each reading sample (all, or the ids) through the provider's voice, with --voice (default
+  the first) at --speed (default 1), without making sound. A paced run models the app's player: it
+  starts on the first chunk, holds 500 ms and drains in real time, pauses once for 5 s partway through
+  passages tagged pause-resume, and ends each pass with a cancellation trial. --fast pulls without
+  waiting, for first audio and synthesis speed. It writes each reading's WAV into the run directory.
   report scores transcribe runs (ids under runs/, or paths) against the reviewed references, and cleanup
   runs against the expected cleanups, and writes report.md into each run directory. Synthetic runs are
-  not scored.
+  not scored. speak runs are scored for first audio, gaps, real-time factor, pause and cancellation.
+  report --listen writes a page into listening/ under the bench data directory, where the runs' readings of
+  each passage play under shuffled labels and are rated blind, saved as JSON that names each label's run and
+  voice, and prints the page's path.
   The manifest defaults to Corpus/manifest.json in the current directory.
   """
 
@@ -61,8 +72,16 @@ do {
   case ("cleanup", let rest):
     let options = try RunOptions(parsing: rest)
     try await cleanup(options, in: Manifest.load(from: URL(fileURLWithPath: manifestPath)))
-  case ("report", let runs):
-    try report(runs, in: Manifest.load(from: URL(fileURLWithPath: manifestPath)))
+  case ("speak", let rest):
+    let options = try RunOptions(parsing: rest)
+    try await speak(options, in: Manifest.load(from: URL(fileURLWithPath: manifestPath)))
+  case ("report", let rest):
+    let manifest = try Manifest.load(from: URL(fileURLWithPath: manifestPath))
+    if let flag = rest.firstIndex(of: "--listen") {
+      try listen(to: Array(rest[..<flag] + rest[(flag + 1)...]), in: manifest)
+    } else {
+      try report(rest, in: manifest)
+    }
   default:
     fail(usage)
   }

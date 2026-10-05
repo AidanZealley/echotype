@@ -14,26 +14,20 @@ func cleanup(_ options: RunOptions, in manifest: Manifest) async throws {
   let credential = try credential(for: provider)
   let samples = try cleanupTargets(options, in: manifest)
   let sampler = Sampler()
-  let preparation = try await requireReady(provider, "cleanup", state: \.cleanup)
+  let preparation = try await requireReady(provider, services: options.services(measuring: .cleanup))
   sampler.sampleNow()
 
   let directory = try RunInfo.begin(
     command: "cleanup", arguments: options.arguments, provider: provider.id.rawValue,
-    candidates: try options.recordedSelection(measuring: .cleanup), fast: options.fast, synthetic: false)
+    candidates: options.recordedSelection(measuring: .cleanup), fast: options.fast, synthetic: false)
   try writeJSON(preparation, to: directory.appending(path: "preparation.json"))
-  let log = directory.appending(path: "cleanup.jsonl")
-  FileManager.default.createFile(atPath: log.path, contents: nil)
-  let logFile = try FileHandle(forWritingTo: log)
-  defer { try? logFile.close() }
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-  encoder.dateEncodingStrategy = .milliseconds
+  let log = try ResultLog(directory.appending(path: "cleanup.jsonl"))
 
   for repeatIndex in 0..<options.repeats {
     for sample in samples {
       let reviser = Reviser(cleanup: service, credential: credential)
       let result = await replay(sample, repeatIndex: repeatIndex, through: reviser, fast: options.fast)
-      try logFile.write(contentsOf: encoder.encode(result) + Data("\n".utf8))
+      try log.append(result)
       print(summaryLine(for: result))
     }
   }

@@ -97,7 +97,7 @@ the Mac, OS, toolchain, source revision, provider and candidate selection.
 | `synthesize` | Generates synthetic WAVs for scripted dictation samples into `audio/synthetic/`. | Synthetic recordings. |
 | `transcribe` | Feeds 100 ms chunks through a `LiveTranscriber`, at real-time pace for latency or `--fast` for accuracy. | Every event with its time, final text, first provisional and committed text, stop-to-final time, committed text that changed. |
 | `cleanup` | Replays each sample's committed-text timeline through the real `Reviser` with `submit`, then `finish`. | `DictationTrace` revisions, stop-to-insert time, share of time spent revising, fallbacks. |
-| `speak` | Pulls a `SpeechStream` as a real-time player would, with a pause partway. | First chunk time, gaps, real-time factor, audio generated while paused, the WAV. |
+| `speak` | Pulls a `SpeechStream` as a real-time player would, with a pause partway and a cancellation trial. | First chunk time, gaps, real-time factor, audio generated while paused, cancellation latency, the WAV. |
 | `lifecycle` | Rapid stop, stop during inference, cancel during generation, close and join. | Cancellation latency and hangs. |
 | `report` | Aggregates runs. | Markdown tables with p50/p95 and sample counts, plus the listening page. |
 
@@ -117,7 +117,18 @@ text, and reports stop-to-insert split into transcription tail and cleanup, with
 deadline, cancellation and revising measures; WER and keyterms still score the transcript.
 
 Local candidates can be selected with `--candidate <service>=<name>`. This is a bench
-argument, not a product setting; app builds still select candidates in one file.
+argument, not a product setting; app builds still select candidates in one file. A local run
+prepares the service it measures plus every service named with `--candidate`, and keeps them
+loaded, so a combination's memory can be measured.
+
+`speak` reads the `reading` samples (or the ids) with `--voice` (default the first) at `--speed`
+(default 1), and makes no sound. A paced run models `SpeechPlayer`: it starts on the first
+chunk, queues at most 500 ms, drains in real time and pulls the next chunk only when it fits;
+`--fast` pulls without waiting, for first audio and synthesis speed. Passages tagged
+`pause-resume` pause once for 5 seconds about a third of the way in (estimated from the text),
+and the run records the audio that arrived without waiting in the first second after resuming.
+Each paced pass ends with a cancellation trial on the longest passage, which cancels after about
+2 seconds of audio with a `next()` pending. Each reading's WAV is saved in the run directory.
 
 Every run checks the contracts in [`Provider.swift`](../../Sources/EchoTypeCore/Providers/Provider.swift)
 and records violations as failures: `.ready` first, committed text only grows, finished
@@ -150,10 +161,12 @@ Scoring is automatic where the reference allows:
 - Read-aloud round trip: transcribe each generated reading and compare it with the source
   to catch skipped, repeated or invented words. It cannot hear heteronyms or prosody.
 
-`report` writes a Markdown report into each run directory; the listening page is still to
-come. It will also write a draft results document and a local HTML listening page. The page plays
-each passage from every voice under shuffled labels and saves ratings as JSON, so voices
-are judged blind.
+`report` writes a Markdown report into each run directory. `report --listen <run-id>...` writes
+a local HTML page into `listening/` under the bench data directory, with copies of the runs'
+WAVs, and prints its path. The page plays each passage from every run under labels shuffled per
+passage, collects a 1-5 rating, a tick per passage check and a note for each reading, and
+downloads them as JSON with the mapping from label to run and voice, revealed only after saving,
+so voices are judged blind. The draft results document is still to come.
 
 ## Layer 3: app driver
 
