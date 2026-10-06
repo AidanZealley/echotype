@@ -80,11 +80,14 @@ final class LocalModel<Loaded: Sendable>: Sendable {
     return stream
   }
 
-  private func downloading(done: Int64, total: Int64) -> ServiceState {
-    func gigabytes(_ bytes: Int64) -> String {
-      (Double(bytes) / 1e9).formatted(.number.precision(.fractionLength(1)))
+  /// Both sizes in the total's unit: GB to one decimal, or whole MB under 1 GB, so a small voice
+  /// still shows its progress.
+  func downloading(done: Int64, total: Int64) -> ServiceState {
+    let (scale, decimals, unit) = total < 1_000_000_000 ? (1e6, 0, "MB") : (1e9, 1, "GB")
+    func size(_ bytes: Int64) -> String {
+      (Double(bytes) / scale).formatted(.number.precision(.fractionLength(decimals)))
     }
-    return .waiting("Downloading models, \(gigabytes(done)) of \(gigabytes(total)) GB")
+    return .waiting("Downloading models, \(size(done)) of \(size(total)) \(unit)")
   }
 
   /// Loads and warms the runtime in a task this object owns, so a provider switch does not stop it.
