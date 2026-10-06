@@ -59,6 +59,7 @@ import Testing
     var changes = model.changes().makeAsyncIterator()
 
     #expect(model.check() == .waiting("Downloading models, 0.0 of 2.3 GB"))
+    #expect(model.downloading(done: 12_400_000, total: 97_489_362) == .waiting("Downloading models, 12 of 97 MB"))
     release.continuation.finish()
     var state = model.check()
     while state.status == .waiting, await changes.next() != nil { state = model.check() }

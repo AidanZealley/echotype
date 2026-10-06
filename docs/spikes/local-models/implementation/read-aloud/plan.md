@@ -17,7 +17,7 @@ Status: approved; implementation has not started.
 | 1 | [Bench reading and listening page](01-bench-speak.md) | Slice 2 | Accepted |
 | 2 | [Kokoro read aloud](02-kokoro.md) | 1 | Accepted |
 | 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Accepted |
-| 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Not started |
+| 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Accepted |
 | 5 | [Voice evaluation and spike recommendation](05-voice-evaluation.md) | 4 | Not started |
 | Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
 
@@ -108,6 +108,10 @@ and the bench's `RunOptions.swift`.
     of them is untested (carried from slice 1).
   - Boosted Unified's 44 s installed load (`20261005T071726Z-local`) is unexplained; it is
     productionising work, not this slice's.
+  - Workstream 4's stop-then-quit check of the Qwen comparison app (ET-R3-01's teardown crash)
+    was not observed: Aidan was still using `.build/voice-check/EchoType.app` at acceptance. Once
+    they have quit it, check `~/Library/Logs/DiagnosticReports` for an `EchoTypeApp` crash, then
+    delete `.build/voice-check/`. Never quit it for them.
   - Productionising, including removing losing candidates and the comparison selection
     machinery, is separate work the spike's recommendation scopes.
 
@@ -115,7 +119,7 @@ and the bench's `RunOptions.swift`.
 
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
-| Signed-app check and Qwen preset audition | Workstream 4 | After closure, before acceptance | Pending | `TBD` | Every checklist item has Aidan's pass or waiver, and they have named the Qwen preset and style verdict |
+| Signed-app check and Qwen preset audition | Workstream 4 | After closure, before acceptance | Passed with waiver (item 11's early ending) | `cf2f094` + R1 diff `1a0f90f6…1d84` | Every checklist item has Aidan's pass or waiver, and they have named the Qwen preset and style verdict |
 | Blind listening | Workstream 5 | After the paced runs, before results | Pending | `TBD` | Aidan's saved ratings file and notes on every passage they rated |
 
 ## Escalations
@@ -152,6 +156,7 @@ Carried from slices 1 and 2:
   runtime evidence. Use `/usr/bin/log` on this Mac to avoid zsh's `log` builtin.
 - Bench measurement code records a stream's thrown error with the contract check; never swallow it with `try?`, or a failure reads as a clean end.
 - A runtime whose cancelled generation cannot be awaited (MLX Audio Swift's Qwen3-TTS) keeps running MLX work after `cancel()`: it can overlap the next reading on the shared model, and crashes MLX's teardown if the process exits meanwhile (ET-R3-01). The bench only waits 1 s after its cancellation trial, a heuristic; the app has no such wait. The signed-app check must stop a Qwen reading and immediately start another, several times, then stop one and quit at once, checking the app log for MLX errors and `~/Library/Logs/DiagnosticReports` for a crash. Check every bench command's exit status, not only its run directory.
+- A runtime that ends generation silently at an internal length cap (MLX Audio Swift's Qwen3-TTS: `max(75, 6 × text tokens)` codec steps per utterance) truncates speech without an error. When judging or measuring such a voice, compare each utterance's step count with the cap and mark readings that end at it (ET-R4-02).
 
 ## Decision and drift log
 
@@ -171,3 +176,5 @@ Carried from slices 1 and 2:
 | 2026-10-05 | MLX Swift moved from 0.32.3 to 0.31.6 and MLX Swift LM from `5e46681b` (3.32.3 plus nine) to 3.31.4. Drift from the packet's "resolve against the existing pins" and from the revision research verified for cleanup. Cleanup's figures in `results.md` were measured on the old pins; only single exactness samples (`20261005T203204Z-local`, `20261005T212053Z-local`) have run on the new ones. Workstream 5 remeasures cleanup in its combination runs and scopes the old figures. | MLX Audio Swift calls `makePromptCache` without `try`, which MLX Swift LM 3.32 made throwing, so it does not compile on the old pins; 3.31.4 needs MLX Swift 0.31. No fork. | Workstream 3 lead | 5 |
 | 2026-10-05 | Qwen3-TTS reads at speed 1 only (`speedRange` `1...1`), and `qwen3-tts-0.6b` offers plain presets only. | The model has no native speed control and time-stretching would change the voice being judged; upstream ignores instructions on 0.6B. | Workstream 3 lead | 4, 5 |
 | 2026-10-05 | ET-R3-01: Qwen3-TTS's cancelled generation stays unawaitable for the spike. The bench's `speak` waits 1 s after its cancellation trial so the next reading and process exit start after it settles; the app has no such wait. No fork of MLX Audio Swift. Fixing it (a fork exposing awaitable streaming, or another runtime) is a blocker before productionising Qwen. Drift from the plan's speech stream contract, whose `cancel()` stops generation but cannot be awaited here. | MLX Audio Swift runs each generation in an unstructured task it cancels but never exposes; Aidan wants the minimal option that lets Qwen be evaluated, and will decide on a proper fix only if Qwen is worth productionising. | Aidan | 4, 5 |
+| 2026-10-06 | ET-R4-02: no patch to MLX Audio Swift. Qwen3-TTS readings may end early, because the runtime silently caps each utterance at `max(75, 6 × text tokens)` codec steps (0.48 s of speech per token), worst with slow presets. Item 11's early ending is waived for the spike. The cap and ET-R3-01's unawaitable cancellation are together fork work that blocks productionising Qwen. Workstream 5 flags readings that end at the cap and marks or excludes them in the listening and results. Drift from the spec's complete-reading expectation and the gate's item 11. | The fix needs a fork; Aidan wants both fork fixes deferred until Qwen is worth productionising. Evidence: run `20261006T132708Z-local`. | Aidan | 5, Final |
+| 2026-10-06 | The evaluation's Qwen voice is plain Ryan (`ryan`). The styled variant sounded no different, so the style prompt is not evaluated further. Every preset was "super impressive" but very non-deterministic between readings (Uncle Fu's accent changed), while Kokoro is the same every time: a finding for workstream 5, not a defect. A voice prompt field and "a couple of predictable voices plus an open prompt" are productionising scope for the spike's recommendation, not built here. | Aidan's gate answers (ET-R4-01, ET-R4-02). | Aidan | 5 |
