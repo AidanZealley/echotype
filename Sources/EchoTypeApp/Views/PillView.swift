@@ -2,7 +2,7 @@ import SwiftUI
 
 private let supportingTextOpacity = 0.65
 private let indicatorOpacity = 0.4
-/// Marks "Select an input" and dictation's final minute as a dot beside plain text. Coloured
+/// Marks "Finding input" and dictation's final minute as a dot beside plain text. Coloured
 /// text alone was illegible on light glass over dark windows; a fixed orange dot reads the
 /// same in both themes.
 private let warningOrange = Color(.sRGB, red: 0.91, green: 0.42, blue: 0)
@@ -47,7 +47,7 @@ struct PillView: View {
   private var statusRow: some View {
     HStack(spacing: 8) {
       LevelMeter(pill: pill)
-      if pill.phase == .selectInput {
+      if pill.phase == .findingInput {
         Warning(Text(pill.phase.name))
       } else {
         Text(pill.phase.name).foregroundStyle(.primary.opacity(supportingTextOpacity))
@@ -68,7 +68,7 @@ struct PillView: View {
       if pill.cleanupSkipped { Text(verbatim: "No cleanup").fixedSize() }
       Spacer(minLength: 8)
       switch pill.phase {
-      case .listening, .paused, .starting, .selectInput:
+      case .listening, .paused, .starting, .findingInput:
         if pill.canCommit {
           Text(verbatim: "\(pill.dictationHotkey == .controlOptionD ? "⌃⌥D" : "⌥D") stop · esc cancel").fixedSize()
         } else {
@@ -201,7 +201,7 @@ extension Pill.Phase {
   fileprivate var name: String {
     switch self {
     case .starting: "Starting"
-    case .selectInput: "Select an input"
+    case .findingInput: "Finding input"
     case .listening: "Listening"
     case .paused: "Paused"
     case .transcribing: "Transcribing"
@@ -249,7 +249,7 @@ private struct LevelMeter: View {
       Image(systemName: "exclamationmark.triangle.fill")
         .foregroundStyle(.red)
         .frame(height: 14)
-    case .starting, .selectInput, .listening, .paused, .reading, .readingPaused:
+    case .starting, .findingInput, .listening, .paused, .reading, .readingPaused:
       HStack(alignment: .center, spacing: 1.5) {
         ForEach(Self.weights.indices, id: \.self) { index in
           Capsule()
@@ -311,11 +311,11 @@ private struct LevelGlow: View {
   @State private var history = Array(repeating: 0.0, count: 4)
 
   var body: some View {
-    TimelineView(.animation(paused: pill.phase != .listening && pill.phase != .selectInput && pill.phase != .reading)) { timeline in
+    TimelineView(.animation(paused: pill.phase != .listening && pill.phase != .findingInput && pill.phase != .reading)) { timeline in
       let time = timeline.date.timeIntervalSinceReferenceDate
       Canvas { context, size in
         let colour: Color = pill.phase == .starting ? .gray
-          : pill.phase == .selectInput || nearsCap(pill, at: timeline.date) ? .orange : .blue
+          : pill.phase == .findingInput || nearsCap(pill, at: timeline.date) ? .orange : .blue
         drawWave(in: &context, size: size, colour: colour, time: time)
       }
     }
@@ -330,7 +330,7 @@ private struct LevelGlow: View {
   private var opacity: Double {
     switch pill.phase {
     case .starting: 0.25
-    case .listening, .selectInput, .reading: 0.4
+    case .listening, .findingInput, .reading: 0.4
     case .paused, .readingPaused: 0.15
     case .transcribing, .inserting, .readingStarting, .waiting, .error: 0
     }

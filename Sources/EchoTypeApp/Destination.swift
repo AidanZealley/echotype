@@ -23,6 +23,21 @@ enum DestinationVerification: String {
 /// adopt the field that happened to become focused while Accessibility was answering.
 @MainActor struct DestinationFocus {
   private let lookup: () -> Destination?
+  // Focus helpers are recreated for each probe, so activation timing is shared.
+  private static var accessibilityActivation = AccessibilityActivation()
+
+  struct AccessibilityActivation {
+    private var requestedAt: [pid_t: TimeInterval] = [:]
+
+    mutating func shouldRequest(for pid: pid_t, at now: TimeInterval) -> Bool {
+      // Electron restarts a two-second debounce on every enable request. Leave it time
+      // to finish, while allowing another attempt if activation failed or was disabled.
+      if let last = requestedAt[pid], now - last < 3 { return false }
+      requestedAt = requestedAt.filter { now - $0.value < 3 }
+      requestedAt[pid] = now
+      return true
+    }
+  }
 
   init() { lookup = Self.focusedDestination }
 
@@ -71,7 +86,8 @@ enum DestinationVerification: String {
     // Electron can hide its focused web field until an assistive client enables its tree.
     // Request that support where offered, then apply the same destination identity checks.
     if let manualAccessibility = attribute("AXManualAccessibility", of: application),
-      CFEqual(manualAccessibility, kCFBooleanFalse)
+      CFEqual(manualAccessibility, kCFBooleanFalse),
+      accessibilityActivation.shouldRequest(for: pid, at: ProcessInfo.processInfo.systemUptime)
     {
       _ = AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }

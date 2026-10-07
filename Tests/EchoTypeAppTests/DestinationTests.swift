@@ -3,6 +3,24 @@ import AppKit
 import Testing
 
 @Suite @MainActor struct DestinationTests {
+  @Test func accessibilityActivationLeavesTimeForElectronAndRetriesPerApp() {
+    var activation = DestinationFocus.AccessibilityActivation()
+    func request(_ pid: pid_t, at now: TimeInterval) -> Bool {
+      activation.shouldRequest(for: pid, at: now)
+    }
+    #expect(request(1, at: 10))
+    // Both samples in capture and subsequent half-second probes must leave the
+    // pending activation alone. Switching apps must not reset its waiting period.
+    #expect(!request(1, at: 10))
+    #expect(request(2, at: 10.5))
+    for now in stride(from: 10.5, through: 12.5, by: 0.5) {
+      #expect(!request(1, at: now))
+    }
+    #expect(request(1, at: 13))
+    #expect(!request(2, at: 13))
+    #expect(request(2, at: 13.5))
+  }
+
   @Test func unsupportedEnabledCapabilityDoesNotHideDisabledOrFailedTargets() {
     #expect(DestinationFocus.acceptsEnabledAttribute((.attributeUnsupported, nil)))
     #expect(DestinationFocus.acceptsEnabledAttribute((.success, kCFBooleanTrue)))

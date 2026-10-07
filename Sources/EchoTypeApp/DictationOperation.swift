@@ -36,7 +36,7 @@ import Observation
       switch self {
       case .starting(let hints), .capturing(_, let hints):
         guard hints.microphone else { return .starting }
-        guard hints.destination else { return .selectInput }
+        guard hints.destination else { return .findingInput }
         if case .capturing(let snapshot, _) = self, snapshot.state == .paused { return .paused }
         return .listening
       case .finishing: return .transcribing
