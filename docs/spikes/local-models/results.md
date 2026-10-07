@@ -874,7 +874,11 @@ three times, `reading-agent-reply` three times).
 No voice left a gap on any passage, including the 50 to 65 s long selection (paced runs above).
 Kokoro synthesises about 16 times faster than real time; Qwen about 1.8 times, so a busier
 machine has much less headroom before gaps (`20261007T101313Z-local`, `20261007T101342Z-local`).
-A paused reader holds about one second of audio for every voice, so production stays bounded.
+The audio ready after the pause counts only what the modelled 500 ms player pulls in the first
+second after resuming, so it is about one second for every voice, Apple's included, and does not
+show the bound. What does: both local streams run at most one utterance ahead of what has been
+pulled (`KokoroSpeechTests.boundedReadAhead`, `QwenTTSSpeechTests.boundedReadAhead`), and their
+footprint stays flat across the pause (runs above).
 Apple's pause and cancellation rows prove the harness only (conventions learned).
 
 Each cancellation trial is n=1 and the pending `next()` ended at once. For Qwen this is the
@@ -959,7 +963,7 @@ services prepared and loaded (`transcription=parakeet-unified`, `cleanup=qwen3-4
 | Reference, Kokoro Emma | 3062 / 2806 | warning / nominal | 447 / 285 | 0 | 29,741 | `20261007T104327Z-local` |
 | Voice comparison, Qwen3-TTS Ryan | 5201 / 4775 | critical / nominal | 246 / 280 | 0 | 4,628 | `20261007T104448Z-local` |
 
-Both kept the pause bounded (1.1 s of audio ready after resume) and their cancellation trial
+Both had 1.1 s of audio ready in the first second after the pause, and their cancellation trial
 was pending, 0 ms (same runs). The voice comparison combination is the memory worst case the spec
 expected: 2.1 GiB more than the reference, and the only combination to reach critical pressure
 on this 16 GiB Mac. The reference combination's preparation is dominated by Unified's load,
@@ -1090,8 +1094,8 @@ xAI stays the quality reference for transcription and the default provider.
 - One local provider whose transcription, cleanup and voice candidates are chosen in
   `LocalCandidates.swift`, with a bench-only `--candidate` override.
 - `build-app.sh` stages every dependency resource bundle; CI needs the Metal toolchain.
-- The bench gained `speak` and the blind listening page; Settings falls back to the first voice
-  for a stored voice the build does not offer.
+- The bench gained `speak` and the blind listening page. Voice candidates rely on Settings'
+  existing fallback to the first voice for a stored voice the build does not offer.
 
 ### Remaining blockers and unmeasured items
 

@@ -1,6 +1,6 @@
 # Local read aloud (slice 3) implementation plan
 
-Status: approved; implementation has not started.
+Status: complete; every workstream and the final review accepted.
 
 ## Orchestration record
 
@@ -19,7 +19,7 @@ Status: approved; implementation has not started.
 | 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Accepted |
 | 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Accepted |
 | 5 | [Voice evaluation and spike recommendation](05-voice-evaluation.md) | 4 | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1-5 | Accepted |
 
 ## Why these boundaries
 
@@ -180,3 +180,4 @@ Carried from slices 1 and 2:
 | 2026-10-06 | ET-R4-02: no patch to MLX Audio Swift. Qwen3-TTS readings may end early, because the runtime silently caps each utterance at `max(75, 6 × text tokens)` codec steps (0.48 s of speech per token), worst with slow presets. Item 11's early ending is waived for the spike. The cap and ET-R3-01's unawaitable cancellation are together fork work that blocks productionising Qwen. Workstream 5 flags readings that end at the cap and marks or excludes them in the listening and results. Drift from the spec's complete-reading expectation and the gate's item 11. | The fix needs a fork; Aidan wants both fork fixes deferred until Qwen is worth productionising. Evidence: run `20261006T132708Z-local`. | Aidan | 5, Final |
 | 2026-10-06 | The evaluation's Qwen voice is plain Ryan (`ryan`). The styled variant sounded no different, so the style prompt is not evaluated further. Every preset was "super impressive" but very non-deterministic between readings (Uncle Fu's accent changed), while Kokoro is the same every time: a finding for workstream 5, not a defect. A voice prompt field and "a couple of predictable voices plus an open prompt" are productionising scope for the spike's recommendation, not built here. | Aidan's gate answers (ET-R4-01, ET-R4-02). | Aidan | 5 |
 | 2026-10-07 | ET-R5-01: blind listening passed. Aidan preferred Kokoro Heart and Qwen3-TTS Ryan; Ryan is the most realistic but unpredictable and needs more control before productionising. `results.md` recommends Kokoro Heart over the build's default Emma and one fixed set, opt-in, with xAI the default, as a proposal; the build selection is unchanged. Their notes are in `05-voice-evaluation.md`, External validation. | Aidan's ratings and notes; figures in `results.md`. | Aidan (ratings), workstream 5 lead (recommendation) | Final |
+| 2026-10-07 | `speak` reports audio ready in the first second after resuming, not the harness spec's "audio generated while paused". That figure is capped by the modelled 500 ms player and reads the same for Apple, so it cannot show bounded production; `results.md` rests the bound on the streams' one-utterance read-ahead, their `boundedReadAhead` tests and flat footprint across the pause. A stream-side count of audio produced while paused is a harness follow-up. Drift from the test harness spec's `speak` outputs. | Found in the final review (F1, O3); the results claimed more than the measure shows. | Final-review lead | Final |
