@@ -45,9 +45,10 @@ manual clock, while app tests inject controlled capture, playback, focus and cli
 operations. Signed Mac checks cover behavior those dependencies cannot establish.
 
 The macOS pull-request job selects a Swift 6.2-capable Xcode, logs the toolchain, runs
-`swift test --enable-code-coverage` and builds the release executable. Live xAI checks
-remain opt-in and disabled in that job. Signing is separate from deterministic tests.
-Coverage identifies missing behavior rather than enforcing a percentage target.
+`swift test` and builds the release executable in parallel jobs. Live xAI checks
+remain opt-in and disabled in those jobs. Signing is separate from deterministic tests.
+Coverage (`swift test --enable-code-coverage`, run locally) identifies missing behavior rather
+than enforcing a percentage target; CI skips it because it slows the MLX build.
 
 Local tests and builds passed. GitHub Actions execution remains unverified, and making
 the job a required merge check is an outstanding repository-administrator setting.

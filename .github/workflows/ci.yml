@@ -8,24 +8,58 @@ on:
 permissions:
   contents: read
 
+# Both jobs compile MLX from source, which dominates the run time. They run in parallel, each
+# with its own cached .build keyed on the resolved dependencies, so only EchoType's own sources
+# rebuild on most runs. Debug and release products differ, so they cannot share a cache.
+env:
+  # Installed in the Xcode 27 image. Keep this explicit when updating Xcode.
+  DEVELOPER_DIR: /Applications/Xcode_27.app/Contents/Developer
+  XAI_API_KEY: ""
+  ECHOTYPE_FIXTURE_WAV: ""
+
 jobs:
-  test-and-build:
-    name: macOS tests and release build
+  test:
+    name: macOS tests
     # The Xcode 27 image, matching the toolchain the app is developed and deployed with.
     runs-on: xcode-27
-    timeout-minutes: 15
-    env:
-      # Installed in the Xcode 27 image. Keep this explicit when updating Xcode.
-      DEVELOPER_DIR: /Applications/Xcode_27.app/Contents/Developer
-      XAI_API_KEY: ""
-      ECHOTYPE_FIXTURE_WAV: ""
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Log toolchain
         run: |
           xcodebuild -version
           swift --version
-      - name: Run deterministic tests with coverage
-        run: swift test --enable-code-coverage
+      # MLX compiles its Metal shaders during the build, and Xcode ships without the compiler.
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: build-debug-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-${{ github.sha }}
+          restore-keys: build-debug-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-
+      # The cached build descriptions record the Metal toolchain's mount path, which changes every
+      # run. Dropping them makes SwiftPM replan while keeping the compiled objects.
+      - name: Drop stale build descriptions
+        run: rm -rf .build/out/Intermediates.noindex/XCBuildData/*.xcbuilddata .build/out/Intermediates.noindex/XCBuildData/prior-build-descriptions.txt
+      - name: Run deterministic tests
+        run: swift test
+
+  release-build:
+    name: macOS release build
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: build-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-${{ github.sha }}
+          restore-keys: build-release-${{ runner.os }}-${{ hashFiles('Package.resolved') }}-
+      # The cached build descriptions record the Metal toolchain's mount path, which changes every
+      # run. Dropping them makes SwiftPM replan while keeping the compiled objects.
+      - name: Drop stale build descriptions
+        run: rm -rf .build/out/Intermediates.noindex/XCBuildData/*.xcbuilddata .build/out/Intermediates.noindex/XCBuildData/prior-build-descriptions.txt
       - name: Build unsigned release executable
         run: swift build -c release --product EchoTypeApp

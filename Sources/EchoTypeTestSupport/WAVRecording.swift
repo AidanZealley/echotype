@@ -1,16 +1,16 @@
 import Foundation
 
-/// Just enough RIFF to read the recording supplied through `ECHOTYPE_FIXTURE_WAV`: 16-bit PCM,
-/// any sample rate, any channel count. Anything else is rejected with a message saying what to
-/// supply instead, because the point of this file is to get real speech to `AudioConverter`,
-/// not to be an audio library.
-struct WAVRecording {
-  let sampleRate: Double
-  let channelCount: Int
+/// Just enough RIFF to read a recording of speech, such as one supplied through
+/// `ECHOTYPE_FIXTURE_WAV` or a corpus recording: 16-bit PCM, any sample rate, any channel
+/// count. Anything else is rejected with a message saying what to supply instead, because the
+/// point of this file is to get real speech to `AudioConverter`, not to be an audio library.
+public struct WAVRecording: Sendable {
+  public let sampleRate: Double
+  public let channelCount: Int
   /// Interleaved samples in [-1, 1], the shape `AudioConverter` consumes.
-  let samples: [Float]
+  public let samples: [Float]
 
-  init(contentsOf url: URL) throws {
+  public init(contentsOf url: URL) throws {
     let bytes = [UInt8](try Data(contentsOf: url))
     guard bytes.count > 12, ascii(bytes, 0) == "RIFF", ascii(bytes, 8) == "WAVE" else {
       throw UnreadableWAV("\(url.path) is not a RIFF WAVE file")
@@ -71,20 +71,20 @@ struct WAVRecording {
 
   var duration: Double { duration(ofInterleaved: samples) }
 
-  func duration(ofInterleaved samples: [Float]) -> Double {
+  public func duration(ofInterleaved samples: [Float]) -> Double {
     Double(samples.count / channelCount) / sampleRate
   }
 
   /// Interleaved chunks of roughly `seconds` each, which is how the macOS capture tap will hand
   /// audio over.
-  func chunks(ofSeconds seconds: Double) -> [[Float]] {
+  public func chunks(ofSeconds seconds: Double) -> [[Float]] {
     let size = max(1, Int(sampleRate * seconds)) * channelCount
     return stride(from: 0, to: samples.count, by: size).map { start in
       Array(samples[start..<min(start + size, samples.count)])
     }
   }
 
-  var summary: String {
+  public var summary: String {
     let format = String(format: "%.1f", duration)
     return "\(format)s, \(Int(sampleRate)) Hz, \(channelCount) channel(s)"
   }
