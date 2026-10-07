@@ -1,6 +1,7 @@
 # Local model provider research
 
-Status: research updated with measured cleanup and transcription, 2026-10-05. Read aloud is not measured.
+Status: research updated with measured cleanup, transcription and read aloud, 2026-10-07. The
+spike's conclusion is in [results](results.md#spike-conclusion).
 
 ## Purpose
 
@@ -46,12 +47,13 @@ that these exact native configurations outperform macOS 26's Apple services or x
 The read-aloud comparison was originally Pocket TTS. Demo auditions recorded in
 [the spec](spec.md) replaced it with Qwen3-TTS; Pocket remains a research alternative.
 
-The reference combination (Unified, Qwen3-2507, Kokoro) needs roughly 3 GB of model
-downloads, subject to the final Kokoro and keyterm asset manifests. Its combined RAM use
-is unknown. FluidAudio could supply both of its audio services and MLX Swift LM its
+The reference combination (Unified, Qwen3-2507, Kokoro) needs 2.98 GB of model downloads
+(3.08 GB with keyterm boosting), and peaked at 3062 MiB with all three loaded
+(`20261007T104327Z-local`; see `results.md`). FluidAudio could supply both of its audio services and MLX Swift LM its
 cleanup, keeping its inference dependencies to two. The comparison builds add WhisperKit
 and MLX Audio Swift, so the spike as a whole uses four runtimes. The voice comparison
-build adds about 2.3 GB of Qwen3-TTS weights and is the likely memory worst case.
+build adds about 2.3 GB of Qwen3-TTS weights and is the memory worst case: 5201 MiB peak and
+critical memory pressure (`20261007T104448Z-local`).
 
 ## Transcription candidates
 
@@ -194,10 +196,10 @@ meet that requirement merely because the consumer stops requesting frames.
 
 | Candidate | Potential quality | Computational cost | Integration cost |
 | --- | --- | --- | --- |
-| [Kokoro-82M v1.0, Core ML ANE pipeline](https://huggingface.co/FluidInference/kokoro-82m-coreml) | Best first audition for fixed-voice narration. Explicit UK voices. British voices need their own audition. | Plan 100-200 MB including pronunciation and selected voice assets; complete manifest needs verification. | Low to medium. Swift/Core ML, native speed control and 24 kHz Float32. Generate bounded utterances lazily and slice audio for playback. |
+| [Kokoro-82M v1.0, Core ML ANE pipeline](https://huggingface.co/FluidInference/kokoro-82m-coreml) | Best first audition for fixed-voice narration. Explicit UK voices. British voices need their own audition. In blind listening Aidan rated Heart highest, above Emma and Apple's premium voices, but its frontend says "thee" for every "the", misses many technical terms and numbers, and reads every "read" as "reed" (`20261006T141539Z-local`; see `results.md`). | Measured: 97 MB pinned manifest including pronunciation resources and the Emma voice, about 0.4 GiB ready footprint, synthesis about 16 times real time, warm first audio p50 206 ms on short passages; first load writes about 242 MB of Core ML cache (`20261007T114030Z-local`, `20261007T101313Z-local`). | Low to medium. Swift/Core ML, native speed control (0.5 to 2 used) and 24 kHz Float32. Generate bounded utterances lazily and slice audio for playback. |
 | [Pocket TTS English, Core ML v2.1 INT8](https://huggingface.co/FluidInference/pocket-tts-coreml) | Strong naturalness and quick-first-audio comparison. Use curated fixed voice states. | Roughly 300-320 MB with one voice and required resources. Genuine 80 ms audio frames. | Medium. Swift implementation exists, but its unbounded stream needs bounded production. Speed control needs additional implementation. |
 | [Supertonic-3, Core ML INT4](https://huggingface.co/FluidInference/supertonic-3-coreml) | Efficient challenger with fixed voices and speed control. No verified UK-specific voice. | About 104 MB for a selected short-utterance configuration. Longer utterances may need extra estimator variants. | Low to medium technically. Swift/Core ML, no external phonemizer, batch synthesis. Weight licensing adds work. |
-| [Qwen3-TTS-12Hz-1.7B-CustomVoice, four-bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit) | Larger expressive-voice comparison. A suitable British preset is not established. | About 2.31 GB including speech codec and tokenizer weights. Additional GPU memory and generation state. | Medium to high. Native MLX implementation exists. Requires bounded streaming, small audio slices, speed handling and heavier model lifecycle management. A [0.6B CustomVoice four-bit conversion](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit) exists (verified, about 1.69 GB in total, so the speech codec and tokenizer dominate the saving) and would use the same implementation. |
+| [Qwen3-TTS-12Hz-1.7B-CustomVoice, four-bit](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit) | Larger expressive-voice comparison. A suitable British preset is not established; Aidan chose Ryan. In blind listening it was the most realistic voice and got every heteronym right, but its tone and pronunciation varied between readings, at times "unhinged" (`20261007T100825Z-local`; see `results.md`). | About 2.31 GB including speech codec and tokenizer weights. Measured: about 2.5 GiB ready footprint and synthesis about 1.8 times real time on the M1 Pro (`20261007T101342Z-local`). | Medium to high. Native MLX implementation exists, but MLX Audio Swift's streaming producer is unbounded, its cancelled generation cannot be awaited, it silently caps each utterance's length, and the model has no speed control (see `results.md`). Requires bounded streaming, small audio slices and heavier model lifecycle management. A [0.6B CustomVoice four-bit conversion](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit) exists (verified, about 1.69 GB in total, so the speech codec and tokenizer dominate the saving) and would use the same implementation. |
 | [Kitten TTS mini 0.8](https://huggingface.co/KittenML/kitten-tts-mini-0.8) | Small fixed-English-voice option. Limited evidence of improvement over Apple premium voices. | About 82 MB; CPU inference. No trustworthy M1 Pro measurement found. | Medium to high despite small weights. Native ONNX embedding and frontend work; reference implementation uses eSpeak NG. |
 
 Kokoro's [voice catalogue and author grades](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md)
@@ -255,7 +257,8 @@ and signed correctly. MLX's [installation guidance](https://github.com/ml-explor
 calls out Metal shader handling for command-line builds. Check the exact pinned
 release and toolchain rather than assuming current main is a drop-in dependency.
 
-Verified on this Mac with MLX Swift 0.32.3:
+Verified on this Mac with MLX Swift 0.32.3 (the spike later moved to 0.31.6 for MLX Audio Swift;
+the signed comparison apps passed on 0.31.6, see `results.md`):
 
 - **`swift build` compiles MLX's shaders, given the Metal Toolchain.** Xcode 27 ships
   without it; `xcodebuild -downloadComponent MetalToolchain` installs it. Without it the

@@ -1,7 +1,7 @@
 # Local models spike results
 
-Status: cleanup measured in debug and release; transcription measured in release, including fresh
-downloads and recovery. Read aloud is not measured.
+Status: complete, 2026-10-07. Cleanup measured in debug and release; transcription and read aloud
+measured in release, including fresh downloads; the spike's conclusion is at the end.
 
 Every figure is from `swift run EchoTypeBench report <run id>` and was rechecked against its
 output. Figures marked "derived" come from the run's raw logs and the derived logs named in each section.
@@ -27,6 +27,9 @@ macOS 27.2 (26B5091g), Xcode 27.0, Swift 6.4, **debug build** of the bench.
 - Quality is word-level (`Prose.words`): punctuation and case are not scored.
 - `fallbacks` counts requests, not samples. `validation rejections` are a subset of it; the rest
   are failed requests ("other").
+- These runs used MLX Swift 0.32.3 and MLX Swift LM `5e46681b`. Slice 3 moved them to 0.31.6 and
+  3.31.4 for MLX Audio Swift; the only full cleanup pass on the new pins is
+  `20261007T104647Z-local`, in Read aloud below.
 
 ### Runs
 
@@ -265,8 +268,8 @@ Across slice 1's qwen3 runs the highest peak is 2649 MiB (about 2.6 GiB, `…111
 model alone. Apple's and xAI's footprints describe the bench only, not Apple's out-of-process
 model. The planning estimate of 3 to 4 GB for qwen3 in `research.md` is high against the 2649 MiB
 peak (`…111803Z-local`) for this window size; the buffer cache limit was 64 MiB. Concurrent
-transcription memory is now recorded below (`20261005T064539Z-local`); read aloud memory remains
-unmeasured.
+transcription memory is now recorded below (`20261005T064539Z-local`); read aloud and combined
+memory are in Read aloud below.
 
 ### Offline
 
@@ -667,3 +670,477 @@ but process footprint can understate Core ML cost and energy was not measured.
 Fresh-download and real interruption recovery passed in the delivery runs above. Independent
 review and focused closure passed. The evaluation is accepted with the recommendation recorded
 and the current build selection unchanged.
+
+## Read aloud
+
+### Conditions and evidence
+
+Every read aloud run is a release build of the bench (`swift run -c release EchoTypeBench`, the
+built `.build/release/EchoTypeBench`) at source `d62955544f86927d384b2600ae30ba48957e46e6`, with
+documentation-only changes in the tree. Every `report` below shows 0 contract violations, and
+every `speak` report 0 failed readings. The machine was used as it was, by Aidan's other work;
+load average is recorded per run and its median ranged from 3.3 to 31.6.
+
+`speak` never plays sound. It models a real-time player: playback starts on the first chunk,
+queues at most 500 ms and drains in real time. "First audio" is the first chunk's arrival under
+that player, which is the provider-dependent part of first audible speech. Device output latency
+and the app's selection capture and readiness check are the same for every voice and were not
+measured. Paced runs give first audio, gaps, the pause and the cancellation trial; `--fast` runs
+give warm distributions and real-time factor, since a paced reader pulls at playback pace.
+
+Aidan's ratings come from a blind listening page built by `report --listen` over the five paced
+runs below (`listening/20261007T105149Z`). Each passage had one reading per voice under shuffled
+labels. The ratings file stays outside git under the bench's Application Support folder; this
+section quotes only scores, checks and short excerpts of Aidan's notes.
+
+Qwen3-TTS readings may end early: MLX Audio Swift silently caps each utterance at
+`max(75, 6 × text tokens)` codec steps of 80 ms (ET-R4-02). Readings marked **capped** below
+ended exactly at their cap, so their ends may be cut. The marks are derived from each reading's
+`audioSeconds / 0.08` against the cap computed with the runtime's own tokenizer.
+`reading-long-selection` has five utterances and only whole-reading audio is recorded, so whether
+one of its utterances hit its cap cannot be told.
+
+### Runs
+
+| Run id | Purpose | Voice | Mode | Load median / max |
+|---|---|---|---|---|
+| `20261006T140826Z-apple` | Listening, gaps, pause | Apple Jamie (`com.apple.voice.premium.en-GB.Malcolm`) | paced, 8 passages | 4.55 / 5.70 |
+| `20261006T141044Z-apple` | Listening, gaps, pause | Apple Zoe (`com.apple.voice.premium.en-US.Zoe`) | paced, 8 passages | 3.83 / 5.21 |
+| `20261006T141305Z-local` | Listening, gaps, pause, cancellation | Kokoro Emma (`bf_emma`) | paced, 8 passages | 4.10 / 4.57 |
+| `20261006T141539Z-local` | Listening, gaps, pause, cancellation | Kokoro Heart (`af_heart`) | paced, 8 passages | 3.28 / 4.52 |
+| `20261007T100825Z-local` | Listening, gaps, pause, cancellation | Qwen3-TTS Ryan (`ryan`) | paced, 8 passages | 6.15 / 7.70 |
+| `20261007T101127Z-apple` | Warm first audio | Jamie | `--fast --repeat 10`, 4 passages | 6.30 / 6.55 |
+| `20261007T101151Z-apple` | Warm first audio | Zoe | `--fast --repeat 10`, 4 passages | 20.08 / 31.39 |
+| `20261007T101244Z-local` | Warm first audio | Emma | `--fast --repeat 10`, 4 passages | 31.31 / 32.65 |
+| `20261007T101313Z-local` | Warm first audio | Heart | `--fast --repeat 10`, 4 passages | 22.48 / 26.26 |
+| `20261007T101342Z-local` | Warm first audio | Ryan | `--fast --repeat 10`, 4 passages | 13.64 / 43.04 |
+| `20261007T101904Z-local` | Speed 1 | Emma | `--fast`, `reading-ordinary-prose` | 6.43 / 6.46 |
+| `20261007T101858Z-local` | Speed 0.5 | Emma | `--fast`, `reading-ordinary-prose` | 6.59 / 6.64 |
+| `20261007T101901Z-local` | Speed 2 | Emma | `--fast`, `reading-ordinary-prose` | 6.46 / 6.46 |
+| `20261007T104112Z-local` | Offline | Emma | `--fast`, 8 passages, network denied | 10.24 / 11.29 |
+| `20261007T104124Z-local` | Offline | Ryan | `--fast`, 8 passages, network denied | 12.89 / 16.94 |
+| `20261007T104327Z-local` | Reference combination memory | Emma, with Unified and Qwen3-4B loaded | paced, 2 passages | 11.64 / 26.34 |
+| `20261007T104448Z-local` | Voice comparison combination memory | Ryan, with Unified and Qwen3-4B loaded | paced, 2 passages | 31.59 / 35.96 |
+| `20261007T104647Z-local` | Dictation with the voice comparison combination loaded | Ryan loaded, not reading | paced `transcribe --cleanup` | 8.69 / 24.87 |
+| `20261007T114030Z-local` | Kokoro first download and first load | Emma | `--fast`, `reading-ordinary-prose` | 4.32 / 4.73 |
+| `20261007T114034Z-local` | Kokoro installed load, fresh process | Emma | `--fast`, `reading-ordinary-prose` | 4.13 / 4.32 |
+| `20261007T114144Z-local` | Qwen3-TTS first download and first load | Ryan | `--fast`, `reading-ordinary-prose` | 6.09 / 6.85 |
+| `20261007T114153Z-local` | Qwen3-TTS installed load, fresh process | Ryan | `--fast`, `reading-ordinary-prose` | 6.08 / 6.18 |
+
+Qwen3-TTS 0.6B was not run. Its condition, 1.7B's warm first audio p50 above 500 ms on short
+passages, was not met: 241 ms (`20261007T101342Z-local`). The styled Qwen voice was not measured
+again: in the signed-app audition Aidan heard no difference from plain Ryan, so the evaluation
+uses plain `ryan` (plan decision log, 2026-10-06).
+
+### Candidates
+
+| | Kokoro | Qwen3-TTS |
+|---|---|---|
+| Repository and revision | `FluidInference/kokoro-82m-coreml@006395f65025af251858b1ab0a7178a6a1e73f9f` | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit@f35faf19b0cc2160865af64ecf0f22f83d335135` |
+| Licence and voice terms | Apache-2.0 (conversion card, `ANE/LICENSE` and upstream `hexgrad/Kokoro-82M` weights and voice packs). The G2P model's own upstream is not named; recorded under the repository's licence | Apache-2.0 (conversion and upstream `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` cards). Presets are the model's own speakers |
+| Files, payload bytes | 49, 97,489,362 | 7, 2,311,984,361 |
+| Voices measured | Emma (`bf_emma`, UK) and Heart (`af_heart`, US) | Ryan (`ryan`), chosen by Aidan in the signed-app audition |
+| Speed range | 0.5 to 2 | 1 only: no native speed control, and time-stretching would change the voice judged |
+| Utterance bound | One sentence each; the first at most 100 Unicode scalars, later ones 250 | Sentences joined up to 250 Unicode scalars |
+| Production bound | One utterance ahead of what the reader has pulled | One utterance ahead; within an utterance, audio streams every four codec steps (0.32 s) |
+| Runtime and pins | FluidAudio `0b1f46289fe27d95b5e66ad8be46e64f5ee02ae7` | MLX Audio Swift `bf14ae0c26e4e85553dd989571cae29d70fa6735`, MLX Swift 0.31.6 (`0bb916c67f4b9e5c682cbe02a42c701c93ab5021`), MLX Swift LM 3.31.4 (`bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57`), swift-transformers 1.3.4 |
+
+Both local voices produce 24 kHz mono chunks of at most 100 ms in their runs above; Apple's are
+22.05 kHz. These are the
+configurations behind the runs in this section, from the workstream 2 and 3 records, not tuning
+done in this evaluation. Adding MLX Audio Swift moved MLX Swift from 0.32.3 and MLX Swift LM from
+`5e46681b` (plan decision log, 2026-10-05). Cleanup's figures in earlier sections were measured on
+the old pins; `20261007T104647Z-local` below is the only full cleanup pass on the new ones.
+
+### Aidan's blind ratings
+
+Ratings are 1 to 5 for how much Aidan would want to listen; a dash is a reading Aidan did not
+score. Checks are the pronunciation checks the reading got right, as Aidan ticked them. Runs are
+the paced listening runs: Jamie `20261006T140826Z-apple`, Zoe `20261006T141044Z-apple`, Emma
+`20261006T141305Z-local`, Heart `20261006T141539Z-local`, Ryan `20261007T100825Z-local`.
+
+| Passage | Jamie | Zoe | Emma | Heart | Ryan |
+|---|---|---|---|---|---|
+| `reading-demo-pronunciation` | 1, checks 1/2 | 1, 1/2 | 3, 1/2 | 4, 1/2 | 2, 2/2, **capped** |
+| `reading-past-tense-read` | -, 2/2 | 1, 2/2 | 2, 1/2 | 3, 1/2 | 3, 2/2 |
+| `reading-technical-terms` | 2, 6/8 | 2, 6/8 | -, 2/8 | 4, 4/8 | 3, 4/8, **capped** |
+| `reading-numbers-abbreviations` | 2, 5/6 | 3, 6/6 | 3, 3/6 | -, 3/6 | 1, 1/6, **capped** |
+| `reading-punctuation-prosody` | 1, 1/3 | 2, 2/3 | 2, 1/3 | 3, 1/3 | 2, 2/3 |
+| `reading-ordinary-prose` | 2 | 1 | 3 | 4 | 4 |
+| `reading-agent-reply` | 1 | 1 | 3 | 4 | 4 |
+| `reading-long-selection` (optional) | 1 | 1 | 3 | 4 | 4, cap undetermined |
+| Mean rating (n rated), derived | 1.43 (7) | 1.50 (8) | 2.71 (7) | 3.71 (7) | 2.88 (8) |
+| Checks right, derived | 15/21 | 17/21 | 8/21 | 10/21 | 11/21 |
+
+Two ticks contradict their notes: Heart's and Zoe's 5173 checks on `reading-technical-terms`
+are ticked right, but both notes say "five thousand four hundred and seventy three". The table
+and counts follow the ticks; following the notes would give Heart 3/8 and 9/21, Zoe 5/8 and 16/21
+(`20261006T141539Z-local`, `20261006T141044Z-apple`).
+
+What Aidan heard, by voice (notes in the ratings file for the runs above):
+
+- **Heart** rated highest or joint highest on every passage it was scored on. Aidan called its
+  tone "really good" and "almost very realistic", but Kokoro says "thee" for every "the" (noted
+  on the prose, agent reply and long passages). It missed SwiftUI, macOS, pnpm and Vite, read
+  "GB" as "jee-bee", "a.m." as "ahm" and "#" as "hash", and missed the question and
+  exclamation (`20261006T141539Z-local`).
+- **Emma** sounds "slightly robotic" beside Heart, with the same "thee" and number reading. It
+  missed six of eight technical terms and read 5173 as "five thousand four hundred and seventy
+  three" (`20261006T141305Z-local`).
+- **Ryan** is "the most realistic voice", but its tone was not neutral: a long sigh before the
+  demo passage, a laugh on "I'll" and at the end of the prose, and on the long selection "the voice
+  tone changes completely every so often". It read "pnpm" as "pen-pom", invented words for the
+  date and said "gy-bytes" on the numbers passage, which Aidan called "unhinged" and rated 1, and
+  said "tice" for "twice". Its three capped readings are the demo, technical and numbers
+  passages, rated 2, 3 and 1 (`20261007T100825Z-local`).
+- **Jamie and Zoe** were "robotic" throughout and rated lowest overall, but got the most terms
+  right. Jamie said "lock-al-host"; Zoe got every number and abbreviation right and Aidan noted
+  it as a "good fallback potentially" (`20261006T140826Z-apple`, `20261006T141044Z-apple`).
+- **Skipped or invented words:** Aidan noted invented or garbled words only in Ryan's readings,
+  the date on the numbers passage and "veet madda beet" on the technical terms, and did not note
+  any skipped or repeated words in any reading (listening runs above).
+
+Contextual pronunciation, from Aidan's checks on the runs above:
+
+| Check | Jamie | Zoe | Emma | Heart | Ryan |
+|---|---|---|---|---|---|
+| "commonly read" as present tense, demo passage | wrong ("red") | wrong | right | right | right |
+| "demos" as "deh-mohs" | right | right | wrong ("dee-moss") | wrong ("dee-moss") | right |
+| "Yesterday I read" as past tense | right | right | wrong | wrong | right |
+| Second "read" as present tense | right | right | right | right | right |
+
+Kokoro's native conversion reproduces the demo's "dee-moss" but not its "commonly read" mistake.
+It reads every "read" as "reed", so it is right in the demo passage and wrong in the past tense,
+as workstream 2's phoneme check predicted: FluidAudio's English frontend resolves each word alone
+(`20261006T141305Z-local`, `20261006T141539Z-local`). Qwen3-TTS got every heteronym right
+(`20261007T100825Z-local`); Apple's voices read the demo's "read" as past tense
+(`20261006T140826Z-apple`, `20261006T141044Z-apple`).
+
+Aidan's overall notes: "Kokoro Heart and Qwen3 Ryan were the ones that I quite liked and found
+most realistic." Heart "doesn't quite pronounce things quite right, but Ryan was like totally
+unpredictable and at times unhinged". Qwen's potential is "massive" because it is so realistic,
+"but we need to control the model more" for consistent, neutral tones (`05-voice-evaluation.md`,
+External validation). In the signed-app audition every Qwen preset was "very non-deterministic"
+between readings, while Kokoro is the same every time (`04-app-read-aloud.md`, External
+validation).
+
+Comparison with xAI, as Aidan's recollection rather than a measured comparison: Aidan recalled
+that local start time is "very comparable with XAI", a remark relayed from the workstream 4 gate
+(`05-voice-evaluation.md`, External validation), and gave no comparison of voice quality with
+xAI. No xAI read-aloud run was made in this evaluation.
+
+### First audio
+
+Milliseconds, warm p50 / p95 / n, from `report`, with the cold first reading of each run apart.
+The target is about 500 ms warm on ordinary short passages: `report`'s "short passages" line,
+`reading-ordinary-prose` and `reading-agent-reply`. The four `--fast --repeat 10` passages are
+those two plus the heteronym passages.
+
+| Voice | Short passages | All four passages | Cold | Target met (short p95) | Run |
+|---|---:|---:|---:|---|---|
+| Jamie | 340 / 375 / 19 | 340 / 368 / 39 | 957 | yes | `20261007T101127Z-apple` |
+| Zoe | 779 / 1004 / 19 | 759 / 1021 / 39 | 1399 | no | `20261007T101151Z-apple` |
+| Emma | 236 / 501 / 19 | 281 / 429 / 39 | 284 | p50 yes, p95 1 ms over | `20261007T101244Z-local` |
+| Heart | 206 / 267 / 19 | 252 / 352 / 39 | 313 | yes | `20261007T101313Z-local` |
+| Ryan | 241 / 489 / 19 | 244 / 489 / 39 | 328 | yes | `20261007T101342Z-local` |
+
+In the paced listening runs over all eight passages, warm first audio p50 / p95 (n=7) and cold
+were Jamie 353 / 386 and 911 ms (`20261006T140826Z-apple`), Zoe 749 / 764 and 1462 ms
+(`20261006T141044Z-apple`), Emma 279 / 616 and 345 ms (`20261006T141305Z-local`), Heart 270 /
+651 and 366 ms (`20261006T141539Z-local`) and Ryan 292 / 482 and 236 ms
+(`20261007T100825Z-local`). Kokoro's slowest passage is `reading-numbers-abbreviations`, 616 and
+651 ms, whose 87-character first sentence normalises to much longer speech (same runs).
+
+"Cold" is the first reading in a process whose model is already prepared; preparation is
+separate, under Cost. Every voice except Zoe meets the target on short passages at p50, and all
+but Zoe and Emma at p95, Emma's by 1 ms. Kokoro Heart's
+and Qwen's p50 are about 100 ms ahead of Jamie's, and Heart's p95 is the lowest
+(`20261007T101313Z-local`, `20261007T101342Z-local`, `20261007T101127Z-apple`). The Zoe and Emma
+runs had load medians of 20 and 31, so their figures may be inflated (`20261007T101151Z-apple`,
+`20261007T101244Z-local`). Qwen's capped readings do not affect first audio, which the cap cannot
+reach; 6 of 40 readings in `20261007T101342Z-local` ended at it (`reading-demo-pronunciation`
+three times, `reading-agent-reply` three times).
+
+### Gaps, throughput, pause, cancellation and speed
+
+| Voice | Gaps (paced, 8 readings) | Warm real-time factor p50 / p95 (n=39) | Audio ready right after the 5 s pause, footprint across it | Cancellation trial | Runs |
+|---|---|---:|---|---|---|
+| Jamie | 0 | 0.05 / 0.09 | 1.1 s, 13 to 13 MiB | never pending: Apple produces the whole stream ahead | `20261006T140826Z-apple`, `20261007T101127Z-apple` |
+| Zoe | 0 | 0.11 / 0.22 | 1.1 s, 12 to 12 MiB | never pending | `20261006T141044Z-apple`, `20261007T101151Z-apple` |
+| Emma | 0 | 0.06 / 0.10 | 1.1 s, 469 to 469 MiB | pending after 10.9 s of audio, 0 ms | `20261006T141305Z-local`, `20261007T101244Z-local` |
+| Heart | 0 | 0.06 / 0.07 | 1.3 s, 409 to 417 MiB | pending after 11.0 s, 0 ms | `20261006T141539Z-local`, `20261007T101313Z-local` |
+| Ryan | 0 | 0.55 / 0.61 | 1.2 s, 2475 to 2385 MiB | pending after 2.9 s, 0 ms | `20261007T100825Z-local`, `20261007T101342Z-local` |
+
+No voice left a gap on any passage, including the 50 to 65 s long selection (paced runs above).
+Kokoro synthesises about 16 times faster than real time; Qwen about 1.8 times, so a busier
+machine has much less headroom before gaps (`20261007T101313Z-local`, `20261007T101342Z-local`).
+A paused reader holds about one second of audio for every voice, so production stays bounded.
+Apple's pause and cancellation rows prove the harness only (conventions learned).
+
+Each cancellation trial is n=1 and the pending `next()` ended at once. For Qwen this is the
+stream, not the model: MLX Audio Swift's cancelled generation cannot be awaited and keeps running
+for up to one codec step (ET-R3-01), so a stop followed at once by another reading can overlap on
+the shared model. The bench waits 1 s after its trial; the app has no such wait.
+
+Speed, Kokoro Emma on `reading-ordinary-prose`: 9.75 s of audio at speed 1
+(`20261007T101904Z-local`), 19.43 s at 0.5, ratio 1.99 (`20261007T101858Z-local`), and 5.23 s
+at 2, ratio 0.54 (`20261007T101901Z-local`); derived from `speak.jsonl`. Qwen reads at speed 1
+only.
+
+### Style prompt
+
+The fixed style prompt, "Read clearly and naturally, in a calm, warm narration style, at an even
+pace.", was trialled in the signed-app audition. Aidan heard no difference from the plain presets,
+and the styled variants varied as much as plain ones (`04-app-read-aloud.md`, External
+validation). It was therefore not rated blind and has no first-audio distribution here. Its only
+measurement is workstream 3's paced `ryan-styled` run on an earlier source revision, first audio
+491 ms cold and 327 ms warm on two passages (`20261005T211844Z-local`), against plain Ryan's
+short-passage p50 241 ms above. The prompt did not deliver the neutral, consistent tone Aidan
+asks for.
+
+### Cost
+
+Download is readiness start to the loading message, including transfer, verification and
+installation. First load follows a fresh download in the same process; the installed load is
+the same command in a fresh process afterwards. Before each fresh run the model's installed
+directory was moved aside (and, for Kokoro, its FluidAudio cache link); afterwards the fresh
+directory matched the set-aside copy file for file, apart from Qwen's runtime-written
+`tokenizer.json`, which is the same JSON with different key order, and the copies were removed.
+No EchoType app was running; only `--mcp` processes, which create no model services.
+
+| | Kokoro | Qwen3-TTS |
+|---|---:|---:|
+| Fresh / installed run | `20261007T114030Z-local` / `20261007T114034Z-local` | `20261007T114144Z-local` / `20261007T114153Z-local` |
+| Payload bytes | 97,489,362 | 2,311,984,361 |
+| Download ms | 40,220 | 66,350 |
+| First load ms | 11,159 | 3,344 |
+| Installed load ms | 2,474 | 1,410 |
+| Installed disk, allocated bytes | 101,974,016 | 2,319,216,640 |
+| Runtime-created files | `ANE/bf_emma.bin` (522,240 bytes), a self-link and the `~/.cache/fluidaudio/Models/kokoro` link | `tokenizer.json` (4,762,740 bytes) |
+| Core ML cache written by the first load, bytes | 242,222,067 in 66 files | none (MLX) |
+| Footprint peak / ready MiB, fresh | 479 / 419 | 3178 / 2555 |
+| Footprint peak / ready MiB, installed | 466 / 437 | 2937 / 2593 |
+| Pressure / thermal | normal / nominal | normal / nominal |
+
+Download time depends on the network at the time: workstream 2's debug Kokoro download took
+31.7 s (`20261005T100655Z-local`). Kokoro's first load compiles or specialises its Core ML
+models: the bench's Core ML cache gained 242 MB of `.e5` and BNNS program files during
+`20261007T114030Z-local` and nothing during the installed load. That cache
+was emptied again during the next run, Qwen's fresh download, which uses no Core ML; the cause
+was not established. Kokoro's 11 to 13 s loads recur across this evaluation in processes with
+no download (`20261006T141305Z-local`, `20261006T141539Z-local`, `20261007T101244Z-local`,
+`20261007T101858Z-local`, `20261007T104112Z-local`), while others took 2.4 to 2.6 s
+(`20261007T101313Z-local`, `20261007T101901Z-local`, `20261007T101904Z-local`). The long ones
+are consistent with that cache being rebuilt, not proven to be. Core ML work can also be charged
+to system processes, so Kokoro's footprint can understate its cost. Qwen's preparation in
+the other runs was 2.5 to 4.6 s (`20261007T100825Z-local`, `20261007T101342Z-local`).
+
+With only the voice loaded, Kokoro's peak footprint was 637 to 683 MiB and Qwen's 2944 to 2949
+MiB in the paced and repeat runs; memory pressure reached critical once with Qwen alone
+(`20261006T141305Z-local`, `20261006T141539Z-local`, `20261007T101244Z-local`,
+`20261007T101313Z-local`, `20261007T100825Z-local`, `20261007T101342Z-local`). Thermal state was
+nominal in every run.
+
+### Offline
+
+Both local voices read all eight passages with network access denied (`sandbox-exec` with `deny
+network*` on the built binary; `curl` to huggingface.co failed under the same profile). Emma:
+warm first audio p50 257 / p95 598 ms (n=7), cold 390 ms, preparation 11.8 s, 0 violations
+(`20261007T104112Z-local`). Ryan: warm p50 282 / p95 458 ms, cold 249 ms, real-time factor p50
+0.56, 0 violations; `reading-technical-terms` ended at its cap (`20261007T104124Z-local`).
+
+### Combined memory and dictation alongside
+
+Two paced passes over `reading-long-selection` and `reading-ordinary-prose` with all three
+services prepared and loaded (`transcription=parakeet-unified`, `cleanup=qwen3-4b-2507`):
+
+| Combination | Footprint peak / ready MiB | Pressure / thermal | Cold / warm first audio ms | Gaps | Preparation ms | Run |
+|---|---:|---|---:|---:|---:|---|
+| Reference, Kokoro Emma | 3062 / 2806 | warning / nominal | 447 / 285 | 0 | 29,741 | `20261007T104327Z-local` |
+| Voice comparison, Qwen3-TTS Ryan | 5201 / 4775 | critical / nominal | 246 / 280 | 0 | 4,628 | `20261007T104448Z-local` |
+
+Both kept the pause bounded (1.1 s of audio ready after resume) and their cancellation trial
+was pending, 0 ms (same runs). The voice comparison combination is the memory worst case the spec
+expected: 2.1 GiB more than the reference, and the only combination to reach critical pressure
+on this 16 GiB Mac. The reference combination's preparation is dominated by Unified's load,
+25.4 s (`20261007T104327Z-local`).
+
+One paced dictation pass ran with the voice comparison combination loaded, against slice 2's
+concurrent run:
+
+| Figure | `20261007T104647Z-local` | `20261005T064539Z-local` |
+|---|---|---|
+| Transcription candidate | `parakeet-unified` | `parakeet-unified-keyterms` |
+| Warm stop-to-insert p50 / p95 (n=14) | 1357 / 2260 ms | 1240 / 2716 ms |
+| Cleanup p50 / p95 (n=14) | 1306 / 2209 ms | 938 / 2415 ms |
+| Transcription p50 / p95 (n=14) | 48 / 58 ms | 295 / 341 ms |
+| Cold stop-to-insert (cleanup) | 1828 ms (1782) | 2004 ms (1697) |
+| Warm revision p50 / p95 | 1564 / 2513 ms (n=35) | 1161 / 2775 ms (n=25) |
+| Cancellation latency p50 / p95 | 230 / 1045 ms (n=13) | 2 / 407 ms (n=14) |
+| Deadline fallbacks / overruns | 0 / 0 | 0 / 0 |
+| WER / formatted / keyterms | 6.9% / 18.8% / 57.9% | 6.1% / 16.5% / 84.2% |
+| Footprint peak / ready | 4977 / 4685 MiB | 2781 / 2478 MiB |
+| Pressure / thermal | warning / nominal | warning / nominal |
+| Load median, max | 8.69, 24.87 | 4.66, 6.88 |
+
+The transcription rows are not like for like: the packet's combination is unboosted Unified,
+whose WER and tail match slice 2's unboosted run (`20261005T061114Z-local`). Cleanup ran on the
+moved MLX pins, on a busier machine and with Qwen3-TTS resident, so its 368 ms slower p50 and
+slower cancellation cannot be attributed to any one of those. Final cleanup still met its deadline
+on every sample (`20261007T104647Z-local`). The app never reads and dictates at once; starting
+dictation stops a reading (plan decision log).
+
+### Signed app
+
+The [workstream 4 signed-app check](implementation/read-aloud/04-app-read-aloud.md#external-validation)
+passed with one waiver, on the installed reference app (Unified, Qwen3-4B, Kokoro) and the
+signed Qwen3-TTS comparison app. Aidan passed items 1-10 and 12: Kokoro's download, loading and
+ready states, Emma and Heart with the speed control, quick gap-free reading, pause and resume,
+stop, both speed ends, MCP `speak`, dictation straight after a reading with all three models
+loaded, offline reading after relaunch, and the comparison app's readiness and dictation. In
+item 11, Qwen's pause, resume, stop and rapid stop-then-start passed ("didn't seem to misbehave")
+and first audio was "well within my tolerance"; its readings ending early were waived as ET-R4-02,
+the runtime's cap. No `EchoTypeApp` crash report or fault was found during the gate. Stop-then-quit
+of a Qwen reading, ET-R3-01's teardown crash, was not observed.
+
+### Not measured
+
+First model load after a reboot or an OS update, energy, device output latency and Developer ID
+notarisation were not measured. Neither were Qwen3-TTS 0.6B, a blind rating of the style prompt,
+or a measured comparison with xAI's voice. Ratings are one listener, one reading per voice and
+passage; Qwen's readings vary between runs, so one reading samples its range rather than fixing
+it.
+
+### Recommendation
+
+Take forward Kokoro Heart (`af_heart`) as the local voice, with Emma as a second voice if a UK
+voice is wanted. Reject Qwen3-TTS for production now, and keep it as a later experiment.
+
+- **First audible speech decides performance, and it does not separate the local voices.** Heart
+  and Ryan both meet the 500 ms target on short passages, 206 / 267 ms and 241 / 489 ms at
+  p50 / p95. Both start sooner than Apple's Jamie at p50, 340 ms; at p95 Heart does too and Ryan
+  does not, against Jamie's 375 ms (`20261007T101313Z-local`, `20261007T101342Z-local`,
+  `20261007T101127Z-apple`). Kokoro has no large first-audio advantage
+  to trade against its pronunciation; its advantage is everything around first audio.
+- **Aidan preferred Heart.** It has the highest mean rating, 3.71 against Ryan's 2.88 and Apple's
+  1.43 and 1.50, and Aidan's notes call Ryan "totally unpredictable and at times unhinged"
+  (listening runs above; `05-voice-evaluation.md`, External validation). Qwen is the most
+  realistic and the only voice with every heteronym right, but its tone, laughs and sighs vary
+  between readings, and its worst reading rated 1 (`20261007T100825Z-local`).
+- **Kokoro is far cheaper.** 97 MB against 2.3 GB to download; about 0.4 GiB ready against 2.5
+  GiB; a reference combination of 3062 MiB peak against 5201 MiB and critical pressure; synthesis
+  about 16 times real time against 1.8 (`20261007T114030Z-local`, `20261007T114144Z-local`,
+  `20261007T104327Z-local`, `20261007T104448Z-local`, `20261007T101313Z-local`,
+  `20261007T101342Z-local`).
+- **Qwen has open blockers that need a fork of MLX Audio Swift:** readings that end at the
+  runtime's length cap (ET-R4-02; three of its eight listening readings,
+  `20261007T100825Z-local`) and unawaitable cancellation (ET-R3-01). It also has no speed control.
+- **Kokoro's pronunciation is its gap, and Aidan accepted it for the sound.** Kokoro says "thee"
+  for "the"; it misses half or more of the technical terms, misreads GB, a.m. and "#", says
+  "dee-moss" and gets the past-tense "read" wrong (listening runs above). Apple's voices
+  pronounce terms and numbers best but were rated lowest. Fixing the frontend's "the" and
+  number normalisation is productionising work worth doing before shipping; word-by-word lexicon
+  patches for the test passages are not.
+
+Qwen's appeal is real. Aidan wants a controllable, neutral Qwen and custom voices from a prompt
+(`05-voice-evaluation.md` and `04-app-read-aloud.md`, External validation). That is a separate
+experiment: lower sampling temperature or fixed seeds for consistency, and the voice-design model
+for prompted voices, after the fork work. Neither is measured here.
+
+## Spike conclusion
+
+**Outcome: one fixed set,** offered as an opt-in local provider while xAI stays the default.
+This is a proposal for Aidan; the build selection is unchanged (`parakeet-unified`,
+`qwen3-4b-2507`, `kokoro` with Emma first).
+
+### Recommended model choices
+
+| Service | Recommendation | Against Apple | Against xAI | Evidence |
+|---|---|---|---|---|
+| Transcription | `parakeet-unified-keyterms`: Unified EN 0.6B with CTC keyterm boosting | Better: WER 6.1% against 10.0%, keyterms 84.2% against 31.6% | Behind: xAI's 0.4% and 100.0%, on references that began as xAI drafts and flatter it | `20261005T061642Z-local`, `20261004T083627Z-apple`, `20261004T073341Z-xai` |
+| Cleanup | `qwen3-4b-2507` | Better: 120 against 75 of 165 exact, 0 against 300 wrong-deleted words | Equal on the counted corpus; slower on long windows; one command-following failure that falls back safely | `20261004T110130Z-local`, `20261004T105325Z-apple`, `20261004T121048Z-xai` |
+| Read aloud | Kokoro Heart (`af_heart`) | Preferred by Aidan, mean 3.71 against 1.43 and 1.50; faster first audio, 206 against 340 ms p50; worse on terms and numbers | Start time "very comparable", Aidan's recollection; voice quality not compared | `20261006T141539Z-local`, `20261007T101313Z-local`, `20261007T101127Z-apple`; `05-voice-evaluation.md`, External validation |
+
+No service should stay with Apple on these results: each recommended candidate beats Apple on its
+main quality measure, WER and keyterms, exact cleanups, and Aidan's ratings (runs in the table).
+xAI stays the quality reference for transcription and the default provider.
+
+### Download, disk and memory for the recommended set
+
+- **Download:** 3,084,340,346 bytes (3.08 GB): boosted Unified with Silero and the CTC model
+  712,395,257, Qwen3-4B 2,274,455,727 and Kokoro 97,489,362 (derived from the manifests; fresh
+  runs `20261005T071635Z-local`, `20261005T072145Z-local`, `20261007T114030Z-local`).
+- **Disk:** 3,105,075,200 allocated bytes installed (3.11 GB), from the same runs, plus Core ML
+  caches outside the model store: 242,222,067 bytes written by Kokoro's first load
+  (`20261007T114030Z-local`) and 20,148,224 bytes for transcription (`20261005T071635Z-local`,
+  `20261005T071726Z-local`).
+- **Memory:** the reference combination with unboosted Unified peaked at 3062 MiB, ready 2806 MiB,
+  with pressure warning (`20261007T104327Z-local`). The recommended set with boosting was not
+  loaded together; boosted Unified with Qwen peaked at 2781 MiB (`20261005T064539Z-local`) and
+  Kokoro alone at 637 to 683 MiB (paced and repeat runs above). Process footprint can omit Core
+  ML work charged to system processes.
+
+### Integration changes made
+
+- Dependencies: FluidAudio (Unified, Silero, CTC, Kokoro), MLX Swift LM with swift-transformers
+  (cleanup), WhisperKit (Whisper Turbo) and MLX Audio Swift (Qwen3-TTS). MLX Audio Swift forced
+  MLX Swift down to 0.31.6 and MLX Swift LM to 3.31.4.
+- A pinned model store under Application Support, with verified selected-file downloads,
+  incomplete files kept apart, offline loading and readiness progress, shared across services.
+- One local provider whose transcription, cleanup and voice candidates are chosen in
+  `LocalCandidates.swift`, with a bench-only `--candidate` override.
+- `build-app.sh` stages every dependency resource bundle; CI needs the Metal toolchain.
+- The bench gained `speak` and the blind listening page; Settings falls back to the first voice
+  for a stored voice the build does not offer.
+
+### Remaining blockers and unmeasured items
+
+- **Licence:** Unified's conversion card conflicts with the NVIDIA Open Model License of its
+  upstream; resolve before automatic download (Transcription, Models and integration). Kokoro's G2P
+  model has no named upstream.
+- **Kokoro's frontend:** "thee" for every "the", technical terms, numbers and abbreviations, and
+  context-free heteronyms (listening runs above).
+- **Kokoro's reload cost:** 11 to 13 s loads recur in processes without a download, consistent
+  with its Core ML cache being emptied between runs; the cause is not established (Cost above).
+- **Boosted Unified's installed load:** its one paired installed load took 44,176 ms, about as
+  long as its first load, 43,978 ms, with Core ML cache creation still under way; it is a single
+  observation and the cause is not isolated (`20261005T071635Z-local`, `20261005T071726Z-local`,
+  Transcription). The unboosted variant's paired load took 299 ms (`20261005T071516Z-local`).
+- **Cleanup on the new pins:** only one full pass ran on MLX Swift 0.31.6, with slower
+  cancellation (p95 1045 ms) on a busier machine (`20261007T104647Z-local`). Remove MLX Audio
+  Swift and return to the newer pins, then remeasure cleanup.
+- **Not measured:** first model load after a reboot or an OS update, energy, device output
+  latency, Developer ID notarisation of nested dependency bundles, CI on the pushed branch, and
+  the recommended set loaded together.
+- **Qwen3-TTS, if revived:** the runtime cap and unawaitable cancellation need a fork (ET-R4-02,
+  ET-R3-01), and the voice comparison combination reaches critical memory pressure
+  (`20261007T104448Z-local`).
+
+### Remaining quality gaps
+
+- Transcription is clearly behind xAI: WER 6.1% against 0.4% and keyterms 84.2% against 100.0%,
+  on references that flatter xAI (`20261005T061642Z-local`, `20261004T073341Z-xai`).
+- Cleanup matches xAI on 11 hand-written samples that cannot tell them apart, but takes about
+  twice as long on the long sample, 2198 against 992 ms median stop-to-insert, derived
+  (`20261004T110130Z-local`, `20261004T121048Z-xai`).
+- Kokoro Heart sounds better than Apple's premium voices to Aidan but mispronounces more: 10 of 21
+  checks against Jamie's 15 and Zoe's 17 (listening runs above). Its quality against xAI's voice is
+  unjudged.
+
+### Proposed production scope
+
+1. Keep Unified with keyterm boosting, Qwen3-4B-Instruct-2507 and Kokoro, with Heart as the
+   default voice, as one fixed set behind the existing Local provider. Keep xAI the default.
+2. Remove Whisper and WhisperKit, SmolLM3, both Qwen3-TTS manifests and MLX Audio Swift, and
+   return MLX Swift and MLX Swift LM to the newest compatible pins.
+3. Replace `LocalCandidates.swift`'s selection machinery and the bench's `--candidate` with a
+   direct composition of the three services; delete `.build/voice-check/` and the comparison
+   builds.
+4. Fix Kokoro's "the" and number normalisation in the frontend, and find out why its Core ML cache
+   is rebuilt.
+5. Resolve Unified's licence conflict, notarise, run CI, and build the setup UI for the
+   3.1 GB download.
+6. Measure first load after reboot, energy and the recommended set together before release.
+
+Later experiments, not production scope: a controllable Qwen3-TTS with custom voices after the
+fork work; Unified's offline re-decoding and Ultra for transcription quality.
