@@ -18,7 +18,7 @@ Status: approved; implementation has not started.
 | 2 | [Kokoro read aloud](02-kokoro.md) | 1 | Accepted |
 | 3 | [Qwen3-TTS read aloud](03-qwen3-tts.md) | 2 | Accepted |
 | 4 | [Read aloud in the signed app](04-app-read-aloud.md) | 3 | Accepted |
-| 5 | [Voice evaluation and spike recommendation](05-voice-evaluation.md) | 4 | Not started |
+| 5 | [Voice evaluation and spike recommendation](05-voice-evaluation.md) | 4 | Accepted |
 | Final | [Whole-feature review](final-review.md) | 1-5 | Not started |
 
 ## Why these boundaries
@@ -120,11 +120,11 @@ and the bench's `RunOptions.swift`.
 | Gate | Owner | Placement | Status | Candidate | Resume condition |
 |---|---|---|---|---|---|
 | Signed-app check and Qwen preset audition | Workstream 4 | After closure, before acceptance | Passed with waiver (item 11's early ending) | `cf2f094` + R1 diff `1a0f90f6…1d84` | Every checklist item has Aidan's pass or waiver, and they have named the Qwen preset and style verdict |
-| Blind listening | Workstream 5 | After the paced runs, before results | Pending | `TBD` | Aidan's saved ratings file and notes on every passage they rated |
+| Blind listening | Workstream 5 | After the paced runs, before results | Passed (ET-R5-01; step 5 run, not waived) | Listening page `listening/20261007T105149Z` | Aidan's saved ratings file and notes on every passage they rated |
 
 ## Escalations
 
-None.
+None open.
 
 ## Conventions learned
 
@@ -157,6 +157,7 @@ Carried from slices 1 and 2:
 - Bench measurement code records a stream's thrown error with the contract check; never swallow it with `try?`, or a failure reads as a clean end.
 - A runtime whose cancelled generation cannot be awaited (MLX Audio Swift's Qwen3-TTS) keeps running MLX work after `cancel()`: it can overlap the next reading on the shared model, and crashes MLX's teardown if the process exits meanwhile (ET-R3-01). The bench only waits 1 s after its cancellation trial, a heuristic; the app has no such wait. The signed-app check must stop a Qwen reading and immediately start another, several times, then stop one and quit at once, checking the app log for MLX errors and `~/Library/Logs/DiagnosticReports` for a crash. Check every bench command's exit status, not only its run directory.
 - A runtime that ends generation silently at an internal length cap (MLX Audio Swift's Qwen3-TTS: `max(75, 6 × text tokens)` codec steps per utterance) truncates speech without an error. When judging or measuring such a voice, compare each utterance's step count with the cap and mark readings that end at it (ET-R4-02).
+- Before removing an answered escalation entry, mark the gate's record and the plan's gate row with the outcome, copy the user's answer into the record, and re-cite anything that cites the entry to the record, so no citation dangles.
 
 ## Decision and drift log
 
@@ -178,3 +179,4 @@ Carried from slices 1 and 2:
 | 2026-10-05 | ET-R3-01: Qwen3-TTS's cancelled generation stays unawaitable for the spike. The bench's `speak` waits 1 s after its cancellation trial so the next reading and process exit start after it settles; the app has no such wait. No fork of MLX Audio Swift. Fixing it (a fork exposing awaitable streaming, or another runtime) is a blocker before productionising Qwen. Drift from the plan's speech stream contract, whose `cancel()` stops generation but cannot be awaited here. | MLX Audio Swift runs each generation in an unstructured task it cancels but never exposes; Aidan wants the minimal option that lets Qwen be evaluated, and will decide on a proper fix only if Qwen is worth productionising. | Aidan | 4, 5 |
 | 2026-10-06 | ET-R4-02: no patch to MLX Audio Swift. Qwen3-TTS readings may end early, because the runtime silently caps each utterance at `max(75, 6 × text tokens)` codec steps (0.48 s of speech per token), worst with slow presets. Item 11's early ending is waived for the spike. The cap and ET-R3-01's unawaitable cancellation are together fork work that blocks productionising Qwen. Workstream 5 flags readings that end at the cap and marks or excludes them in the listening and results. Drift from the spec's complete-reading expectation and the gate's item 11. | The fix needs a fork; Aidan wants both fork fixes deferred until Qwen is worth productionising. Evidence: run `20261006T132708Z-local`. | Aidan | 5, Final |
 | 2026-10-06 | The evaluation's Qwen voice is plain Ryan (`ryan`). The styled variant sounded no different, so the style prompt is not evaluated further. Every preset was "super impressive" but very non-deterministic between readings (Uncle Fu's accent changed), while Kokoro is the same every time: a finding for workstream 5, not a defect. A voice prompt field and "a couple of predictable voices plus an open prompt" are productionising scope for the spike's recommendation, not built here. | Aidan's gate answers (ET-R4-01, ET-R4-02). | Aidan | 5 |
+| 2026-10-07 | ET-R5-01: blind listening passed. Aidan preferred Kokoro Heart and Qwen3-TTS Ryan; Ryan is the most realistic but unpredictable and needs more control before productionising. `results.md` recommends Kokoro Heart over the build's default Emma and one fixed set, opt-in, with xAI the default, as a proposal; the build selection is unchanged. Their notes are in `05-voice-evaluation.md`, External validation. | Aidan's ratings and notes; figures in `results.md`. | Aidan (ratings), workstream 5 lead (recommendation) | Final |
