@@ -50,14 +50,14 @@ extension SettingsValidationTests {
     second.id = "second"
     second.voice.voices = [Voice(id: "second-voice", name: "Second voice")]
     second.voice.speedRange = 0.5...2
-    var settings = Settings(provider: first.id, reading: [
+    var settings = Settings(readAloudProvider: first.id, reading: [
       "first": .init(voice: "altair", speed: 1.25),
       "second": .init(voice: "second-voice", speed: 1.8),
     ])
     #expect(settings.readingChoice(for: first) == .init(voice: "altair", speed: 1.25))
-    settings.provider = second.id
+    settings.readAloudProvider = second.id
     #expect(settings.readingChoice(for: second) == .init(voice: "second-voice", speed: 1.8))
-    settings.provider = first.id
+    settings.readAloudProvider = first.id
     #expect(settings.readingChoice(for: first) == .init(voice: "altair", speed: 1.25))
     #expect(Settings(decoding: settings.encoded()).reading == settings.reading)
   }

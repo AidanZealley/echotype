@@ -6,7 +6,7 @@ import Testing
 func settingsRoundTrip() {
   let settings = Settings(
     hotkey: .controlOptionD,
-    provider: "xai",
+    dictationProvider: "xai",
     keyterms: ["shadcn", "TanStack Start"],
     inputDeviceID: "BuiltInMicrophoneDevice",
     readAloudHotkey: .controlOptionS,
@@ -15,7 +15,7 @@ func settingsRoundTrip() {
   )
 
   #expect(Settings(decoding: settings.encoded()) == settings)
-  #expect(String(decoding: settings.encoded(), as: UTF8.self).contains(#""provider":"xai""#))
+  #expect(String(decoding: settings.encoded(), as: UTF8.self).contains(#""dictationProvider":"xai""#))
 }
 
 /// The bytes this version stores. If this fails, a key name, the hotkey's shape or a modifier's
@@ -34,7 +34,7 @@ func storedValueDecodes() {
     Settings(decoding: stored)
       == Settings(
         hotkey: .controlOptionD,
-        provider: "xai",
+        dictationProvider: "xai",
         keyterms: ["shadcn", "TanStack Start"],
         inputDeviceID: "BuiltInMicrophoneDevice",
         readAloudHotkey: .controlOptionS,
@@ -50,7 +50,7 @@ func missingFieldsDefault() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6}}"#.utf8)
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
-  #expect(Settings(decoding: stored).provider == Providers.all[0].id)
+  #expect(Settings(decoding: stored).dictationProvider == Providers.all[0].id)
   #expect(Settings(decoding: stored).readAloudHotkey == .optionS)
   #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0]).voice == "ara")
   #expect(Settings(decoding: stored).readingChoice(for: Providers.all[0]).speed == 1.0)
@@ -62,16 +62,16 @@ func unknownProvider() {
   let stored = Data(#"{"hotkey":{"keyCode":2,"modifiers":6},"provider":"retired"}"#.utf8)
 
   #expect(Settings(decoding: stored) == Settings(hotkey: .controlOptionD))
-  #expect(Settings(decoding: stored).provider == Providers.all[0].id)
+  #expect(Settings(decoding: stored).dictationProvider == Providers.all[0].id)
 }
 
 @Test("xAI stays the default, and stored Apple and Local selections load")
 func registeredProviders() {
   #expect(Providers.all.map(\.id) == ["xai", "apple", "local"])
-  #expect(Settings(decoding: nil).provider == Provider.xAI.id)
+  #expect(Settings(decoding: nil).dictationProvider == Provider.xAI.id)
   for provider in [Provider.apple, .local] {
-    let settings = Settings(provider: provider.id)
-    #expect(Settings(decoding: settings.encoded()).provider == provider.id)
+    let settings = Settings(dictationProvider: provider.id)
+    #expect(Settings(decoding: settings.encoded()).dictationProvider == provider.id)
   }
 }
 
@@ -93,4 +93,41 @@ func savedLanguageOutsideProviderList() {
 @Test("Unreadable data decodes to the defaults")
 func unreadableDataDefaults() {
   #expect(Settings(decoding: Data("not settings".utf8)) == Settings())
+}
+
+@Test("Each missing feature migrates from legacy selection; explicit choices win")
+func featureProviderMigration() throws {
+  let cases: [(String, ProviderID, ProviderID)] = [
+    (#"{"provider":"apple"}"#, "apple", "apple"),
+    (#"{"provider":"apple","dictationProvider":"local"}"#, "local", "apple"),
+    (#"{"provider":"local","readAloudProvider":"apple"}"#, "local", "apple"),
+    (#"{"provider":"apple","dictationProvider":"retired","readAloudProvider":"local"}"#, "xai", "local"),
+    (#"{"provider":"local","dictationProvider":false}"#, "xai", "local"),
+    (#"{"provider":"apple","readAloudProvider":null}"#, "apple", "xai"),
+    (#"{"provider":false,"dictationProvider":"local","readAloudProvider":"apple"}"#, "local", "apple"),
+  ]
+  for (json, dictation, reading) in cases {
+    let settings = Settings(decoding: Data(json.utf8))
+    #expect(settings.dictationProvider == dictation)
+    #expect(settings.readAloudProvider == reading)
+    let encoded = try #require(JSONSerialization.jsonObject(with: settings.encoded()) as? [String: Any])
+    #expect(encoded["provider"] == nil)
+    #expect(encoded["dictationProvider"] as? String == dictation.rawValue)
+    #expect(encoded["readAloudProvider"] as? String == reading.rawValue)
+  }
+}
+
+@Test("Independent provider choices retain unrelated settings and reading preferences")
+func independentProviderStorage() {
+  var settings = Settings(
+    hotkey: .controlOptionD, dictationProvider: "apple", readAloudProvider: "local",
+    keyterms: ["TanStack"], language: "en-GB", inputDeviceID: "mic",
+    readAloudHotkey: .controlOptionS,
+    reading: ["xai": .init(voice: "altair", speed: 1.25)], sendReplyRequests: false)
+  #expect(Settings(decoding: settings.encoded()) == settings)
+  settings.dictationProvider = "xai"
+  #expect(Settings(decoding: settings.encoded()).readAloudProvider == "local")
+  settings.readAloudProvider = "apple"
+  #expect(Settings(decoding: settings.encoded()).dictationProvider == "xai")
+  #expect(Settings(decoding: settings.encoded()).reading == settings.reading)
 }

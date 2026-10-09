@@ -29,7 +29,7 @@ struct SettingsView: View {
         AgentsTab()
           .navigationTitle("EchoType Settings")
       }
-      Tab("Provider", systemImage: "network") {
+      Tab("Providers", systemImage: "network") {
         ProviderTab(store: store, controller: controller)
           .navigationTitle("EchoType Settings")
       }
@@ -141,7 +141,7 @@ private struct UpdatesTab: View {
 private struct GeneralTab: View {
   @Bindable var store: SettingsStore
 
-  private var provider: Provider { Providers[store.settings.provider] }
+  private var provider: Provider { Providers[store.settings.dictationProvider] }
 
   var body: some View {
     Form {
@@ -181,7 +181,7 @@ private struct ReadAloudTab: View {
   /// until the first check answers.
   @State private var voiceState: ServiceState?
 
-  private var provider: Provider { Providers[store.settings.provider] }
+  private var provider: Provider { Providers[store.settings.readAloudProvider] }
   private var reading: Binding<EchoTypeCore.Settings.Reading> {
     Binding(
       get: { store.settings.readingChoice(for: provider) },
@@ -190,6 +190,9 @@ private struct ReadAloudTab: View {
 
   var body: some View {
     Form {
+      Picker("Provider", selection: $store.settings.readAloudProvider) {
+        ForEach(Providers.all) { Text(verbatim: $0.name).tag($0.id) }
+      }
       Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
         ForEach(EchoTypeCore.Settings.Hotkey.readAloudPresets, id: \.self) { hotkey in
           Text(verbatim: hotkey.label).tag(hotkey)
@@ -280,13 +283,13 @@ private struct ProviderTab: View {
   /// open. Nil until the first check answers.
   @State private var readiness: ServiceReadiness?
 
-  private var provider: Provider { Providers[store.settings.provider] }
+  private var provider: Provider { Providers[store.settings.dictationProvider] }
 
   private var followed: Followed { Followed(settings: store.settings, provider: provider) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Picker("Provider", selection: $store.settings.provider) {
+      Picker("Dictation provider", selection: $store.settings.dictationProvider) {
         ForEach(Providers.all) { provider in
           Text(verbatim: provider.name).tag(provider.id)
         }
@@ -300,9 +303,11 @@ private struct ProviderTab: View {
         feature("Read aloud", state: readiness?.voice)
         feature("Cleanup", offered: provider.cleanup != nil, state: readiness?.cleanup)
       }
-      ProviderControls(provider: provider, controller: controller)
-        // Each provider gets its own key draft, reveal state and async results.
-        .id(provider.id)
+      ForEach(Providers.all) { configured in
+        ProviderControls(provider: configured, settings: store.settings, offersTest: configured.id == provider.id,
+          controller: controller)
+          .id(configured.id)
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
@@ -355,6 +360,8 @@ private struct StatusMark: View {
 /// heard.
 private struct ProviderControls: View {
   let provider: Provider
+  let settings: EchoTypeCore.Settings
+  let offersTest: Bool
   let controller: DictationController?
   /// What the Keychain holds. Nil when there is no key.
   @State private var savedKey: String?
@@ -387,7 +394,7 @@ private struct ProviderControls: View {
           entry
         }
       }
-      if let controller {
+      if offersTest, let controller {
         HStack {
           Spacer()
           Button(testing ? "Testing…" : "Test") {
@@ -411,7 +418,12 @@ private struct ProviderControls: View {
     .confirmationDialog("Remove the API key?", isPresented: $confirmingRemove) {
       Button("Remove", role: .destructive) { Task { await remove() } }
     } message: {
-      Text("Dictation won't work until you add another.")
+      let affected = [
+        settings.dictationProvider == provider.id ? "Dictation" : nil,
+        settings.readAloudProvider == provider.id ? "Read Aloud" : nil,
+      ].compactMap { $0 }
+      Text(affected.isEmpty ? "This removes the saved key for \(provider.name)."
+        : "\(affected.joined(separator: " and ")) will need a new \(provider.name) API key.")
     }
   }
 
@@ -558,7 +570,7 @@ private struct KeytermsTab: View {
       HStack {
         Text("Separate with commas")
         Spacer()
-        Text(verbatim: "\(store.settings.keyterms.count) of \(Providers[store.settings.provider].transcription.keytermLimit - 1) keyterms used")
+        Text(verbatim: "\(store.settings.keyterms.count) of \(Providers[store.settings.dictationProvider].transcription.keytermLimit - 1) keyterms used")
           .monospacedDigit()
       }
       .foregroundStyle(.secondary)

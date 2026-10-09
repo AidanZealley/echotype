@@ -1,6 +1,6 @@
 # Local models productionization plan
 
-Status: approved by Aidan on 2026-10-09; workflow execution has not started.
+Status: approved by Aidan on 2026-10-09; execution in progress.
 
 ## Orchestration record
 
@@ -20,7 +20,7 @@ Status: approved by Aidan on 2026-10-09; workflow execution has not started.
 | # | Workstream | Depends on | Status |
 | ---: | --- | --- | --- |
 | 1 | [Production speech packaging](01-speech-packaging.md) | Approved workflow | Accepted |
-| 2 | [Feature provider selection](02-feature-providers.md) | 1 | Not started |
+| 2 | [Feature provider selection](02-feature-providers.md) | 1 | Accepted |
 | 3 | [Explicit local setup and native Settings](03-local-setup-settings.md) | 2 | Not started |
 | 4 | [Pruning and combined validation](04-pruning-validation.md) | 3 and UI gate | Not started |
 | Final | [Whole-feature review](final-review.md) | 1–4 | Not started |
@@ -56,6 +56,13 @@ remaining candidates. It owns documentation and combined signed-app evidence. Wo
 - 1 adopts Kokoro frontend/text/model trial edits, their tests and build-app/package eSpeak changes.
   Also adopt the existing MLX restoration, CleanupModel API changes and Qwen speech retirement
   together with dependent candidate/bench edits so accepted commits compile independently.
+- Stream 2 recovery on 2026-10-09 retains base `367a7ce165d9a8ac6610462877fdd9ef583dab42`.
+  The recovery lead adopts the dirty feature-choice, operation, credential and provider-binding
+  changes and their tests as implementation, including the new `FeatureProviderTests.swift`.
+  Minimal Settings constructor adaptations in bench Transcribe and Apple live tests belong
+  to 2. Demo dispatch/source, Parakeet timing, documentation and spike deletions remain
+  with their existing owners. Fresh Core/App/release checks, independent review and
+  focused closure passed before acceptance.
 - 2 owns Settings.swift and app operation composition. SettingsView receives only necessary bindings
   for distinct provider choices; reuse those controls in 3 rather than adding temporary facades.
 - 3 receives composition files for readiness/lifecycle integration and owns ModelStore/LocalModel,
@@ -112,6 +119,12 @@ evidence, what it unblocks and user answer. Do not erase unresolved entries.
 - Native system controls support both themes; the Keyterms editor needs a visible boundary and focus.
 - The 46.9-second bench preparation was first observed loading; subsequent boosted processes took
   0.75–0.80 seconds. Do not describe this as measured hotkey latency or a universal load guarantee.
+
+- Stream 2 freezes `dictationProvider` and `readAloudProvider`. Only absent fields
+  inherit legacy `provider`; present malformed or unknown fields fall back independently.
+  Operations receive captured providers directly. Credential checks start no runtime work.
+  Legacy local readiness side effects are documented seams for stream 3, not completed
+  lifecycle work or signed production-app evidence.
 
 ## Decision and drift log
 

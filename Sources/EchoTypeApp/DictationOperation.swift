@@ -69,6 +69,8 @@ import Observation
     var revisionClock: any SessionClock
   }
 
+  var provider: Provider { dependencies.provider }
+
   let settings: Settings
   let isTest: Bool
   private let dependencies: Dependencies
@@ -176,12 +178,12 @@ import Observation
     let destinationReady = !isTest && dependencies.captureDestination() != nil
     if !isTest { lastDestinationProbe = dependencies.clock.now }
     publish(.starting(.init(destination: destinationReady)))
-    try await checkReadiness()
-    let chunks = try await dependencies.startCapture(settings.inputDeviceID)
-    try checkStartup()
     let key = await dependencies.key()
     try checkStartup()
     guard dependencies.provider.credential.isSatisfied(by: key) else { throw MissingCredential() }
+    try await checkReadiness()
+    let chunks = try await dependencies.startCapture(settings.inputDeviceID)
+    try checkStartup()
     let transcriber = try await startTranscriber(key: key)
     let session = SessionMachine(transcriber: transcriber, settings: settings, clock: dependencies.clock)
     self.session = session
