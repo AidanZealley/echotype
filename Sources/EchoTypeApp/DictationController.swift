@@ -26,7 +26,8 @@ import Observation
     case .cancelled: return .cancelled
     }
   }
-  private(set) var hasCredential: Bool?
+  private(set) var dictationHasCredential: Bool?
+  private(set) var readAloudHasCredential: Bool?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
   /// The last dictation that reached `running`, whatever its outcome. Nil until one ends. Kept in
@@ -55,10 +56,11 @@ import Observation
   /// The monitor reads the hotkey from it live; each session reads a copy of the rest.
   private let store: SettingsStore
   private let clipboard: Clipboard
-  typealias ReadingFactory = (Reader.Source, UUID, Settings,
+  typealias ReadingFactory = (Reader.Source, UUID, Settings, Provider,
     @escaping @MainActor (Reader) -> Void, @escaping @MainActor (Double) -> Void) -> Reader
   private let makeReader: ReadingFactory
-  private let makeDictation: ((Bool) -> DictationOperation)?
+  private let makeDictation: ((Bool, Settings, Provider) -> DictationOperation)?
+  private let key: @Sendable (Provider) async -> String?
   private let focusedScreen: () -> NSScreen?
   private let showPanel: (Pill, NSScreen?) -> Void
   private let hidePanel: () -> Void
@@ -76,9 +78,12 @@ import Observation
 
   init(store: SettingsStore, clipboard: Clipboard, makeReader: @escaping ReadingFactory,
     focusedScreen: @escaping () -> NSScreen?, showPanel: @escaping (Pill, NSScreen?) -> Void,
-    hidePanel: @escaping () -> Void, makeDictation: ((Bool) -> DictationOperation)? = nil
+    hidePanel: @escaping () -> Void,
+    key: @escaping @Sendable (Provider) async -> String? = { await DictationController.storedKey(for: $0) },
+    makeDictation: ((Bool, Settings, Provider) -> DictationOperation)? = nil
   ) {
     self.makeDictation = makeDictation
+    self.key = key
     self.store = store; self.clipboard = clipboard; self.makeReader = makeReader
     self.focusedScreen = focusedScreen; self.showPanel = showPanel; self.hidePanel = hidePanel
   }
@@ -86,8 +91,7 @@ import Observation
   convenience init(store: SettingsStore) {
     let clipboard = Clipboard()
     let panel = OverlayPanel()
-    self.init(store: store, clipboard: clipboard, makeReader: { source, id, settings, present, level in
-      let provider = Providers[settings.provider]
+    self.init(store: store, clipboard: clipboard, makeReader: { source, id, settings, provider, present, level in
       return Reader(source, id: id, settings: settings, dependencies: .init(
         selection: { await clipboard.copySelection(cancelled: $0) },
         cleanup: { await clipboard.waitForCleanup() },
@@ -125,28 +129,35 @@ import Observation
     }
     // Checks the key at launch and again whenever the provider changes.
     Task { [weak self, store] in
-      var checked: ProviderID?
-      for await provider in Observations({ store.settings.provider }) where provider != checked {
-        checked = provider
+      var checked: [ProviderID]?
+      for await providers in Observations({ [store.settings.dictationProvider, store.settings.readAloudProvider] }) where providers != checked {
+        checked = providers
         await self?.refreshCredentialStatus()
       }
     }
-    // Starts setup the provider needs, such as a speech model download, without waiting for the
-    // first dictation. The answer is not kept; Settings and operations check for themselves.
-    let provider = Providers[store.settings.provider]
-    let request = ReadinessRequest(settings: store.settings, provider: provider)
-    Task { _ = await provider.readiness.check(request) }
   }
 
-  /// Whether the selected provider has its credential.
+  /// Credential availability is independent for the two selected features. This does not
+  /// check readiness or prepare a provider's runtime.
   func refreshCredentialStatus(clearError: Bool = false) async {
     keyStatusGeneration += 1
     let generation = keyStatusGeneration
-    let provider = Providers[store.settings.provider]
-    let available = provider.credential.isSatisfied(by: await Self.storedKey(for: provider))
+    let dictation = Providers[store.settings.dictationProvider]
+    let reading = Providers[store.settings.readAloudProvider]
+    let dictationKey = await key(dictation)
+    let readingKey = reading.id == dictation.id ? dictationKey : await key(reading)
     guard generation == keyStatusGeneration else { return }
-    hasCredential = available
+    dictationHasCredential = dictation.credential.isSatisfied(by: dictationKey)
+    readAloudHasCredential = reading.credential.isSatisfied(by: readingKey)
     if clearError { lastError = nil }
+  }
+
+  var credentialStatusMessage: String? {
+    let blocked = [
+      dictationHasCredential == false ? "Dictation needs a \(Providers[store.settings.dictationProvider].name) API key" : nil,
+      readAloudHasCredential == false ? "Read Aloud needs a \(Providers[store.settings.readAloudProvider].name) API key" : nil,
+    ].compactMap { $0 }
+    return blocked.isEmpty ? nil : blocked.joined(separator: "; ") + ". Open Settings"
   }
 
   /// The provider's key from the Keychain, read off the main actor. A provider that needs no
@@ -209,7 +220,8 @@ import Observation
     errorFade?.cancel()
     let settings = store.settings
     let id = UUID()
-    let operation = makeReader(source, id, settings, { [weak self] reader in
+    let provider = Providers[settings.readAloudProvider]
+    let operation = makeReader(source, id, settings, provider, { [weak self] reader in
       guard self?.isReading(reader) == true else { return }
       self?.showReading(reader)
     }, { [weak self] level in
@@ -228,7 +240,7 @@ import Observation
       let failure = await operation.run()
       guard isReading(operation) else { return }
       phase = .idle; readingTask = nil
-      end(showing: failure.map { Self.describe($0, provider: Providers[settings.provider]) },
+      end(showing: failure.map { Self.describe($0, provider: operation.provider) },
         waiting: Self.isWaiting(failure))
     }
   }
@@ -274,16 +286,16 @@ import Observation
   // MARK: Dictation
 
   private func makeOperation(isTest: Bool) -> DictationOperation {
-    if let makeDictation { return makeDictation(isTest) }
-    let audio = AudioCapture()
     let settings = store.settings
-    let provider = Providers[settings.provider]
+    let provider = Providers[settings.dictationProvider]
+    if let makeDictation { return makeDictation(isTest, settings, provider) }
+    let audio = AudioCapture()
     let operation = DictationOperation(settings: settings, isTest: isTest,
       dependencies: .init(
         startCapture: { try await audio.start(deviceUID: $0) },
         stopCapture: { audio.stop() },
         releaseCapture: { await audio.waitForCleanup() },
-        provider: provider, key: { await Self.storedKey(for: provider) },
+        provider: provider, key: { [key] in await key(provider) },
         captureDestination: { DestinationFocus().capture() },
         insert: { [clipboard] text, destination, sends, cancelled, begin in
           await clipboard.insert(text, destination: destination, sends: sends, cancelled: cancelled, onBegin: begin)
@@ -339,7 +351,7 @@ import Observation
       let result = await operation.run()
       guard owns(operation) else { return result }
       if let trace = result.trace { lastTrace = trace }
-      let provider = Providers[operation.settings.provider]
+      let provider = operation.provider
       var message = result.startupFailure.map { Self.describe($0, provider: provider) }
       if message == nil, case .failed(_, let error) = result.outcome {
         message = Self.describe(error, provider: provider)
@@ -367,7 +379,7 @@ import Observation
     guard owns(operation) else { return nil }
     phase = .idle
     operationTask = nil
-    let provider = Providers[operation.settings.provider]
+    let provider = operation.provider
     if let failure = result.startupFailure { return .failed(Self.describe(failure, provider: provider)) }
     return switch result.outcome {
     case .insert(let text): .heard(text)

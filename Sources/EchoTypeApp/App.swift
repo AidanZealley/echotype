@@ -76,11 +76,9 @@ struct EchoTypeApp: App {
   private var statusLine: String {
     guard let controller else { return "Overlay demo" }
     if !store.hotkeysActive { return "Inactive" }
-    if controller.hasCredential == false {
-      return "Add your \(Providers[store.settings.provider].name) API key in Settings"
-    }
+    if let message = controller.credentialStatusMessage { return message }
     if let error = controller.lastError { return error }
-    if controller.hasCredential == nil { return "Starting" }
+    if controller.dictationHasCredential == nil || controller.readAloudHasCredential == nil { return "Starting" }
     return switch controller.state {
     case .idle: "Ready"
     case .starting: "Starting"
@@ -94,7 +92,7 @@ struct EchoTypeApp: App {
 
   /// Draw the opacity into the image so the menu bar gets one template icon.
   private var statusImage: NSImage {
-    let dimmed = !store.hotkeysActive || controller?.hasCredential == false
+    let dimmed = !store.hotkeysActive || controller?.dictationHasCredential == false && controller?.readAloudHasCredential == false
       || controller?.lastError != nil
     let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
       guard let waveform = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?

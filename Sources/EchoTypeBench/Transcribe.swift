@@ -14,7 +14,7 @@ func transcribe(_ options: RunOptions, in manifest: Manifest) async throws {
   let credential = try credential(for: provider)
   let samples = try transcriptionTargets(options, in: manifest)
   let request = TranscriptionRequest(
-    settings: Settings(provider: provider.id, keyterms: manifest.keyterms, language: Language.english.tag),
+    settings: Settings(dictationProvider: provider.id, keyterms: manifest.keyterms, language: Language.english.tag),
     provider: provider, credential: credential)
   let sampler = Sampler()
   let preparation = try await requireReady(provider, services: options.services(measuring: .transcription))

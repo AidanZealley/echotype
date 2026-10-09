@@ -16,6 +16,8 @@ import Observation
     var key: () async -> String?
     var player: any ReadingPlayback
   }
+  var provider: Provider { dependencies.provider }
+
   private let source: Source
   private let settings: Settings
   private let dependencies: Dependencies

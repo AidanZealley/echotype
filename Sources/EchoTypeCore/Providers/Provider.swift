@@ -3,11 +3,11 @@ import Foundation
 // The neutral contracts every provider's adapters implement. Code outside `Providers/<Name>/`
 // names no provider; it holds service values and talks to them only through these types.
 
-/// One provider: its description and the services it supplies. The user picks one, and it
-/// supplies every service; services are never split across providers. `Providers.all` lists
+/// One provider: its description and the services it supplies. Each feature selects one.
+/// Dictation keeps transcription and cleanup together. `Providers.all` lists
 /// them.
 public struct Provider: Identifiable, Sendable {
-  /// Stored in `Settings.provider` and used as the Keychain account.
+  /// Stored in the feature provider choices and used as the Keychain account.
   public var id: ProviderID
   /// Shown in Settings and used to word errors.
   public var name: String

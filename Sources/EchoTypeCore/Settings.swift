@@ -62,8 +62,11 @@ public struct Settings: Equatable, Sendable {
 
   public var hotkey: Hotkey
 
-  /// The provider that supplies every service. Read it with `Providers[settings.provider]`.
-  public var provider: ProviderID
+  /// Supplies transcription and cleanup for Dictation and Microphone Test.
+  public var dictationProvider: ProviderID
+
+  /// Supplies selection reading and speech delivered through MCP.
+  public var readAloudProvider: ProviderID
 
   /// Domain terms sent to the transcription API to improve accuracy on jargon.
   ///
@@ -145,7 +148,8 @@ public struct Settings: Equatable, Sendable {
 
   public init(
     hotkey: Hotkey = .optionD,
-    provider: ProviderID = Providers.all[0].id,
+    dictationProvider: ProviderID = Providers.all[0].id,
+    readAloudProvider: ProviderID = Providers.all[0].id,
     keyterms: [String] = [],
     language: String = Language.english.tag,
     silenceTimeout: TimeInterval = 10,
@@ -157,7 +161,8 @@ public struct Settings: Equatable, Sendable {
     sendReplyRequests: Bool = true
   ) {
     self.hotkey = hotkey
-    self.provider = provider
+    self.dictationProvider = dictationProvider
+    self.readAloudProvider = readAloudProvider
     self.keyterms = keyterms
     self.language = language
     self.silenceTimeout = silenceTimeout
@@ -180,7 +185,7 @@ public struct Settings: Equatable, Sendable {
 /// later, or one unreadable field, never resets the others.
 extension Settings: Codable {
   private enum CodingKeys: String, CodingKey {
-    case hotkey, provider, keyterms, language, inputDeviceID
+    case hotkey, provider, dictationProvider, readAloudProvider, keyterms, language, inputDeviceID
     case readAloudHotkey, reading, sendReplyRequests
   }
 
@@ -198,7 +203,15 @@ extension Settings: Codable {
     hotkey = (try? container.decodeIfPresent(Hotkey.self, forKey: .hotkey)) ?? defaults.hotkey
     // An id no registered provider has, such as one removed since, gives the default.
     let storedProvider = try? container.decodeIfPresent(ProviderID.self, forKey: .provider)
-    provider = Providers[storedProvider ?? defaults.provider].id
+    // Legacy selection fills missing fields only. A present malformed choice resets that
+    // feature to the default, while the other feature still migrates independently.
+    func choice(_ key: CodingKeys) -> ProviderID {
+      let stored = try? container.decodeIfPresent(ProviderID.self, forKey: key)
+      return Providers[container.contains(key) ? stored ?? defaults.dictationProvider
+        : storedProvider ?? defaults.dictationProvider].id
+    }
+    dictationProvider = choice(.dictationProvider)
+    readAloudProvider = choice(.readAloudProvider)
     keyterms =
       (try? container.decodeIfPresent([String].self, forKey: .keyterms)) ?? defaults.keyterms
     language =
@@ -223,7 +236,8 @@ extension Settings: Codable {
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encode(hotkey, forKey: .hotkey)
-    try container.encode(provider, forKey: .provider)
+    try container.encode(dictationProvider, forKey: .dictationProvider)
+    try container.encode(readAloudProvider, forKey: .readAloudProvider)
     try container.encode(keyterms, forKey: .keyterms)
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)

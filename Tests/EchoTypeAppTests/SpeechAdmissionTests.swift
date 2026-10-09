@@ -55,14 +55,14 @@ private final class AdmissionTranscriber: LiveTranscriber {
     controller = DictationController(store: SettingsStore(),
     clipboard: Clipboard(access: .init(count: { 0 }, save: { [] }, restore: { _ in }, read: { nil },
       write: { _ in }, post: { _, _ in }, wait: { _ in })),
-    makeReader: { source, id, settings, present, _ in
+    makeReader: { source, id, settings, _, present, _ in
       let reader = Reader(source, id: id, settings: settings, dependencies: .init(
         selection: { _ in nil }, cleanup: {}, provider: self.provider, key: {
           self.readingEntered.open(); await self.readingRelease.wait(); return nil
         }, player: SpeechPlayer(onLevel: { _ in })), onPresentation: present)
       self.readers.append(reader); return reader
     }, focusedScreen: { nil }, showPanel: { _, _ in }, hidePanel: {},
-    makeDictation: { test in
+    makeDictation: { test, _, _ in
       let operation = DictationOperation(settings: Settings(), isTest: test, dependencies: .init(
         startCapture: { _ in
           self.captureEntered.open()
