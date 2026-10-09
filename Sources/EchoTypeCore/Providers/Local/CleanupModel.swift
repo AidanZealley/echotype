@@ -67,12 +67,12 @@ final class CleanupModel: Sendable {
     let parameters = GenerateParameters(
       maxTokens: Self.outputLimit(windowTokens: windowTokens),
       temperature: 0,
-      prefillStepSize: Self.prefillStep)
+      prefill: PrefillParameters(stepSize: Self.prefillStep))
 
     // A request that does not start with the prompt, such as a template that names today's
     // date after midnight, prefills everything.
     let reuse = tokens.starts(with: prompt.tokens)
-    let cache = reuse ? prompt.cache.map { $0.copy() } : context.model.newCache(parameters: parameters)
+    let cache = reuse ? prompt.cache.map { $0.copy() } : try context.model.newCache(parameters: parameters)
     let rest = reuse ? Array(tokens.dropFirst(prompt.tokens.count)) : tokens
 
     // Prefill happens here and checks for cancellation between chunks.
@@ -89,7 +89,7 @@ final class CleanupModel: Sendable {
         switch generation {
         case .chunk(let text): reply += text
         case .info(let info): stopReason = info.stopReason
-        case .toolCall: break
+        case .toolCall, .rejectedToolCall: break
         }
       }
       await task.value
@@ -123,7 +123,7 @@ final class CleanupModel: Sendable {
     let first = try template(system, "a", context, templateContext)
     let second = try template(system, "b", context, templateContext)
     let shared = zip(first, second).prefix { $0 == $1 }.map(\.0)
-    let cache = context.model.newCache(parameters: nil)
+    let cache = try context.model.newCache(parameters: nil)
     _ = context.model(LMInput.Text(tokens: MLXArray(shared)[.newAxis]), cache: cache, state: nil)
     eval(cache)
     return PromptCache(tokens: shared, cache: cache)

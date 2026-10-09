@@ -6,12 +6,11 @@ let package = Package(
   name: "EchoType",
   platforms: [.macOS(.v26)],
   dependencies: [
-    // On-device cleanup and read aloud for the experimental local provider. MLX Audio Swift calls
-    // MLX Swift LM APIs that 3.32 made throwing (`makePromptCache`), so MLX Swift LM stays on
-    // 3.31.4 and MLX Swift on the newest 0.31 release, which 3.31.4 requires. swift-transformers
-    // supplies the tokenizer and chat template.
-    .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.6"),
-    .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.31.4"),
+    // Restore the cleanup runtime measured before the Qwen speech experiment forced older
+    // MLX dependencies. Pin the evaluated revision; swift-transformers supplies its tokenizer.
+    .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.32.3"),
+    .package(
+      url: "https://github.com/ml-explore/mlx-swift-lm", revision: "5e46681b2adcef2db158e7b949aeae3896778e23"),
     .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
     // On-device transcription for the experimental local provider. The newest tag predates
     // Parakeet Unified, so it is pinned by the commit research verified against Swift 6.4.
@@ -20,10 +19,7 @@ let package = Package(
     // On-device transcription for Whisper. WhisperKit vendors its own tokenizer and Hub code, so
     // it does not constrain the swift-transformers pin above.
     .package(url: "https://github.com/argmaxinc/argmax-oss-swift", exact: "1.1.0"),
-    // On-device Qwen3-TTS read aloud. The newest tag is months older, so it is pinned by a commit
-    // from September 2026, whose Qwen3-TTS code matches the newest commit's.
-    .package(
-      url: "https://github.com/Blaizzy/mlx-audio-swift", revision: "bf14ae0c26e4e85553dd989571cae29d70fa6735"),
+    .package(url: "https://github.com/espeak-ng/espeak-ng-spm", revision: "fd28f6460cc4cdf631528c8e2f7bd825747aac5c"),
   ],
   targets: [
     // Session and protocol code without AppKit or TCC. Tests use an injected clock and
@@ -37,8 +33,16 @@ let package = Package(
         .product(name: "Tokenizers", package: "swift-transformers"),
         .product(name: "FluidAudio", package: "FluidAudio"),
         .product(name: "WhisperKit", package: "argmax-oss-swift"),
-        .product(name: "MLXAudioTTS", package: "mlx-audio-swift"),
-      ]),
+        .product(name: "libespeak-ng", package: "espeak-ng-spm"),
+      ],
+      plugins: [.plugin(name: "EnglishPronunciationPlugin")]),
+    .executableTarget(
+      name: "EnglishPronunciationBuilder",
+      dependencies: [.product(name: "libespeak-ng", package: "espeak-ng-spm")],
+      path: "scripts/speech-data-builder"),
+    .plugin(
+      name: "EnglishPronunciationPlugin", capability: .buildTool(),
+      dependencies: ["EnglishPronunciationBuilder"]),
     // WAV reading and resampling for the bench and the live tests. Depended on only by those,
     // never by EchoTypeCore or EchoTypeApp.
     .target(name: "EchoTypeTestSupport"),
