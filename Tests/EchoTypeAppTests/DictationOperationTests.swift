@@ -282,11 +282,11 @@ struct DictationOperationTests {
     let task = await h.start(operation)
     #expect(operation.presentation.pillPhase == .starting)
     operation.microphoneReady()
-    #expect(operation.presentation.pillPhase == .selectInput)
+    #expect(operation.presentation.pillPhase == .findingInput)
     #expect(h.points.count(.destination) == 1)
     h.focusedDestination = destination()
     operation.microphoneReady()
-    #expect(operation.presentation.pillPhase == .selectInput)
+    #expect(operation.presentation.pillPhase == .findingInput)
     #expect(h.points.count(.destination) == 1)
     await h.clock.advance(0.5)
     operation.microphoneReady()
@@ -298,7 +298,7 @@ struct DictationOperationTests {
     // Silent buffers keep reporting levels after the session pauses.
     h.focusedDestination = nil
     operation.microphoneReady()
-    #expect(operation.presentation.pillPhase == .selectInput)
+    #expect(operation.presentation.pillPhase == .findingInput)
     #expect(h.points.count(.destination) == 3)
     operation.commit()
     await h.points.reached(.finishing)

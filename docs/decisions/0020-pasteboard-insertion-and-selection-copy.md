@@ -1,7 +1,8 @@
 # 0020 Own clipboard transactions and verify the destination before paste
 
 Status: accepted, 2026-09-26. Updated for shared clipboard ownership on 2026-09-30,
-Electron compatibility on 2026-10-01 and paste confirmation on 2026-10-03.
+Electron compatibility on 2026-10-01, paste confirmation on 2026-10-03 and
+Electron activation timing on 2026-10-06.
 
 ## Context
 
@@ -20,7 +21,10 @@ also uses the clipboard and must not race insertion or its restoration.
   in the same window. Advisory readiness checks never supply the insertion token.
 - Electron can hide its web Accessibility tree until an assistive client requests it.
   When the application exposes `AXManualAccessibility` as false, request true before
-  looking up focus. T3 Code demonstrated this requirement. Keep the same role, enabled,
+  looking up focus, at most once every three monotonic seconds per process. Electron
+  debounces activation for two seconds and repeated requests restart that countdown;
+  the half-second focus probes must not keep postponing activation. Focus checks
+  continue during the wait. T3 Code demonstrated this requirement. Keep the same role, enabled,
   window, PID and two-sample identity checks after requesting support.
 - Save all pasteboard item types, then recheck cancellation and destination immediately
   before writing. Destination loss skips paste and preserves final text in Last
@@ -60,4 +64,6 @@ describes.
 Signed checks covered TextEdit Copy/paste/Return, typed clipboard restoration,
 destination loss and recovery. Same-window field checks passed in TextEdit, Ghostty
 and Visual Studio Code. T3 input detection and dictation passed after the Electron
-correction. Terminal.app remains unverified.
+correction. On 2026-10-06, Aidan compared fresh T3 Code launches: the installed
+build remained on the orange input warning, while the build with activation throttling
+recovered within about two seconds without an app switch. Terminal.app remains unverified.
