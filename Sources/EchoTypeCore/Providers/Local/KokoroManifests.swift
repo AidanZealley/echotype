@@ -1,11 +1,7 @@
 import Foundation
 
-/// The pinned files Kokoro read aloud loads, all from FluidAudio's conversion repository and laid
-/// out as it is there: the seven-stage English ANE chain under `ANE/` with its vocabulary and the
-/// pre-converted Heart voice pack, Emma's Kokoro-82M v1.0 JSON voice pack under `voices/`, and the
-/// English G2P resources at the root (the BART fallback model, its vocabulary and the Misaki US
-/// lexicon). The list comes from what `KokoroAneModelStore.loadIfNeeded`, `G2PModel` and the
-/// English frontend read, not from the downloader's defaults.
+/// The seven-stage Core ML chain, vocabulary and retained voice packs. English
+/// pronunciation data comes from the app bundle, never the downloaded model store.
 enum KokoroManifests {
   /// Apache 2.0: the conversion's card says so, as does the upstream `hexgrad/Kokoro-82M`, whose
   /// voice packs these are; `ANE/LICENSE` is the Apache 2.0 text.
@@ -121,42 +117,6 @@ enum KokoroManifests {
       .init(
         path: "ANE/vocab.json", size: 1416,
         sha256: "8d65b0188b77eafc60751dac42bbac7ab5f5685074af44db91d1877b42dc1d7c"),
-      .init(
-        path: "G2PDecoder.mlmodelc/analytics/coremldata.bin", size: 243,
-        sha256: "dbf1767747fdc188222d467a45b04608b396c76c71db3abb18a5fb3680ef9827"),
-      .init(
-        path: "G2PDecoder.mlmodelc/coremldata.bin", size: 545,
-        sha256: "607e960f19b4d9a30317a5a11869fcce84b300a909fcab2cc756c0d98e2dacd9"),
-      .init(
-        path: "G2PDecoder.mlmodelc/metadata.json", size: 3064,
-        sha256: "e54e98484fd60d26f22fd3c4e7fe87b0d92a5d2de1f958cc3c4bb36d4ae06a44"),
-      .init(
-        path: "G2PDecoder.mlmodelc/model.mil", size: 19737,
-        sha256: "fe647c598e0d9454d360b8ee49a59ae57ca147fc5330863ba84ccb90dce482ad"),
-      .init(
-        path: "G2PDecoder.mlmodelc/weights/weight.bin", size: 828_030,
-        sha256: "cbaeb4e743359f607ab161af0c6d8a817462fdaec622ee788ef8ef952c5f8214"),
-      .init(
-        path: "G2PEncoder.mlmodelc/analytics/coremldata.bin", size: 243,
-        sha256: "cf7fbd7e7a65529b2d2bf3941e458a0ab6dff7a298bf48e205a1727c81c26a99"),
-      .init(
-        path: "G2PEncoder.mlmodelc/coremldata.bin", size: 398,
-        sha256: "0f14d46ca9fd06c68b4717294575b2b99449e67d40b7a2c56f926bf05cd90b11"),
-      .init(
-        path: "G2PEncoder.mlmodelc/metadata.json", size: 2034,
-        sha256: "c8e0cfd7f494ac1b3662ff8f1914b2b45f79ffb2791724cdc0576981996732e1"),
-      .init(
-        path: "G2PEncoder.mlmodelc/model.mil", size: 20392,
-        sha256: "8c617e569f37286b056dad800d862dc145be9a95fa9ed43857bb646ba199d7da"),
-      .init(
-        path: "G2PEncoder.mlmodelc/weights/weight.bin", size: 694_592,
-        sha256: "6926bcd2827d21fec82839487b987e06f85fd8a6a5bb896bc4f6062461d014ec"),
-      .init(
-        path: "g2p_vocab.json", size: 1665,
-        sha256: "295ed64b86c2820cd665b0602ae50c6947c0e82ac643082873e0be87dca282ce"),
-      .init(
-        path: "us_lexicon_cache.json", size: 10_444_631,
-        sha256: "6b36ba313202227d6914ad32cd684a0304bd2757e9ec4158ea7bc36ec40e224e"),
       .init(
         path: "voices/bf_emma.json", size: 2_679_667,
         sha256: "2b7f73a1af7bd195d1c4bae834cc96d4e319e26abb4ddbe4c7c43485789dda69"),

@@ -1,9 +1,8 @@
 import FluidAudio
 import Foundation
 
-/// The loaded Kokoro-82M runtime, shared by every reading: FluidAudio's seven-stage Core ML chain
-/// and its English frontend. Readings share the weights and nothing else; each synthesis call is
-/// independent.
+/// The loaded Kokoro-82M runtime, shared by every reading. FluidAudio runs the seven-stage
+/// Core ML chain; the bundled eSpeak frontend supplies phonemes for each utterance.
 final class KokoroModel: Sendable {
   /// Emma (UK) first, as the default, then Heart (US).
   static let voices = [Voice(id: "bf_emma", name: "Emma"), Voice(id: "af_heart", name: "Heart")]
@@ -14,25 +13,30 @@ final class KokoroModel: Sendable {
     self.manager = manager
   }
 
-  /// Loads the models from the installed directory, never through FluidAudio's downloader, then
-  /// reads one word so the first reading does not pay for compiling.
-  ///
-  /// FluidAudio finds every file by existence alone, so with the links below in place it fetches
-  /// nothing. It looks for the chain in `<directory>/kokoro-82m-coreml/ANE`, so the directory gets
-  /// a link to itself under that name. Its English G2P model and lexicon are read from its own
-  /// cache folder whatever directory the chain came from, so that folder is linked to the store's
-  /// copy, as Parakeet's tokenizer is.
+  /// Load only the installed Core ML chain and retained voices. The public model-store
+  /// API bypasses manager.initialize(), which prepares unused English G2P assets.
   static func load(from directory: URL) async throws -> KokoroModel {
-    try linkFolder(at: directory.appending(path: "kokoro-82m-coreml"), to: directory)
-    try linkFolder(
-      at: TtsCacheDirectory.ensure().appending(path: KokoroAneResourceDownloader.modelsSubdirectory)
-        .appending(path: Repo.kokoro.folderName),
-      to: directory)
+    // FluidAudio's store can download missing files. Reject incomplete installations
+    // before entering it, including when a caller bypasses EchoType's setup checks.
+    guard KokoroManifests.english.files.allSatisfy({
+      FileManager.default.fileExists(atPath: directory.appending(path: $0.path).path)
+    }) else { throw ProviderError.failed("The installed speech models are incomplete. Open Settings to prepare them.") }
+    // FluidAudio appends this repository name and ANE to the supplied directory.
+    let repository = directory.appending(path: "kokoro-82m-coreml")
+    try linkFolder(at: repository, to: directory)
+    guard repository.resolvingSymlinksInPath().standardizedFileURL.path
+      == directory.resolvingSymlinksInPath().standardizedFileURL.path
+    else {
+      throw ProviderError.failed("The speech model folder contains a conflicting kokoro-82m-coreml directory. Resolve that folder conflict before preparing speech.")
+    }
     try convertVoicePacks(in: directory)
 
-    let manager = KokoroAneManager(directory: directory)
-    try await manager.initialize(preloadVoices: Set(voices.map(\.id)))
-    _ = try await manager.synthesizeDetailed(text: "Ready.", voice: voices[0].id)
+    let store = KokoroAneModelStore(directory: directory)
+    try await store.loadIfNeeded()
+    for voice in voices { _ = try await store.voicePack(voice.id) }
+    let manager = KokoroAneManager(modelStore: store)
+    let ready = try await KokoroEnglishFrontend.shared.phonemes(for: "Ready.", voice: voices[0].id)
+    _ = try await manager.synthesizeFromPhonemesDetailed(ready, voice: voices[0].id)
     return KokoroModel(manager: manager)
   }
 
@@ -40,9 +44,19 @@ final class KokoroModel: Sendable {
   /// voice this model does not offer reads as the first, since FluidAudio would download it.
   func speak(_ request: SpeechRequest) -> any SpeechStream {
     let voice = Self.voices.contains { $0.id == request.voice } ? request.voice : Self.voices[0].id
-    return KokoroSpeech(text: request.text) { [manager] utterance in
-      let result = try await manager.synthesizeDetailed(text: utterance, voice: voice, speed: Float(request.speed))
-      return SpeechAudio(sampleRate: result.sampleRate, samples: result.samples)
+    return KokoroSpeech(text: KokoroText.prepare(request.text)) { [manager] utterance in
+      // Retain our written-form normalization, then use phrase-aware English G2P.
+      let normalized = NemoTextNormalizer.normalize(utterance, language: .english)
+      let phonemes = try await KokoroEnglishFrontend.shared.phonemes(for: normalized, voice: voice)
+      var samples: [Float] = []
+      var sampleRate = 24_000
+      for chunk in KokoroEnglishFrontend.chunks(phonemes) {
+        try Task.checkCancellation()
+        let result = try await manager.synthesizeFromPhonemesDetailed(chunk, voice: voice, speed: Float(request.speed))
+        samples.append(contentsOf: result.samples)
+        sampleRate = result.sampleRate
+      }
+      return SpeechAudio(sampleRate: sampleRate, samples: samples)
     }
   }
 

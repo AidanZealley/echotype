@@ -21,7 +21,20 @@ cp Resources/AppIcon.icns "$staged/EchoType.app/Contents/Resources/"
 # Dependencies ship their resources as bundles beside the executable, such as MLX's compiled
 # Metal shaders. Bundle.module finds them only in Contents/Resources, and a missing one fails at
 # the first use rather than at build time, so every bundle is staged before signing.
-cp -R "$bin"/*.bundle "$staged/EchoType.app/Contents/Resources/"
+for bundle in "$bin"/*.bundle; do
+  # Incremental SwiftPM builds may leave the retired 64 MB eSpeak source bundle.
+  [[ $(basename "$bundle") == espeak-ng_data.bundle ]] && continue
+  cp -R "$bundle" "$staged/EchoType.app/Contents/Resources/"
+done
+# The build plugin generates this from pinned inputs for app, bench and tests alike.
+pronunciation="$staged/EchoType.app/Contents/Resources/EchoType_EchoTypeCore.bundle/Contents/Resources/EnglishPronunciation.bundle"
+for required in en_dict phondata phonindex phontab intonations; do
+  test -f "$pronunciation/espeak-ng-data/$required"
+done
+test -f "$pronunciation/COPYING.txt"
+test -f "$pronunciation/SOURCE.txt"
+mkdir -p "$staged/EchoType.app/Contents/Resources/Licenses"
+cp .build/checkouts/espeak-ng-spm/LICENSE "$staged/EchoType.app/Contents/Resources/Licenses/eSpeak-NG.txt"
 
 # The same hardened runtime and microphone entitlement apply to local and release builds.
 # Developer ID signing can replace the default identity when one is available.
