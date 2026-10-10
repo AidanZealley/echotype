@@ -15,7 +15,7 @@ public struct LocalSelection: Codable, Equatable, Sendable {
     self.voice = voice
   }
 
-  public static let build = LocalSelection(transcription: "parakeet-unified", cleanup: "qwen3-4b-2507", voice: "kokoro")
+  public static let build = LocalSelection(transcription: "parakeet-unified-keyterms", cleanup: "qwen3-4b-2507", voice: "kokoro")
 }
 
 /// A transcription model: the pinned files it loads from and the runtime that loads them. A new

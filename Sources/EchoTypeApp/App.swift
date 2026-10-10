@@ -5,20 +5,33 @@ import SwiftUI
 
 struct EchoTypeApp: App {
   @State private var store: SettingsStore
-  /// Nil for `--hud-demo`, which shows the overlay and must not start the hotkey monitor or
-  /// open the microphone. It records no dictation, so it has no Last Dictation window.
+  /// Inspection and HUD demos have no hotkeys, microphone or GUI MCP observer.
   @State private var controller: DictationController?
+
+  /// Inspection bundles use their own defaults domain and launch the real Settings directly.
+  private static var inspectingSettings: Bool {
+    Bundle.main.object(forInfoDictionaryKey: "EchoTypeSettingsInspection") as? Bool == true
+      && Bundle.main.bundleIdentifier?.hasPrefix("com.aidanzealley.echotype.stream3-inspection-")
+        == true
+  }
 
   init() {
     let store = SettingsStore()
     _store = State(initialValue: store)
-    if CommandLine.arguments.contains("--hud-demo") {
+    if Self.inspectingSettings {
+      _controller = State(initialValue: nil)
+      NSApplication.shared.setActivationPolicy(.regular)
+      NSApplication.shared.appearance = NSAppearance(
+        named:
+          Bundle.main.object(forInfoDictionaryKey: "InspectionTheme") as? String == "Dark"
+          ? .darkAqua : .aqua)
+    } else if CommandLine.arguments.contains("--hud-demo") {
       _controller = State(initialValue: nil)
       Task { await PillDemo.run() }
     } else {
       _controller = State(initialValue: DictationController(store: store))
     }
-    Self.claimLoginItem()
+    if !Self.inspectingSettings { Self.claimLoginItem() }
   }
 
   /// `SMAppService.mainApp` answers `status` by bundle identifier, but the login item launches
@@ -36,7 +49,15 @@ struct EchoTypeApp: App {
   }
 
   var body: some Scene {
-    MenuBarExtra {
+    Window("EchoType Settings", id: "settings-inspection") {
+      SettingsView(store: store, controller: nil)
+        .onAppear { presentWindow {} }
+    }
+    .defaultSize(width: 790, height: 590)
+    .defaultLaunchBehavior(Self.inspectingSettings ? .presented : .suppressed)
+    .restorationBehavior(.disabled)
+    .commandsRemoved()
+    MenuBarExtra(isInserted: .constant(!Self.inspectingSettings)) {
       Text(statusLine)
       Divider()
       if controller != nil {
@@ -57,6 +78,7 @@ struct EchoTypeApp: App {
       SettingsView(store: store, controller: controller)
         .onDisappear(perform: windowClosed)
     }
+    .defaultSize(width: 790, height: 590)
 
     Window("Last Dictation", id: LastDictationWindow.id) {
       if let controller {
@@ -78,7 +100,10 @@ struct EchoTypeApp: App {
     if !store.hotkeysActive { return "Inactive" }
     if let message = controller.credentialStatusMessage { return message }
     if let error = controller.lastError { return error }
-    if controller.dictationHasCredential == nil || controller.readAloudHasCredential == nil { return "Starting" }
+    if controller.isIdle, let message = controller.availabilityMessage { return message }
+    if controller.dictationHasCredential == nil || controller.readAloudHasCredential == nil {
+      return "Starting"
+    }
     return switch controller.state {
     case .idle: "Ready"
     case .starting: "Starting"
@@ -92,11 +117,14 @@ struct EchoTypeApp: App {
 
   /// Draw the opacity into the image so the menu bar gets one template icon.
   private var statusImage: NSImage {
-    let dimmed = !store.hotkeysActive || controller?.dictationHasCredential == false && controller?.readAloudHasCredential == false
+    let dimmed =
+      !store.hotkeysActive
+      || controller?.dictationHasCredential == false && controller?.readAloudHasCredential == false
       || controller?.lastError != nil
     let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
-      guard let waveform = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
-        .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+      guard
+        let waveform = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
+          .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
       else { return false }
       waveform.draw(
         in: NSRect(x: 0, y: 2, width: 18, height: 14), from: .zero,

@@ -22,8 +22,9 @@ enum LocalProvider {
     let speaker = voice.map {
       LocalModel(manifests: $0.manifests, loadingMessage: "Loading the voice model", store: store, load: $0.load)
     }
+    let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: reviser, voice: speaker)
     return Provider(
-      id: "local", name: "Local", summary: "Experimental. Runs models on this Mac.",
+      id: "local", name: "Local", summary: "Runs English models on this Mac. Works offline after setup.",
       credential: .none, languages: [.english],
       transcription: TranscriptionService(keytermLimit: transcription?.keytermLimit ?? 1) { request in
         guard let start = transcriber?.loaded else { throw ProviderError.unavailable }
@@ -50,7 +51,8 @@ enum LocalProvider {
             voice: speaker?.check() ?? .unavailable("No voice model is selected."),
             cleanup: reviser?.check())
         },
-        changes: { merged([transcriber?.changes(), reviser?.changes(), speaker?.changes()].compactMap { $0 }) }))
+        changes: { merged([transcriber?.changes(), reviser?.changes(), speaker?.changes()].compactMap { $0 }) },
+        prepare: { try await lifecycle.prepare($0) }), localSetup: lifecycle.controls)
   }
 
   /// One stream that yields when any of `streams` does.

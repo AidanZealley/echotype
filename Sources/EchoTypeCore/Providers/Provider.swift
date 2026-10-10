@@ -22,11 +22,12 @@ public struct Provider: Identifiable, Sendable {
   public var cleanup: CleanupService?
   /// Whether this Mac can use the services now. `.always` when only the credential gates them.
   public var readiness: Readiness
+  public var localSetup: LocalSetup?
 
   public init(
     id: ProviderID, name: String, summary: String, credential: Credential,
     languages: [Language], transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
-    readiness: Readiness = .always
+    readiness: Readiness = .always, localSetup: LocalSetup? = nil
   ) {
     self.id = id
     self.name = name
@@ -37,6 +38,7 @@ public struct Provider: Identifiable, Sendable {
     self.voice = voice
     self.cleanup = cleanup
     self.readiness = readiness
+    self.localSetup = localSetup
   }
 }
 
@@ -96,18 +98,20 @@ public enum ProviderError: Error, Equatable, Sendable {
 /// check it before opening capture and reading before requesting speech; each starts only when
 /// every service it uses is `.ready`.
 public struct Readiness: Sendable {
-  /// What each service can do now. Starts any setup it needs; the provider runs at most one
-  /// setup at a time, so calling again is cheap.
+  /// Reports availability without downloading or preparing local runtimes.
   public var check: @Sendable (ReadinessRequest) async -> ServiceReadiness
   /// Yields when an earlier answer may be out of date, such as setup finishing or failing.
   public var changes: @Sendable () -> AsyncStream<Void>
+  public var prepare: @Sendable (ProviderFeature) async throws -> RuntimeLease
 
   public init(
     check: @escaping @Sendable (ReadinessRequest) async -> ServiceReadiness,
-    changes: @escaping @Sendable () -> AsyncStream<Void>
+    changes: @escaping @Sendable () -> AsyncStream<Void>,
+    prepare: @escaping @Sendable (ProviderFeature) async throws -> RuntimeLease = { _ in RuntimeLease() }
   ) {
     self.check = check
     self.changes = changes
+    self.prepare = prepare
   }
 
   /// For a provider whose services need nothing but the credential. It cannot see which services
@@ -363,6 +367,12 @@ public protocol SpeechStream: Sendable {
   /// Stops the request and makes a pending `next()` throw. The caller stops pulling after
   /// cancelling and must not rely on later results. May be called at any time and more than once.
   func cancel()
+  /// Joins backend work after cancellation before managed runtime files can be removed.
+  func waitForClose() async
+}
+
+extension SpeechStream {
+  public func waitForClose() async {}
 }
 
 /// Mono Float32 samples in -1...1.

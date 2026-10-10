@@ -157,7 +157,10 @@ import Observation
     })
   }
 
+  private var runtimeLease: RuntimeLease?
+
   func run() async -> Result {
+    defer { runtimeLease = nil }
     precondition(!hasRun, "A dictation operation runs once")
     hasRun = true
     let outcome: SessionMachine.Outcome
@@ -200,6 +203,8 @@ import Observation
   /// dictation inserts unrevised text and the pill says so. Checked before capture opens, so a
   /// blocked operation opens nothing.
   private func checkReadiness() async throws {
+    runtimeLease = try await dependencies.provider.readiness.prepare(.dictation)
+    try checkStartup()
     let services = await dependencies.provider.readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
     try checkStartup()
     try services.transcription.requireReady()

@@ -40,6 +40,30 @@ import Testing
     #expect(started.withLock { $0 } == 4)
   }
 
+  @Test("Close joins synthesis even when the backend ignores cancellation")
+  func closeJoinsSynthesis() async {
+    let entered = AsyncStream.makeStream(of: Void.self)
+    let release = Mutex<CheckedContinuation<Void, Never>?>(nil)
+    let stopped = Mutex(false)
+    let stream = KokoroSpeech(text: "One sentence.") { _ in
+      await withCheckedContinuation { continuation in
+        release.withLock { $0 = continuation }
+        entered.continuation.yield()
+      }
+      stopped.withLock { $0 = true }
+      return SpeechAudio(sampleRate: 1000, samples: [0])
+    }
+    let pull = Task { try? await stream.next() }
+    for await _ in entered.stream { break }
+    stream.cancel()
+    await pull.value
+    let close = Task { await stream.waitForClose() }
+    #expect(stopped.withLock { $0 } == false)
+    release.withLock { $0?.resume(); $0 = nil }
+    await close.value
+    #expect(stopped.withLock { $0 })
+  }
+
   @Test("Cancelling ends a pull that is waiting on synthesis")
   func cancelWhileSynthesising() async {
     let (started, start) = AsyncStream.makeStream(of: Void.self)

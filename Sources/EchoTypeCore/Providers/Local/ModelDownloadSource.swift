@@ -32,10 +32,13 @@ extension ModelDownloadSource {
     func run(_ url: URL) async throws {
       let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
       defer { session.finishTasksAndInvalidate() }
-      try await withCheckedThrowingContinuation { continuation in
+      try await withTaskCancellationHandler {
+        try Task.checkCancellation()
+        try await withCheckedThrowingContinuation { continuation in
         outcome.withLock { $0.continuation = continuation }
         session.downloadTask(with: url).resume()
-      }
+        }
+      } onCancel: { session.invalidateAndCancel() }
     }
 
     func urlSession(

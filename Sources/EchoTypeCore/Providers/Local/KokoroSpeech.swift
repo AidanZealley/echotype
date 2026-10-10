@@ -63,6 +63,12 @@ final class KokoroSpeech: SpeechStream {
     deliver()
   }
 
+  func waitForClose() async {
+    cancel()
+    let synthesis = state.withLock { $0.synthesis }
+    await synthesis?.value
+  }
+
   /// Answers a waiting pull if it can, starting synthesis when the reader needs more audio.
   private func deliver() {
     let answer = state.withLock { state -> (Waiter, Result<SpeechAudio?, any Error>)? in

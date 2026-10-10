@@ -55,6 +55,7 @@ private final class FakeSpeechStream: SpeechStream {
   var storedKey: String? = "fake"
   /// Nil for a provider with the default, always-ready readiness.
   var readiness: ServiceReadiness?
+  var prepare: @Sendable (ProviderFeature) async throws -> RuntimeLease = { _ in RuntimeLease() }
   init(_ request: FakeSpeechStream = FakeSpeechStream()) { self.request = request }
   func reader(_ source: Reader.Source = .text("Hello"), id: UUID = UUID(),
     settings: Settings = Settings(), onPresentation: @escaping @MainActor (Reader) -> Void = { _ in }
@@ -76,8 +77,8 @@ private final class FakeSpeechStream: SpeechStream {
         },
         cleanup: nil,
         readiness: readiness.map { answer in
-          Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
-        } ?? .always), key: {
+          Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } }, prepare: prepare)
+        } ?? Readiness(check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: nil) }, changes: { AsyncStream { $0.finish() } }, prepare: prepare)), key: {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return self.storedKey
@@ -87,6 +88,26 @@ private final class FakeSpeechStream: SpeechStream {
 }
 
 @Suite(.timeLimit(.minutes(1))) @MainActor struct ReadingOperationTests {
+  @Test func runtimeLeaseLastsThroughCancelledPlaybackCleanup() async {
+    let active = Mutex(0)
+    let fixture = ReadingFixture()
+    fixture.suspendCleanup = true
+    fixture.prepare = { feature in
+      #expect(feature == .readAloud)
+      active.withLock { $0 += 1 }
+      return RuntimeLease { active.withLock { $0 -= 1 } }
+    }
+    let reader = fixture.reader()
+    let task = Task { await reader.run() }
+    await fixture.request.entered.wait()
+    reader.stop()
+    await fixture.cleanupEntered.wait()
+    #expect(active.withLock { $0 } == 1)
+    fixture.cleanupRelease.open()
+    _ = await task.value
+    #expect(active.withLock { $0 } == 0)
+  }
+
   @Test func creationDoesNotAcquireResourcesAndStopDuringCopyJoinsCleanup() async {
     let fixture = ReadingFixture(); fixture.suspendSelection = true
     let reader = fixture.reader(.selection)

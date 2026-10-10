@@ -40,7 +40,7 @@ import Testing
     #expect(readiness.voice.status == .unavailable)
   }
 
-  @Test("Readiness reports the download, then a failed one stays failed without starting again")
+  @Test("Readiness has no setup side effects; explicit failed downloads stay failed")
   func downloadProgressAndFailure() async {
     let root = FileManager.default.temporaryDirectory.appending(path: "LocalModelTests-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: root) }
@@ -58,6 +58,9 @@ import Testing
     ) { _ in 0 }
     var changes = model.changes().makeAsyncIterator()
 
+    #expect(model.check().status == .unavailable)
+    #expect(fetches.withLock { $0 } == 0)
+    store.start(LocalCandidates.qwen3.manifest)
     #expect(model.check() == .waiting("Downloading models, 0.0 of 2.3 GB"))
     #expect(model.downloading(done: 12_400_000, total: 97_489_362) == .waiting("Downloading models, 12 of 97 MB"))
     release.continuation.finish()
