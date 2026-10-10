@@ -182,6 +182,7 @@ private struct Insertion: Equatable {
   var storedKey: String? = "fake-key"
   /// Nil for a provider with the default, always-ready readiness.
   var readiness: ServiceReadiness?
+  var prepare: @Sendable (ProviderFeature) async throws -> RuntimeLease = { _ in RuntimeLease() }
   var requests: [TranscriptionRequest] = []
 
   init() {
@@ -222,8 +223,8 @@ private struct Insertion: Equatable {
             return request.text
           } : nil,
           readiness: readiness.map { answer in
-            Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } })
-          } ?? .always),
+            Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } }, prepare: prepare)
+          } ?? Readiness(check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) }, changes: { AsyncStream { $0.finish() } }, prepare: prepare)),
         key: { [storedKey] in
           await points.pass(.key)
           return storedKey
@@ -595,6 +596,28 @@ struct DictationOperationTests {
     _ = await task.value
     #expect(DestinationFocus(lookup: { atStop }).verify(h.insertedDestination) == (available ? .matching : .unavailable))
     #expect(DestinationFocus(lookup: { late }).verify(h.insertedDestination) == (available ? .changed : .unavailable))
+  }
+
+  @Test func runtimeLeaseLastsThroughFinalRevisionAndInsertion() async {
+    let active = Mutex(0)
+    let h = Harness()
+    h.prepare = { feature in
+      #expect(feature == .dictation)
+      active.withLock { $0 += 1 }
+      return RuntimeLease { active.withLock { $0 -= 1 } }
+    }
+    h.points.hold(.revision); h.points.hold(.insertion)
+    let operation = h.operation(cleanup: true)
+    let task = await h.start(operation)
+    operation.commit()
+    await h.points.reached(.revision)
+    #expect(active.withLock { $0 } == 1)
+    h.points.release(.revision)
+    await h.points.reached(.insertion)
+    #expect(active.withLock { $0 } == 1)
+    h.points.release(.insertion)
+    _ = await task.value
+    #expect(active.withLock { $0 } == 0)
   }
 
   // MARK: Revision and insertion

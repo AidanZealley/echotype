@@ -30,6 +30,11 @@ import Observation
   private(set) var readAloudHasCredential: Bool?
   private(set) var lastError: String?
   private var keyStatusGeneration = 0
+  private(set) var dictationReadiness: ServiceReadiness?
+  private(set) var readAloudReadiness: ServiceReadiness?
+  @ObservationIgnored private var dictationStatusTask: Task<Void, Never>?
+  @ObservationIgnored private var readingStatusTask: Task<Void, Never>?
+
   /// The last dictation that reached `running`, whatever its outcome. Nil until one ends. Kept in
   /// memory only.
   private(set) var lastTrace: DictationTrace?
@@ -130,9 +135,13 @@ import Observation
     // Checks the key at launch and again whenever the provider changes.
     Task { [weak self, store] in
       var checked: [ProviderID]?
-      for await providers in Observations({ [store.settings.dictationProvider, store.settings.readAloudProvider] }) where providers != checked {
-        checked = providers
-        await self?.refreshCredentialStatus()
+      for await settings in Observations({ store.settings }) {
+        self?.followAvailability()
+        let providers = [settings.dictationProvider, settings.readAloudProvider]
+        if providers != checked {
+          checked = providers
+          await self?.refreshCredentialStatus()
+        }
       }
     }
   }
@@ -150,6 +159,32 @@ import Observation
     dictationHasCredential = dictation.credential.isSatisfied(by: dictationKey)
     readAloudHasCredential = reading.credential.isSatisfied(by: readingKey)
     if clearError { lastError = nil }
+  }
+
+  private func followAvailability() {
+    dictationStatusTask?.cancel(); readingStatusTask?.cancel()
+    dictationReadiness = nil; readAloudReadiness = nil
+    let settings = store.settings
+    let dictation = Providers[settings.dictationProvider]
+    let reading = Providers[settings.readAloudProvider]
+    dictationStatusTask = Task { [weak self] in
+      await dictation.readiness.follow(ReadinessRequest(settings: settings, provider: dictation)) { self?.dictationReadiness = $0 }
+    }
+    readingStatusTask = Task { [weak self] in
+      await reading.readiness.follow(ReadinessRequest(settings: settings, provider: reading)) { self?.readAloudReadiness = $0 }
+    }
+  }
+
+  var availabilityMessage: String? {
+    let features: [(String, Bool?, ServiceState?)] = [
+      ("Dictation", dictationHasCredential, dictationReadiness?.transcription),
+      ("Read Aloud", readAloudHasCredential, readAloudReadiness?.voice),
+    ]
+    let blocked = features.compactMap { title, credential, service -> String? in
+      guard credential != false, let service, service.status != .ready else { return nil }
+      return title + ": " + (service.message ?? "Open Settings")
+    }
+    return blocked.isEmpty ? nil : blocked.joined(separator: "; ")
   }
 
   var credentialStatusMessage: String? {

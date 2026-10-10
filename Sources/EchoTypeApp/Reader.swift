@@ -74,14 +74,17 @@ import Observation
   func run() async -> (any Error)? {
     precondition(!hasRun); hasRun = true
     var failure: (any Error)?
+    defer { runtimeLease = nil }
     do {
       try await withTaskCancellationHandler { try await read() } onCancel: {
         Task { @MainActor in self.stop() }
       }
     }
     catch { if !stopped && !Task.isCancelled { failure = error } }
-    stream?.cancel(); stream = nil
+    stream?.cancel()
     dependencies.player.stop()
+    await stream?.waitForClose()
+    stream = nil
     await dependencies.cleanup()
     if stopped || Task.isCancelled { failure = nil }
     level = 0
@@ -91,6 +94,8 @@ import Observation
     onPresentation(self)
     return failure
   }
+
+  private var runtimeLease: RuntimeLease?
 
   private func read() async throws {
     try checkStopped()
@@ -107,6 +112,8 @@ import Observation
     try checkStopped()
     guard dependencies.provider.credential.isSatisfied(by: apiKey) else { throw MissingCredential() }
     let provider = dependencies.provider
+    runtimeLease = try await provider.readiness.prepare(.readAloud)
+    try checkStopped()
     let services = await provider.readiness.check(ReadinessRequest(settings: settings, provider: provider))
     try checkStopped()
     try services.voice.requireReady()

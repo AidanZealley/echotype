@@ -4,41 +4,90 @@ import EchoTypeCore
 import ServiceManagement
 import SwiftUI
 
-/// The settings window: a tab per concern. The hotkeys apply at once; the rest apply from the
+/// The settings window: a page per concern. The hotkeys apply at once; the rest apply from the
 /// next dictation or reading.
 struct SettingsView: View {
   @Bindable var store: SettingsStore
-  /// Nil in the overlay demo, which has no controller and so no Test button.
+  /// Nil in Settings inspection and overlay demos, which have no controller.
   let controller: DictationController?
 
+  @State private var destination = "dictation"
+
   var body: some View {
-    TabView {
-      Tab("General", systemImage: "gearshape") {
-        GeneralTab(store: store)
-          .navigationTitle("EchoType Settings")
+    SettingsSplitView(title: destinationTitle) {
+      List(selection: $destination) {
+        Section("Features") {
+          Label("Dictation", systemImage: "mic").tag("dictation")
+          Label("Read Aloud", systemImage: "speaker.wave.2").tag("reading")
+        }
+        Section("Providers") {
+          ForEach(Providers.all) { provider in
+            Label(
+              provider.name, systemImage: provider.id == "local" ? "desktopcomputer" : "network"
+            )
+            .tag(provider.id.rawValue)
+          }
+        }
+        Section("App") {
+          Label("General", systemImage: "gearshape").tag("general")
+          Label("Keyterms", systemImage: "character.book.closed").tag("keyterms")
+          Label("Agents", systemImage: "terminal").tag("agents")
+          Label("About", systemImage: "info.circle").tag("about")
+        }
       }
-      Tab("Keyterms", systemImage: "character.book.closed") {
-        KeytermsTab(store: store)
-          .navigationTitle("EchoType Settings")
+      .listStyle(.sidebar)
+      .scrollContentBackground(.hidden)
+    } detail: {
+      Group {
+          switch destination {
+          case "dictation": DictationSettings(store: store, controller: controller)
+          case "reading": ReadAloudTab(store: store, controller: controller)
+          case "general": GeneralTab(store: store)
+          case "keyterms": KeytermsTab(store: store)
+          case "agents": AgentsTab()
+          case "about": AboutTab()
+          case "local": LocalSettingsPane(store: store)
+          default:
+            let provider = Providers[ProviderID(rawValue: destination)]
+            Form {
+              Section("Provider") {
+                Text(provider.summary).foregroundStyle(.secondary)
+                ProviderControls(
+                  provider: provider, settings: store.settings, offersTest: false,
+                  controller: controller
+                )
+                .id(provider.id)
+              }
+              if provider.credential == .none {
+                Section("Permissions") {
+                  Text(
+                    "No API key is required. Availability depends on this Mac's installed voices, language and permissions."
+                  )
+                  .foregroundStyle(.secondary)
+                  PermissionsRow()
+                }
+              }
+            }.settingsForm()
+          }
       }
-      Tab("Read Aloud", systemImage: "speaker.wave.2") {
-        ReadAloudTab(store: store)
-          .navigationTitle("EchoType Settings")
-      }
-      Tab("Agents", systemImage: "terminal") {
-        AgentsTab()
-          .navigationTitle("EchoType Settings")
-      }
-      Tab("Providers", systemImage: "network") {
-        ProviderTab(store: store, controller: controller)
-          .navigationTitle("EchoType Settings")
-      }
-      Tab("Updates", systemImage: "arrow.triangle.2.circlepath") {
-        UpdatesTab()
-          .navigationTitle("EchoType Settings")
-      }
+      .scrollContentBackground(.hidden)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(.regularMaterial)
     }
-    .frame(width: 460)
+    .frame(minWidth: 790, minHeight: 590)
+    .ignoresSafeArea()
+  }
+
+  private var destinationTitle: String {
+    switch destination {
+    case "dictation": "Dictation"
+    case "reading": "Read Aloud"
+    case "general": "General"
+    case "keyterms": "Keyterms"
+    case "agents": "Agents"
+    case "about": "About"
+    default: Providers[ProviderID(rawValue: destination)].name
+    }
   }
 }
 
@@ -63,36 +112,43 @@ private struct AgentsTab: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("Connect an agent to EchoType so it can read replies aloud. Run the command once in a terminal, then start a new agent session.")
+    Form {
+      Section("Connect an agent") {
+        Text(
+          "Connect an agent to EchoType so it can read replies aloud. Run the command once in a terminal, then start a new agent session."
+        )
         .font(.caption)
         .foregroundStyle(.secondary)
-      command("Claude Code", "claude mcp add --scope user echotype -- \(app) --mcp", remove: "claude mcp remove echotype")
-      command("Codex", "codex mcp add echotype -- \(app) --mcp", remove: "codex mcp remove echotype")
-      VStack(alignment: .leading, spacing: 6) {
-        HStack {
-          Text("Optional agent instructions")
-          Spacer()
-          Button("Copy", systemImage: "doc.on.doc") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(Self.agentInstructions, forType: .string)
+        command(
+          "Claude Code", "claude mcp add --scope user echotype -- \(app) --mcp",
+          remove: "claude mcp remove echotype")
+        command(
+          "Codex", "codex mcp add echotype -- \(app) --mcp", remove: "codex mcp remove echotype")
+      }
+      Section("Agent instructions") {
+        VStack(alignment: .leading, spacing: 6) {
+          HStack {
+            Text("Optional agent instructions")
+            Spacer()
+            Button("Copy", systemImage: "doc.on.doc") {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(Self.agentInstructions, forType: .string)
+            }
           }
+          Text("Paste into your agent's instructions, such as AGENTS.md.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          Text(verbatim: Self.agentInstructions)
+            .font(.caption)
+            .textSelection(.enabled)
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
         }
-        Text("Paste into your agent's instructions, such as AGENTS.md.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Text(verbatim: Self.agentInstructions)
-          .font(.caption)
-          .textSelection(.enabled)
-          .padding(8)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
-          .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
       }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(20)
-    .fixedSize(horizontal: false, vertical: true)
+    .settingsForm()
   }
 
   private func command(_ name: String, _ add: String, remove: String) -> some View {
@@ -119,64 +175,134 @@ private struct AgentsTab: View {
   }
 }
 
-private struct UpdatesTab: View {
+private struct AboutTab: View {
   private let releases = URL(string: "https://github.com/AidanZealley/echotype/releases/latest")!
 
   var body: some View {
     Form {
-      LabeledContent("Installed version") {
-        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+      Section("EchoType") {
+        LabeledContent("Installed version") {
+          Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+        }
       }
-      Link("View latest release on GitHub", destination: releases)
-      Text("Compare the version on GitHub with this one. To update, quit EchoType, download the DMG, and replace EchoType.app in Applications.")
+      Section("Updates") {
+        Link("View latest release on GitHub", destination: releases)
+        Text(
+          "Compare the version on GitHub with this one. To update, quit EchoType, download the DMG, and replace EchoType.app in Applications."
+        )
         .font(.caption)
         .foregroundStyle(.secondary)
-    }
-    .formStyle(.columns)
-    .padding(20)
-    .fixedSize(horizontal: false, vertical: true)
+      }
+      Section("Links") {
+        Link("Source code", destination: URL(string: "https://github.com/AidanZealley/echotype")!)
+        Link(
+          "Report an issue",
+          destination: URL(string: "https://github.com/AidanZealley/echotype/issues")!)
+      }
+    }.settingsForm()
   }
 }
 
 private struct GeneralTab: View {
   @Bindable var store: SettingsStore
 
-  private var provider: Provider { Providers[store.settings.dictationProvider] }
-
   var body: some View {
     Form {
-      Picker("Hotkey", selection: $store.settings.hotkey) {
-        ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { hotkey in
-          Text(verbatim: hotkey.label).tag(hotkey)
-        }
-      }
-      InputRow(store: store)
-      Picker("Language", selection: Binding(
-        get: { store.settings.language(for: provider) },
-        set: { store.settings.language = $0 }
-      )) {
-        ForEach(provider.languages, id: \.self) { language in
-          Text(verbatim: language.name).tag(language.tag)
-        }
-      }
-      VStack(alignment: .leading) {
-        Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
-        Text("Ending with a request like “reply with EchoType” sends the message")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-      LaunchAtLoginRow()
-      PermissionsRow()
-        .padding(.top, 12)
+      Section("Startup") { LaunchAtLoginRow() }
+      Section("Permissions") { PermissionsRow() }
     }
-    .formStyle(.columns)
-    .padding(20)
-    .fixedSize(horizontal: false, vertical: true)
+    .settingsForm()
+  }
+}
+
+private struct DictationSettings: View {
+  @Bindable var store: SettingsStore
+  let controller: DictationController?
+  @State private var readiness: ServiceReadiness?
+  @State private var testing = false
+  @State private var outcome: DictationController.TestOutcome?
+  private var provider: Provider { Providers[store.settings.dictationProvider] }
+  var body: some View {
+    Form {
+      Section("Provider") {
+        Picker("Provider", selection: $store.settings.dictationProvider) {
+          ForEach(Providers.all) { Text($0.name).tag($0.id) }
+        }
+        Text(provider.summary).foregroundStyle(.secondary)
+        if controller?.dictationHasCredential == false {
+          Text("Add your \(provider.name) API key on its provider page.").foregroundStyle(.red)
+        }
+        if let readiness {
+          LabeledContent("Transcription") { ServiceNote(state: readiness.transcription) }
+          if let cleanup = readiness.cleanup {
+            LabeledContent("Cleanup") { ServiceNote(state: cleanup) }
+          }
+        }
+      }
+      Section("Input") {
+        Picker("Hotkey", selection: $store.settings.hotkey) {
+          ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { hotkey in
+            Text(verbatim: hotkey.label).tag(hotkey)
+          }
+        }
+        InputRow(store: store)
+        Picker(
+          "Language",
+          selection: Binding(
+            get: { store.settings.language(for: provider) },
+            set: { store.settings.language = $0 }
+          )
+        ) {
+          ForEach(provider.languages, id: \.self) { language in
+            Text(verbatim: language.name).tag(language.tag)
+          }
+        }
+      }
+      Section("Replies") {
+        VStack(alignment: .leading) {
+          Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
+          Text("Ending with a request like “reply with EchoType” sends the message")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+
+      }
+      if let controller {
+        Section("Microphone test") {
+          Button(testing ? "Testing…" : "Test microphone") {
+            testing = true
+            Task {
+              outcome = await controller.test()
+              testing = false
+            }
+          }.disabled(testing || !controller.isIdle || controller.dictationHasCredential == false)
+          switch outcome {
+          case .heard(let text): Text(text).textSelection(.enabled)
+          case .heardNothing: Text("Nothing was heard")
+          case .failed(let error): Text(error).foregroundStyle(.red)
+          case nil: EmptyView()
+          }
+        }
+      }
+      if provider.id == "local" {
+        LocalFeatureSection(feature: .dictation, installation: store.localInstallation)
+        LocalNotices()
+      }
+    }.settingsForm()
+      .task(id: provider.id) {
+        if provider.id == "local" { await store.localInstallation.follow() }
+      }
+      .task(id: Followed(settings: store.settings, provider: provider)) {
+        await provider.readiness.follow(
+          ReadinessRequest(settings: store.settings, provider: provider)
+        ) { readiness = $0 }
+      }
   }
 }
 
 private struct ReadAloudTab: View {
   @Bindable var store: SettingsStore
+  let controller: DictationController?
   /// The voice service's state for the current settings, followed while this tab is open. Nil
   /// until the first check answers.
   @State private var voiceState: ServiceState?
@@ -190,39 +316,48 @@ private struct ReadAloudTab: View {
 
   var body: some View {
     Form {
-      Picker("Provider", selection: $store.settings.readAloudProvider) {
-        ForEach(Providers.all) { Text(verbatim: $0.name).tag($0.id) }
-      }
-      Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
-        ForEach(EchoTypeCore.Settings.Hotkey.readAloudPresets, id: \.self) { hotkey in
-          Text(verbatim: hotkey.label).tag(hotkey)
+      Section("Provider") {
+        Picker("Provider", selection: $store.settings.readAloudProvider) {
+          ForEach(Providers.all) { Text(verbatim: $0.name).tag($0.id) }
+        }
+        Text(provider.summary).foregroundStyle(.secondary)
+        if let voiceState { LabeledContent("Speech") { ServiceNote(state: voiceState) } }
+        if controller?.readAloudHasCredential == false {
+          Text("Add your \(provider.name) API key on its provider page.").foregroundStyle(.red)
         }
       }
-      if voiceState?.status != .unavailable {
-        Picker("Voice", selection: reading.voice) {
-          ForEach(provider.voice.voices) { voice in
-            Text(verbatim: voice.name).tag(voice.id)
+      Section("Reading") {
+        Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
+          ForEach(EchoTypeCore.Settings.Hotkey.readAloudPresets, id: \.self) { hotkey in
+            Text(verbatim: hotkey.label).tag(hotkey)
+          }
+        }
+        if !provider.voice.voices.isEmpty {
+          Picker("Voice", selection: reading.voice) {
+            ForEach(provider.voice.voices) { voice in
+              Text(verbatim: voice.name).tag(voice.id)
+            }
+          }
+        }
+        // A fixed rate has no choice to make and cannot supply a Slider's non-empty range.
+        if provider.voice.speedRange.lowerBound < provider.voice.speedRange.upperBound {
+          LabeledContent("Speed") {
+            HStack {
+              Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
+              Text(reading.wrappedValue.speed, format: .number.precision(.fractionLength(1)))
+                .monospacedDigit()
+                .frame(width: 28, alignment: .trailing)
+            }
           }
         }
       }
-      if let voiceState { ServiceNote(state: voiceState) }
-      // A fixed rate has no choice to make and cannot supply a Slider's non-empty range.
-      if voiceState?.status != .unavailable,
-        provider.voice.speedRange.lowerBound < provider.voice.speedRange.upperBound
-      {
-        LabeledContent("Speed") {
-          HStack {
-            Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
-            Text(reading.wrappedValue.speed, format: .number.precision(.fractionLength(1)))
-              .monospacedDigit()
-              .frame(width: 28, alignment: .trailing)
-          }
-        }
+      if provider.id == "local" {
+        LocalFeatureSection(feature: .readAloud, installation: store.localInstallation)
+        LocalNotices()
       }
     }
-    .formStyle(.columns)
-    .padding(20)
-    .fixedSize(horizontal: false, vertical: true)
+    .settingsForm()
+    .task(id: provider.id) { if provider.id == "local" { await store.localInstallation.follow() } }
     .task(id: Followed(settings: store.settings, provider: provider)) {
       voiceState = nil
       let followed = Followed(settings: store.settings, provider: provider)
@@ -260,6 +395,9 @@ private struct ServiceNote: View {
           Button("Open") { NSWorkspace.shared.open(fix) }
         }
       }
+    } else {
+      Text(state.status == .ready ? "Ready" : state.status == .waiting ? "Waiting" : "Unavailable")
+        .foregroundStyle(.secondary)
     }
   }
 }
@@ -272,61 +410,6 @@ extension EchoTypeCore.Settings.Hotkey {
     case .optionS: "⌥S"
     case .controlOptionS: "⌃⌥S"
     default: "⌥D"
-    }
-  }
-}
-
-private struct ProviderTab: View {
-  @Bindable var store: SettingsStore
-  let controller: DictationController?
-  /// The selected provider's readiness for the current settings, followed while this tab is
-  /// open. Nil until the first check answers.
-  @State private var readiness: ServiceReadiness?
-
-  private var provider: Provider { Providers[store.settings.dictationProvider] }
-
-  private var followed: Followed { Followed(settings: store.settings, provider: provider) }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Picker("Dictation provider", selection: $store.settings.dictationProvider) {
-        ForEach(Providers.all) { provider in
-          Text(verbatim: provider.name).tag(provider.id)
-        }
-      }
-      Text(verbatim: provider.summary)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      VStack(alignment: .leading, spacing: 10) {
-        // These two services are required by the Provider contract.
-        feature("Live transcription", state: readiness?.transcription)
-        feature("Read aloud", state: readiness?.voice)
-        feature("Cleanup", offered: provider.cleanup != nil, state: readiness?.cleanup)
-      }
-      ForEach(Providers.all) { configured in
-        ProviderControls(provider: configured, settings: store.settings, offersTest: configured.id == provider.id,
-          controller: controller)
-          .id(configured.id)
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(20)
-    .fixedSize(horizontal: false, vertical: true)
-    .task(id: followed) {
-      readiness = nil
-      await Providers[followed.provider].readiness.follow(followed.request) { readiness = $0 }
-    }
-  }
-
-  /// One service: its status mark and its name with the provider's message below. A service the
-  /// provider does not offer is marked grey, and one not yet checked shows progress.
-  private func feature(_ title: String, offered: Bool = true, state: ServiceState?) -> some View {
-    HStack(alignment: .top) {
-      StatusMark(status: state?.status, offered: offered)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: title)
-        if offered, let state { ServiceNote(state: state) }
-      }
     }
   }
 }
@@ -400,8 +483,9 @@ private struct ProviderControls: View {
           Button(testing ? "Testing…" : "Test") {
             Task { await test(controller) }
           }
-          .disabled(testing || writing || !loaded || !controller.isIdle
-            || !provider.credential.isSatisfied(by: savedKey))
+          .disabled(
+            testing || writing || !loaded || !controller.isIdle
+              || !provider.credential.isSatisfied(by: savedKey))
         }
       }
       messages
@@ -422,8 +506,10 @@ private struct ProviderControls: View {
         settings.dictationProvider == provider.id ? "Dictation" : nil,
         settings.readAloudProvider == provider.id ? "Read Aloud" : nil,
       ].compactMap { $0 }
-      Text(affected.isEmpty ? "This removes the saved key for \(provider.name)."
-        : "\(affected.joined(separator: " and ")) will need a new \(provider.name) API key.")
+      Text(
+        affected.isEmpty
+          ? "This removes the saved key for \(provider.name)."
+          : "\(affected.joined(separator: " and ")) will need a new \(provider.name) API key.")
     }
   }
 
@@ -459,12 +545,15 @@ private struct ProviderControls: View {
   /// means it is not masked, which a secure field would need.
   private var entry: some View {
     VStack(alignment: .leading, spacing: 8) {
-      TextField("\(provider.name) API key", text: $draft, prompt: Text(verbatim: placeholder), axis: .vertical)
-        .labelsHidden()
-        .font(.body.monospaced())
-        .lineLimit(2...4)
-        .onSubmit { Task { await save() } }
-        .disabled(writing || testing)
+      TextField(
+        "\(provider.name) API key", text: $draft, prompt: Text(verbatim: placeholder),
+        axis: .vertical
+      )
+      .labelsHidden()
+      .font(.body.monospaced())
+      .lineLimit(2...4)
+      .onSubmit { Task { await save() } }
+      .disabled(writing || testing)
       HStack {
         Spacer()
         if replacing {
@@ -475,7 +564,8 @@ private struct ProviderControls: View {
         }
         Button("Save") { Task { await save() } }
           .keyboardShortcut(.defaultAction)
-          .disabled(writing || testing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(
+            writing || testing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
   }
@@ -559,6 +649,7 @@ private struct ProviderControls: View {
 private struct KeytermsTab: View {
   let store: SettingsStore
   @State private var text: String
+  @FocusState private var editorFocused: Bool
 
   init(store: SettingsStore) {
     self.store = store
@@ -566,30 +657,42 @@ private struct KeytermsTab: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text("Separate with commas")
-        Spacer()
-        Text(verbatim: "\(store.settings.keyterms.count) of \(Providers[store.settings.dictationProvider].transcription.keytermLimit - 1) keyterms used")
-          .monospacedDigit()
-      }
-      .foregroundStyle(.secondary)
-      TextEditor(text: $text)
-        .font(.body)
-        .scrollContentBackground(.hidden)
-        // The text view already insets each line by a few points horizontally.
-        .padding(.vertical, 8)
-        .padding(.horizontal, 4)
-        .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
-        .frame(height: 120)
-        .onChange(of: text) {
-          store.settings.keyterms = text.split { $0 == "," || $0.isNewline }
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    Form {
+      Section("Vocabulary") {
+        VStack(alignment: .leading, spacing: 8) {
+          HStack {
+            Text("Separate with commas")
+            Spacer()
+            Text(
+              verbatim:
+                "\(store.settings.keyterms.count) of \(Providers[store.settings.dictationProvider].transcription.keytermLimit - 1) keyterms used"
+            )
+            .monospacedDigit()
+          }
+          .foregroundStyle(.secondary)
+          TextEditor(text: $text)
+            .focused($editorFocused)
+            .font(.body)
+            .scrollContentBackground(.hidden)
+            // The text view already insets each line by a few points horizontally.
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
+            .overlay(
+              RoundedRectangle(cornerRadius: 6).stroke(
+                editorFocused ? Color.accentColor : Color(nsColor: .separatorColor),
+                lineWidth: editorFocused ? 2 : 1)
+            )
+            .frame(height: 180)
+            .onChange(of: text) {
+              store.settings.keyterms = text.split { $0 == "," || $0.isNewline }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            }
         }
+      }
     }
-    .padding(20)
+    .settingsForm()
   }
 }
 
@@ -684,13 +787,9 @@ private struct PermissionsRow: View {
   @State private var deviceControl = false
 
   var body: some View {
-    LabeledContent("Permissions") {
-      Grid(alignment: .leading, verticalSpacing: 8) {
-        row("Microphone", granted: microphone, pane: "Privacy_Microphone")
-        // Still the Accessibility trust check, which macOS 27 names Device Control and Data
-        // Access.
-        row("Device Control and Data Access", granted: deviceControl, pane: "Privacy_Accessibility")
-      }
+    Group {
+      row("Microphone", granted: microphone, pane: "Privacy_Microphone")
+      row("Device Control and Data Access", granted: deviceControl, pane: "Privacy_Accessibility")
     }
     .onAppear(perform: refresh)
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
@@ -698,17 +797,22 @@ private struct PermissionsRow: View {
   }
 
   private func row(_ title: String, granted: Bool, pane: String) -> some View {
-    GridRow(alignment: .firstTextBaseline) {
+    LabeledContent {
+      HStack {
+        Text(granted ? "Granted" : "Not granted").foregroundStyle(.secondary)
+        Button("Open System Settings") {
+          NSWorkspace.shared.open(
+            URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
+        }
+      }
+    } label: {
       VStack(alignment: .leading) {
         Text(title)
         Text(granted ? "Granted" : "Not granted")
           .font(.caption)
           .foregroundStyle(granted ? .secondary : Color.red)
       }
-      Button("Open") {
-        let url = "x-apple.systempreferences:com.apple.preference.security?\(pane)"
-        NSWorkspace.shared.open(URL(string: url)!)
-      }
+
     }
   }
 
@@ -719,7 +823,7 @@ private struct PermissionsRow: View {
 }
 
 extension Readiness {
-  /// Reports the answer for `request` now, which starts any setup it needs, and again each time
+  /// Reports the answer for `request` now without starting setup, and again each time
   /// `changes` yields. Runs until cancelled, which drops the stream; an answer that arrives after
   /// cancellation is ignored.
   @MainActor func follow(
@@ -732,5 +836,12 @@ extension Readiness {
     }
     await report()
     for await _ in changes { await report() }
+  }
+}
+
+/// The same native grouped rows and scrolling behavior on every Settings page.
+extension View {
+  func settingsForm() -> some View {
+    self.formStyle(.grouped).font(.body)
   }
 }

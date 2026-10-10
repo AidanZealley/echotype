@@ -10,7 +10,7 @@ import Testing
 private final class FakeSource: Sendable {
   let contents: [String: Data]
   private let failing: Mutex<String?>
-  private let fetches = Mutex(0)
+  private let fetches = Mutex<[String: Int]>([:])
   let release = AsyncStream.makeStream(of: Void.self)
   private let holding: String?
 
@@ -20,13 +20,14 @@ private final class FakeSource: Sendable {
     self.holding = holding
   }
 
-  var fetchCount: Int { fetches.withLock { $0 } }
+  var fetchCount: Int { fetches.withLock { $0.values.reduce(0, +) } }
+  func fetchCount(for path: String) -> Int { fetches.withLock { $0[path, default: 0] } }
   func repair() { failing.withLock { $0 = nil } }
 
   var source: ModelDownloadSource {
     ModelDownloadSource { [self] url, destination, progress in
-      fetches.withLock { $0 += 1 }
       let path = url.lastPathComponent
+      fetches.withLock { $0[path, default: 0] += 1 }
       if failing.withLock({ $0 }) == path { throw CocoaError(.fileReadUnknown) }
       let data = contents[path]!
       if holding == path {
@@ -104,6 +105,70 @@ private func isSettled(_ state: ModelState) -> Bool {
 
     #expect(state == .failed("b.json does not match its checksum"))
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: model.directoryName).path))
+  }
+
+  @Test("Same-size corruption after relaunch is rejected before loading and retry reuses intact files")
+  func retainedIntegrity() async throws {
+    defer { cleanUp() }
+    let fake = FakeSource(contents)
+    let model = manifest(contents)
+    let first = ModelStore(root: root, source: fake.source)
+    try await first.install(model)
+    let directory = root.appending(path: model.directoryName)
+    try Data(repeating: 9, count: 100).write(to: directory.appending(path: "a.bin"))
+    let relaunched = ModelStore(root: root, source: fake.source)
+    let loads = Mutex(0)
+    let runtime = LocalModel<Int>(manifests: [model], loadingMessage: "Loading", store: relaunched) { _ in
+      loads.withLock { $0 += 1 }; return 1
+    }
+    await #expect(throws: (any Error).self) { try await runtime.prepare() }
+    #expect(loads.withLock { $0 } == 0)
+    try await relaunched.install(model)
+    try await runtime.prepare()
+    #expect(fake.fetchCount == 3)
+    #expect(runtime.loaded == 1)
+  }
+
+  @Test("Missing or truncated installed files recover intact files without fetching them again")
+  func incompleteInstalledRecovery() async throws {
+    for truncated in [false, true] {
+      let directoryRoot = root.appending(path: truncated ? "truncated" : "missing")
+      defer { try? FileManager.default.removeItem(at: directoryRoot) }
+      let fake = FakeSource(contents)
+      let model = manifest(contents)
+      let first = ModelStore(root: directoryRoot, source: fake.source)
+      try await first.install(model)
+      let damaged = directoryRoot.appending(path: model.directoryName + "/a.bin")
+      if truncated {
+        try Data([1]).write(to: damaged)
+      } else {
+        try FileManager.default.removeItem(at: damaged)
+      }
+      let relaunched = ModelStore(root: directoryRoot, source: fake.source)
+      #expect(relaunched.state(of: model) == .missing)
+      #expect(relaunched.missingBytes(model) == 100)
+      try await relaunched.install(model)
+      try relaunched.verifyInstalled(model)
+      #expect(fake.fetchCount(for: "a.bin") == 2)
+      #expect(fake.fetchCount(for: "b.json") == 1)
+    }
+    cleanUp()
+  }
+
+  @Test("Concurrent retries share corrupt-install recovery and reuse intact files")
+  func sharedCorruptRecovery() async throws {
+    defer { cleanUp() }
+    let fake = FakeSource(contents)
+    let model = manifest(contents)
+    let store = ModelStore(root: root, source: fake.source)
+    try await store.install(model)
+    try Data(repeating: 9, count: 100).write(to: root.appending(path: model.directoryName + "/a.bin"))
+    let first = store.start(model)
+    let second = store.start(model)
+    try await store.waitForInstallation(model, task: first)
+    try await store.waitForInstallation(model, task: second)
+    try store.verifyInstalled(model)
+    #expect(fake.fetchCount == 3)
   }
 
   @Test("An interrupted download is never installed, even after a relaunch, and a retry succeeds")

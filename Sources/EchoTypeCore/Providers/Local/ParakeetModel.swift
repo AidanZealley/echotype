@@ -39,7 +39,10 @@ final class ParakeetModel: Sendable {
     if let keywordSpotting {
       // Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache
       // folder, whichever way the model was loaded, so that folder points at the store's copy.
-      try linkFolder(at: CtcModels.defaultCacheDirectory(), to: keywordSpotting)
+      let tokenizerCache = CtcModels.defaultCacheDirectory()
+      try linkFolder(at: tokenizerCache, to: keywordSpotting)
+      guard tokenizerCache.resolvingSymlinksInPath().standardizedFileURL == keywordSpotting.resolvingSymlinksInPath().standardizedFileURL
+      else { throw ProviderError.failed("The Parakeet tokenizer cache belongs to another installation. Resolve the cache conflict before preparing Dictation.") }
       ctc = try await CtcModels.loadDirect(from: keywordSpotting)
     }
     let model = ParakeetModel(asr: asr, vad: vad, ctc: ctc)

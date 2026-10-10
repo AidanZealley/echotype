@@ -5,71 +5,111 @@ import Synchronization
 /// loaded runtime. A service's candidate supplies the manifests and the loader; this reports
 /// readiness. Only the candidates the provider was built with are ever prepared.
 final class LocalModel<Loaded: Sendable>: Sendable {
-  private enum Load {
-    case notLoaded
-    case loading
-    case loaded(Loaded)
-    case failed(String)
+  private struct State {
+    var loaded: Loaded?
+    var task: Task<Void, Never>?
+    var generation: UUID?
+    var failure: String?
   }
-
-  private let manifests: [ModelManifest]
-  /// Said while loading, such as "Loading the cleanup model".
+  let manifests: [ModelManifest]
   private let loadingMessage: String
-  /// Loads and warms the runtime from the installed directories, in the manifests' order.
   private let load: @Sendable ([URL]) async throws -> Loaded
   private let store: ModelStore
-  private let state = Mutex(Load.notLoaded)
+  private let state = Mutex(State())
   private let followers = Mutex<[UUID: AsyncStream<Void>.Continuation]>([:])
 
-  init(
-    manifests: [ModelManifest], loadingMessage: String, store: ModelStore,
-    load: @escaping @Sendable ([URL]) async throws -> Loaded
-  ) {
-    self.manifests = manifests
-    self.loadingMessage = loadingMessage
-    self.store = store
-    self.load = load
+  init(manifests: [ModelManifest], loadingMessage: String, store: ModelStore,
+    load: @escaping @Sendable ([URL]) async throws -> Loaded) {
+    self.manifests = manifests; self.loadingMessage = loadingMessage
+    self.store = store; self.load = load
   }
 
-  /// The runtime once it is loaded and warmed.
-  var loaded: Loaded? {
-    state.withLock { if case .loaded(let loaded) = $0 { loaded } else { nil } }
-  }
+  var loaded: Loaded? { state.withLock { $0.loaded } }
 
-  /// The service's state, starting setup the first time it is needed. `.ready` only once the
-  /// models are loaded and warmed. A failed download stays failed, since starting it again on every
-  /// check would loop while offline: `ModelStore.start` restarts failures and every state change
-  /// yields on `changes()`.
+  /// Reports status. It never starts a download or loads a runtime.
   func check() -> ServiceState {
-    let states = manifests.map { manifest in
-      var state = store.state(of: manifest)
-      if case .missing = state {
-        store.start(manifest)
-        state = store.state(of: manifest)
-      }
-      return state
-    }
-    var directories: [URL] = []
     var done: Int64 = 0
-    for (manifest, state) in zip(manifests, states) {
-      switch state {
+    var installed = 0
+    for manifest in manifests {
+      switch store.state(of: manifest) {
+      case .installed: installed += 1; done += manifest.totalBytes
+      case .downloading(let bytes, _):
+        done += bytes
+        return downloading(done: done, total: manifests.reduce(0) { $0 + $1.totalBytes })
       case .failed(let message): return .unavailable(message)
-      case .installed(let directory):
-        directories.append(directory)
-        done += manifest.totalBytes
-      case .downloading(let bytes, _): done += bytes
-      case .missing: break
+      case .missing: return .unavailable("Download models in Settings > Local.")
       }
     }
-    if directories.count == manifests.count { return startLoading(from: directories) }
-    return downloading(done: done, total: manifests.reduce(0) { $0 + $1.totalBytes })
+    guard installed == manifests.count else { return .unavailable("Download models in Settings > Local.") }
+    return state.withLock {
+      if $0.loaded != nil { return .ready }
+      if $0.task != nil { return .waiting(loadingMessage) }
+      if let failure = $0.failure { return .unavailable(failure) }
+      return .waiting("Installed. Prepare in Settings > Local, or start this feature.")
+    }
   }
 
-  /// A fresh stream that yields when a download or the load moves on.
+  /// Concurrent callers join one installed-only load. A cancelled setup cannot publish Ready.
+  func beginPreparation() throws -> Task<Void, Never>? {
+    let directories = try manifests.map { manifest in
+      guard case .installed(let directory) = store.state(of: manifest) else {
+        throw ProviderError.failed("Download models in Settings > Local.")
+      }
+      return directory
+    }
+    let task = state.withLock { state -> Task<Void, Never>? in
+      if state.loaded != nil { return nil }
+      if let task = state.task { return task }
+      let generation = UUID()
+      state.generation = generation; state.failure = nil
+      let task = Task.detached { [self] in
+        do {
+          for manifest in manifests { try store.verifyInstalled(manifest) }
+          try Task.checkCancellation()
+          let result = try await load(directories)
+          try Task.checkCancellation()
+          self.state.withLock {
+            guard $0.generation == generation else { return }
+            $0.loaded = result
+          }
+        } catch {
+          self.state.withLock {
+            guard $0.generation == generation else { return }
+            $0.failure = error is CancellationError ? nil : error.localizedDescription
+          }
+        }
+        self.state.withLock { $0.task = nil }
+        notify()
+      }
+      state.task = task
+      return task
+    }
+    notify()
+    return task
+  }
+
+  func prepare() async throws {
+    try Task.checkCancellation()
+    try await waitForPreparation(beginPreparation())
+  }
+
+  func waitForPreparation(_ task: Task<Void, Never>?) async throws {
+    await task?.value
+    try Task.checkCancellation()
+    guard loaded != nil else { throw ProviderError.failed(check().message ?? "Preparation cancelled.") }
+  }
+
+  func cancel() {
+    state.withLock { $0.generation = nil; $0.task?.cancel(); $0.loaded = nil; $0.failure = nil }
+    notify()
+  }
+
+  func release() { cancel() }
+  var preparing: Bool { state.withLock { $0.task != nil } }
+
   func changes() -> AsyncStream<Void> {
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     let id = UUID()
-    // Subscribed now, not in the task, so a change before the task starts is not missed.
     let upstream = store.changes()
     let downloads = Task { for await _ in upstream { continuation.yield() } }
     continuation.onTermination = { [weak self] _ in
@@ -80,39 +120,14 @@ final class LocalModel<Loaded: Sendable>: Sendable {
     return stream
   }
 
-  /// Both sizes in the total's unit: GB to one decimal, or whole MB under 1 GB, so a small voice
-  /// still shows its progress.
+  private func notify() { followers.withLock { for follower in $0.values { follower.yield() } } }
+
   func downloading(done: Int64, total: Int64) -> ServiceState {
     let (scale, decimals, unit) = total < 1_000_000_000 ? (1e6, 0, "MB") : (1e9, 1, "GB")
     func size(_ bytes: Int64) -> String {
       (Double(bytes) / scale).formatted(.number.precision(.fractionLength(decimals)))
     }
     return .waiting("Downloading models, \(size(done)) of \(size(total)) \(unit)")
-  }
-
-  /// Loads and warms the runtime in a task this object owns, so a provider switch does not stop it.
-  private func startLoading(from directories: [URL]) -> ServiceState {
-    let (result, begins): (ServiceState, Bool) = state.withLock { load in
-      switch load {
-      case .notLoaded:
-        load = .loading
-        return (.waiting(loadingMessage), true)
-      case .loading: return (.waiting(loadingMessage), false)
-      case .loaded: return (.ready, false)
-      case .failed(let message): return (.unavailable(message), false)
-      }
-    }
-    guard begins else { return result }
-    Task {
-      do {
-        let loaded = try await load(directories)
-        state.withLock { $0 = .loaded(loaded) }
-      } catch {
-        state.withLock { $0 = .failed(error.localizedDescription) }
-      }
-      followers.withLock { for follower in $0.values { follower.yield() } }
-    }
-    return result
   }
 }
 
