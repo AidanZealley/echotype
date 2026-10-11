@@ -1,7 +1,13 @@
 # Test harness
 
-Status: approved, 2026-10-03. Built alongside the [local models spike](../spikes/local-models/spec.md),
-which is its first consumer.
+Status: approved, 2026-10-03. Built alongside the local models spike, its first consumer. The
+[model decision record](../decisions/0026-local-model-stack.md) consolidates the findings;
+the original spike specification remains at commit `2f231b9`.
+
+The confirmed [productionization pass](local-models-productionization.md) now retires
+the bench after its final measurements, before merging. This historical direction
+does not require retaining the tool. The [testing follow-up](app-testing.md) proposes
+independent unit/integration, end-to-end and scripted evaluation tooling.
 
 ## Goal
 
@@ -309,7 +315,7 @@ On the development Mac (M1 Pro, macOS 27.2, Xcode 27.0, Swift 6.4):
 
 - **MLX links with `swift build`.** It needs Xcode's Metal Toolchain component, installed
   with `xcodebuild -downloadComponent MetalToolchain`, so the bench and app can share one
-  build. Details are in the [local models research](../spikes/local-models/research.md#downloads-licensing-and-packaging).
+  build. Details are in the [local model build notes](../local-models.md#build-and-resource-requirements).
 - **Apple services run from the command line.** Transcription, voice and cleanup all ran
   without permission prompts.
 - **Distributed notifications cross processes.** They were delivered between two

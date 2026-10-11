@@ -26,7 +26,7 @@ for bundle in "$bin"/*.bundle; do
   [[ $(basename "$bundle") == espeak-ng_data.bundle ]] && continue
   cp -R "$bundle" "$staged/EchoType.app/Contents/Resources/"
 done
-# The build plugin generates this from pinned inputs for app, bench and tests alike.
+# The build plugin generates this from pinned inputs for app and tests alike.
 pronunciation="$staged/EchoType.app/Contents/Resources/EchoType_EchoTypeCore.bundle/Contents/Resources/EnglishPronunciation.bundle"
 for required in en_dict phondata phonindex phontab intonations; do
   test -f "$pronunciation/espeak-ng-data/$required"

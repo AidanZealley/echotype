@@ -2,8 +2,8 @@ import Foundation
 import Synchronization
 
 /// One service's life in the process: the download of its pinned models, loading them, and the
-/// loaded runtime. A service's candidate supplies the manifests and the loader; this reports
-/// readiness. Only the candidates the provider was built with are ever prepared.
+/// loaded runtime. Its manifests and loader describe the supported model set; status checks
+/// report readiness without installing or preparing it.
 final class LocalModel<Loaded: Sendable>: Sendable {
   private struct State {
     var loaded: Loaded?

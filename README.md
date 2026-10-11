@@ -26,13 +26,13 @@ when you stop. Select some text and press a second hotkey to hear it read back.
   dropped while you talk. Cleanup runs whenever the selected provider supports it. Your
   words are never swapped for different ones.
 - **Keyterms.** Add names and bits of jargon so they're spelled correctly. The selected
-  provider sets the limit, currently 99 saved terms with either provider.
+  provider sets the limit, currently 99 saved terms with xAI, Apple or Local.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
   pauses. Voice and speed are remembered for each provider.
-- **Provider.** Choose a provider in Settings, see its supported features and manage its
-  API key. Both supply transcription, read aloud and cleanup. xAI is the default and needs
-  an API key. Apple is free and keeps audio and text on your Mac; Settings shows anything
-  it still needs, such as a speech model download, a voice or Apple Intelligence.
+- **Providers.** Choose Dictation and Read Aloud providers independently in Settings.
+  Dictation includes cleanup. xAI is the default and needs an API key. Apple and Local
+  need no key. Local uses Parakeet with keyterm boosting, Qwen cleanup and Kokoro speech.
+  Explicitly download and prepare each local feature in Settings before using it offline.
 - **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
   and copies it as JSON.
 - **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
@@ -51,7 +51,7 @@ when you stop. Select some text and press a second hotkey to hear it read back.
 ## Install
 
 You need macOS 26 or later, and an [xAI API key](https://console.x.ai) unless you choose
-Apple.
+Apple or Local. Local requires an Apple silicon Mac and several gigabytes for model files.
 
 1. Download the latest `EchoType-<version>.dmg` from
    [Releases](https://github.com/AidanZealley/echotype/releases/latest).
@@ -61,13 +61,28 @@ Apple.
 4. Allow **Device Control and Data Access** (Accessibility on older versions of macOS)
    when asked. EchoType needs it for the hotkeys and to paste text.
 5. Click the waveform icon in the menu bar, choose **Settings…**, and paste your key into
-   the **Provider** tab with xAI selected. **Save** keeps it in the Keychain. Or select
-   Apple, which needs no key. **Test** records five seconds and shows what it heard.
+   the **Providers → xAI** page. **Save** keeps it in the Keychain. Choose providers on
+   **Dictation** and **Read Aloud**. Apple needs no key. For Local, use its feature's
+   **Download** button to install and prepare the required models. Selecting Local alone
+   does not download anything. **Test** records five seconds and shows what it heard.
 6. Press <kbd>⌥</kbd><kbd>D</kbd> in any text field and start talking. macOS asks for
    microphone access the first time.
 
 If another app already uses <kbd>⌥</kbd><kbd>D</kbd> or <kbd>⌥</kbd><kbd>S</kbd>, switch
 to the <kbd>⌃</kbd><kbd>⌥</kbd> version in Settings.
+
+### Local storage and uninstalling
+
+Switching providers retains downloaded models and saved keys. Settings shows installed
+files separately from prepared runtimes. Initial preparation can take tens of seconds;
+Cancel and Retry retain verified files without silently installing missing models.
+
+Before uninstalling, open **Providers → Local → Manage files** and remove the model sets
+or all local files. Stop active work first. Dragging the app to Trash leaves model files in
+`~/Library/Application Support/EchoType/Models/`. If the app is already removed and no
+process uses those files, delete that directory to reclaim its managed models. Preserve
+other tools' FluidAudio and Core ML caches. [Storage notes](docs/local-models.md) list
+owned links and remaining public-release obligations.
 
 ### Updating
 
@@ -133,6 +148,10 @@ The code is split into `EchoTypeCore`, which holds the session, protocol and set
 logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.
 [`docs/decisions`](docs/decisions/README.md) records why things work the way they do, and
 [`docs/releasing.md`](docs/releasing.md) covers packaging a DMG for release.
+
+The [local model decision](docs/decisions/0026-local-model-stack.md) records the chosen
+stack and measurements. [Local model setup and storage](docs/local-models.md) describes
+the confirmed productionization behavior and remaining release checks.
 
 To add a provider, create `Sources/EchoTypeCore/Providers/<Name>/` with its description
 and service adapters, give it a readiness check if a Mac's setup can rule its services

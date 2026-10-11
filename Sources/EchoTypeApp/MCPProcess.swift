@@ -18,7 +18,8 @@ import EchoTypeCore
   }
 
   private static func deliver(_ text: String) throws {
-    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.aidanzealley.echotype")
+    guard let app = NSRunningApplication.runningApplications(
+      withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.aidanzealley.echotype")
       .first(where: { $0.processIdentifier != getpid() && !$0.isTerminated })
     else { throw SpeechDelivery.Failure.unavailable }
     try SpeechDeliveryClient.deliver(text, target: app.processIdentifier)

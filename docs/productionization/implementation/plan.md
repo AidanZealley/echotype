@@ -22,7 +22,7 @@ Status: approved by Aidan on 2026-10-09; execution in progress.
 | 1 | [Production speech packaging](01-speech-packaging.md) | Approved workflow | Accepted |
 | 2 | [Feature provider selection](02-feature-providers.md) | 1 | Accepted |
 | 3 | [Explicit local setup and native Settings](03-local-setup-settings.md) | 2 | Accepted |
-| 4 | [Pruning and combined validation](04-pruning-validation.md) | 3 and UI gate | Not started |
+| 4 | [Pruning and combined validation](04-pruning-validation.md) | 3 and UI gate | Accepted |
 | Final | [Whole-feature review](final-review.md) | 1–4 | Not started |
 
 ## Why these boundaries
@@ -100,12 +100,247 @@ removal and combined-memory checks have recorded evidence, not just bench infere
 | Gate | Owner / placement | Status | Candidate and instructions | Evidence / resume condition |
 | --- | --- | --- | --- | --- |
 | Native Settings judgment | Aidan; stream 3 after closure, before acceptance | Accepted, 2026-10-10 | Signed `.build/local-productionization/EchoType.app`, executable SHA-256 `35414727620eb844958740124043b90acde3604e3910857ee400183074c52e40`; exact standard AppKit `.space` between split tracking separator and title | Final user conditional approval fulfilled. Actual Light/Dark spacer verified; fresh independent review and focused closure pass. Current provenance is `stream3-spacer-verification.json` |
-| Signed-app functional evidence | Stream 4 lead; before acceptance | Pending | Same signed build; isolated owned test storage, installed chosen models, offline and mixed-provider checks | Record paths/configuration, outcomes, memory/load limitations and cleanup safety. Missing hardware/access evidence blocks acceptance |
+| Signed-app functional evidence | Stream 4 lead; before acceptance | Accepted, 2026-10-11 | Reviewed unchanged R1 signed candidate; approved native UI unchanged | Physical Local capture and user shortcut commit produced actual TextEdit insertion and idle settlement. Earlier mixed-provider, offline audible speech, physical Escape, preparation and removal evidence is retained. Fresh independent evidence review and closure pass. PID 62901 preserved; paid scope exhausted |
 | Public release hold | Stream 4 records; before any future publication | Pending | Parakeet provenance/notice handling and eSpeak combined-program licensing/source obligations | Explicit evidence before public release. May remain pending for a local implementation merge; no publishing is authorized |
 
 ## Escalations
 
-None.
+None. The public release hold remains in the gate table.
+
+## Resolved S4-FUNCTIONAL-01 history: Signed-app functional evidence
+
+- Resolved on 2026-10-11. Aidan reported retained Ready with no error, then Recording
+  during coordinated physical admission. Actual PID 62901 input start/stop logs, active
+  disabled Test microphone, the user-operated commit shortcut, fresh dictated text in
+  the formerly blank Untitled 2 and subsequent idle controls establish actual Local
+  capture and app insertion. No agent paste or synthetic shortcut ran.
+- The next Dictation shortcut commits by design. Silence renders Paused while audio
+  streams; automatic insertion after silence was never an acceptance requirement.
+  The new paragraph's exact fidelity remains unmeasured. The stale 19:00 trace and
+  prior manual clipboard recovery are not used to prove this result.
+- Earlier independently reviewed evidence closes the remaining mixed-provider, offline
+  speech, visible preparation, setup cancellation/retry, captured-provider protection,
+  physical Escape, lease settlement and disposable removal checks. Physical Dictation
+  plus MCP speech satisfy the required entry paths; successful Local selection-reading
+  hotkey playback is not claimed. Fresh evidence review and focused closure have no
+  Required finding. This resolves the gate without source correction or repeated build.
+- Retain the signed offline PID, user devices, production app, credentials and dictated
+  target content. Paid authorization is exhausted. No merge or publication is authorized.
+  The records below are historical recovery states, superseded by this resolution.
+
+
+- Current resume condition, 2026-10-11: preserve offline PID 62901, parent 25015 and
+  original 08:46:42 BST start. Both providers are Local, Dictation and Read Aloud Ready.
+  Actual General permission API outputs report Granted. Audible offline Local completion,
+  captured-provider lease retention and physical Escape with settled lease controls pass.
+  Restoration/cancellation evidence closure and fresh insertion diagnosis have no findings.
+- Automatic Local insertion remains blocked. Aidan reports the controlled retry stayed
+  blank after recording and keeping TextEdit active for 30 seconds; AX/screenshot confirms
+  the blank target. Last Dictation still contains the earlier known sentence, with verified
+  JSON start/end 19:00:32–19:00:40 UTC, predating controlled retries. Recent actual-PID input
+  logs establish no new capture. An unadmitted hotkey or startup before trace creation
+  remains possible. Do not infer a transport bug or send another blind recording.
+- The immediate missing evidence is the exact first retained waveform-menu status/error.
+  The orchestrator asked for that once after reading the existing trace. Startup can
+  preserve the old trace and retain an error while returning idle. Current evidence is
+  `stream4-local-controlled-insertion-oct11.json`, `stream4-retained-dictation-trace-oct11.json`,
+  restoration/cancellation JSON and packet 04's latest review/attribution sections.
+  All paid scope is exhausted. No further capture, restart, TCC/device change or speculative
+  source fix is justified by the stale trace. Earlier launch gates below are historical.
+- Decision needed: report the retained waveform status/error so the lead can distinguish
+  admission/startup failure before completing the automatic insertion gate. No relaunch
+  or additional paid authorization is needed for that read-only diagnosis.
+- Options: read the requested existing status and resume focused diagnosis, or leave the
+  required functional gate blocked with current process and evidence preserved.
+- Recommendation: use the existing prepared candidate. Preserve actual permission and
+  device choices; do not reset TCC, change entitlements, restart or repeat paid speech.
+- Candidate: HEAD `868f5ea3e839f3510afa68a9aef3eb7966f100b5` plus reviewed uncommitted
+  stream 4 changes. Production `.build/local-productionization/EchoType.app` SHA-256
+  `9f7b3e252eb37777892a59a4e3ec6196e05067dc036b650cfbab91fffabbd6ca`.
+  Isolated `.build/local-productionization/Stream4ValidationR1.app` SHA-256
+  `a5e98f2f68df68fa9585e1068d28a4d88e52719665be4fc2cd0c4a4384c0721b`, bundle id
+  `com.aidanzealley.echotype.stream4-validation-offline`. Source/package/test provenance is
+  `.build/local-productionization/stream4-candidate.json`.
+- Historical launch gate: Aidan quits only the isolated Stream4ValidationR1 app, current
+  PID 9478, using its own Quit command or Cmd-Q while that app is active. Preserve the live
+  production app and all other windows/processes. In the same Ghostty terminal used for
+  PID 2033, run `cd /Users/aidanzealley/code/echotype` then
+  `./.build/local-productionization/launch-stream4-r1-network.sh`. This retains guarded
+  owned preferences, models, Keychain service and every user-root denial. The isolated
+  key is already provisioned. Direct Finder launch fails closed; assistant-shell launch
+  reproduces the responsible-app rejection. Retain the offline script for later Local checks.
+- Before any capture: inspect General for Microphone Granted, retain the new PID and
+  confirm Ghostty attribution with a targeted TCC preflight query. If still Not granted,
+  stop and retain evidence without altering access. In Settings > Local, explicitly Prepare
+  Dictation and wait for Ready using the restored verified files. This separates preparation
+  from later real input. Coordinate the spoken phrase and disposable input target before
+  any physical Ctrl+Option+D. Only the one authorized 5–10-second paid Dictation plus its
+  normal cleanup remains available. No further paid speech request is authorized.
+- Resume procedure after authorization: retain the offline script for Local checks, prepare
+  a separate bounded network-enabled launch retaining owned storage and denied user roots
+  for xAI checks, copy only verified Dictation model assets back into disposable storage,
+  explicitly Prepare in Settings, then test Ctrl+Opt+D/S in a disposable input target.
+  Record successful xAI Dictation/Local Read Aloud and reversed Local Dictation/xAI Read
+  Aloud, including MCP speech, captured-provider changes and settled playback/cancellation.
+  Never treat the current network-denial sandbox as a successful paid-provider test.
+- Evidence: independent review complete; S4-R1 corrected and fresh focused closure passes.
+  Final tests pass 164 Core/88 App; release packaging completes in 101.72 seconds; both
+  signatures and source identity checks pass. Offline setup/cancel/retry, combined
+  process footprint and disposable removal evidence are retained in packet 04. R1
+  actual app demonstrates visible installed-only speech preparation without stale Ready
+  feedback. MCP admission alone does not prove playback completion or cancellation.
+- Resume preflight on 2026-10-10: preserved user-relaunched validation PID 2033 while
+  Aidan configures it. The current Apple page reports Microphone Granted and Device Control
+  and Data Access Granted. Non-prompting isolated-service metadata finds an xAI item without
+  returning credential data. Network launch is prepared as
+  `.build/local-productionization/launch-stream4-r1-network.sh`; it preserves the owned home,
+  guarded namespace and every original user-root denial. No paid call ran. Current 74
+  source/package hashes match. Evidence is `stream4-functional-resume-preflight.json`.
+  Pending user coordination is completion of configuration and two short spoken phrases,
+  one for paid Dictation and one for Local Dictation, in a disposable input target.
+  Permission/key presence alone does not close the functional gate.
+- Bounded session result on 2026-10-10: owned PID 2033 restarted with the unchanged
+  network script as PID 9478. CUA start/stop Ctrl+Opt+D presses eight seconds apart inserted
+  two U+0004 control characters into a new disposable TextEdit target, with no capture,
+  transcript or paid Dictation admission evidence. The target is cleared. General now
+  reports Microphone Not granted, Device Control and Data Access Granted. No TCC change
+  occurred. Physical-hotkey diagnosis is pending through the orchestrator.
+- Exactly one xAI sentence, `This is a short speech check.`, was admitted through isolated
+  MCP with Local Dictation/xAI Read Aloud selected. Re-enabled Test microphone establishes
+  controller idle/settlement, not audible success. Aidan's audibility outcome is pending;
+  this paid attempt must not be repeated. Paid Dictation remains unused because capture
+  was not established. All 36 restored disposable Dictation files and current 74 source
+  hashes verify. Evidence is `stream4-functional-restored-assets.json`,
+  `stream4-functional-xai-reading.json` and `stream4-functional-bounded-attempt.json`.
+  No source/UI change or extra paid request ran. Current PID 9478, blank target and
+  Local Dictation/xAI Read Aloud selection are preserved pending user outcomes. Further
+  capture/provider changes must wait; final free Local checks use the offline launch.
+- User outcomes for that bounded session: Aidan's physical Ctrl+Option+D reached a
+  `Starting` state, remained there, and Escape was pressed. Subsequent presses eventually
+  showed a Microphone access not granted error. No inserted Dictation result is confirmed.
+  Aidan heard no xAI sentence, with earbuds connected to two devices, so audibility is
+  unverified rather than a confirmed provider failure. Do not repeat the paid speech attempt.
+  Diagnose the isolated launch/permission attribution and starting/cancellation state using
+  existing evidence and non-capturing checks before further live capture. Preserve devices,
+  TCC, credentials and the approved UI; do not infer a functional pass.
+- Latest physical outcome, 2026-10-10: Aidan reports `Ok I manually did a ctrl+opt+D
+  dictation into an active text edit and it worked`. Read-only inspection preserves
+  Ghostty PID 19185 and confirms xAI Dictation/Local Read Aloud, active hotkeys,
+  xAI Ready and enabled Test microphone. Its existing disabling rule proves idle
+  settlement. Successful physical insertion is user evidence; no per-operation provider
+  trace, exact transcript or cleanup quality was inspected. The existing network log
+  is empty. Evidence is `stream4-physical-dictation-result.json`.
+- Both bounded paid allowances are now consumed. Do not repeat paid Dictation or
+  speech under the earlier authorization. Earlier claims that paid Dictation was unused
+  describe incomplete historical evidence and are superseded by this result.
+- Remaining functional gates are successful Local Read Aloud through hotkey/MCP,
+  reverse Local Dictation/xAI Read Aloud with audible completion, installed offline
+  operation, captured-provider switching and settled playback/cancellation with lease
+  release. The prior paid reading was unheard; a user decision is required before
+  repeating it. Preserve the current Ghostty launch and user apps pending coordination.
+  No capture, inference, paid request, focus, source/settings change or restart ran
+  during this diagnosis. Stream 4 remains Blocked; functional acceptance is not claimed.
+- Unblocks: stream 4 functional acceptance and its scoped commit, then whole-feature review.
+  Native Settings approval is already Accepted. Public-release licence/provenance and
+  signing/notarization holds remain separate and do not authorize publication.
+- Latest continuation decision: after clarification of workflow status and unnecessary
+  manual terminal coordination, Aidan says `Ok let's continue`. Use computer use to
+  operate a fresh Ghostty shell tab, verify the isolated process and perform the offline
+  launch/setup. User input is needed only for coordinated spoken Dictation and audible
+  outcome confirmation. No additional paid call is authorized.
+- Oct11 continuation: after the absent isolated process was established, Aidan
+  reports `done` for running the offline launcher at a Ghostty shell prompt.
+  Verify the new isolated process and permission state, then resume free Local checks.
+- Oct11 physical Local Dictation outcome: Aidan says `I missed it happening but no
+  text is showing in untitled 2`. No successful insertion is established. Inspect
+  current app/target read-only before any repeat recording, without inferring
+  capture or failure from an empty document alone.
+- Last Dictation diagnostic coordination: after initially selecting the wrong menu,
+  Aidan confirms `Clicked wrong thing. It's open now`. Inspect the open isolated
+  Last Dictation window read-only before any recording retry.
+- Coordinated physical Local retry outcome: after explicit NOW instructions using
+  `This is a short local dictation test.`, Aidan confirms `Recording started, I
+  spoke and stopped it`. Inspect output/trace and settlement before marking success.
+- Trace correlation answer: Aidan confirms `Yes, roughly right; TextEdit was active`
+  for the rendered transcript `Hello, Tailwind to my computer again, isn't this fun?`
+  and clicking Untitled 2 before the shortcut. Transcription matches actual speech;
+  blank target despite attempted paste needs diagnosis rather than a focus assumption.
+- Local reading outcome: Aidan says `I think it worked but I was changing audio
+  device part way. Please try again`. Repeat the same short free Local sentence,
+  preserving user-chosen device settings. Audible completion is not yet confirmed.
+- Repeat Local reading result: Aidan confirms `Yes, heard the full sentence` for
+  `This is a short offline speech check.` Audible offline Local completion is confirmed.
+- Escape scenario user outcome: Aidan missed the cancellation prompt, then selected
+  text and invoked Read Aloud himself. Screenshot shows NSPOSIXErrorDomain Code 1,
+  `Operation not permitted` from a URLSession task. The prior lead retained xAI
+  as next Read Aloud after provider-switch testing in the network-denied app.
+  This new user request cannot demonstrate Local failure or successful cancellation.
+  Restore Local Read Aloud, verify settlement and retain the unverified Escape gate.
+- Subsequent coordinated Local cancellation: after `Ready now` and a fresh local
+  reading notice, Aidan confirms `Yes, stopped when I pressed Escape`. Verify current
+  controller idle and freshly opened storage controls to close cancellation/lease evidence.
+- Controlled insertion follow-up: Aidan says `Try again and I'll make sure I stay
+  in it`. Re-establish the disposable target and coordinate another physical Local
+  check, keeping TextEdit active through processing. Prior controlled attempt is unconfirmed.
+- Controlled retry result: Aidan reports `Still blank after 30 seconds` after the
+  physical recording instructions and keeping TextEdit active through processing.
+  Diagnose this attempt and validation-specific automatic-paste permissions/transport;
+  no successful automatic insertion is established and no further blind retry is needed.
+- Retained waveform status answer: Aidan reports exact first line `Ready`.
+  No retained startup error is observed. Verify live recording admission separately
+  from stop/insertion on the next coordinated check, rather than another blind full retry.
+- Confirmed live recording outcome: Aidan reported `Recording`, then after the stop
+  instructions said `I saw the text appear in the dictaiton box but I had to use the
+  shortcut to commit it myself`. The lead observes actual dictated text in Untitled 2
+  and controller idle, with no agent paste. Check intended review/commit shortcut
+  semantics; do not impose automatic insertion after pause if commit is designed separately.
+- Latest manual launch result after computer-use refusal: Aidan reports
+  `kill: kill 19185 failed: no such process` and EchoType Settings opened just after.
+  The old PID was already absent; verify the new offline process and attribution
+  before continuing Local setup and coordinated physical input.
+- Native automation blocker, 2026-10-10: fresh shell inspection at 19:32:45 BST
+  confirms network PID 19185, parent 19159, unchanged start 18:38:25 and foreground
+  process group 19185 on Ghostty `ttys004`. CUA lists running Ghostty, but
+  `cua.getApp('com.mitchellh.ghostty')` rejects access with `Computer Use is not
+  allowed to use the app 'com.mitchellh.ghostty' for safety reasons.` No native
+  terminal action, termination or offline launch occurred. The authorized computer-use
+  recovery cannot proceed through this tool. Resolve Ghostty tool access or provide an
+  authorized launch route that retains its working responsible-app attribution. The
+  recommendation is to resolve the tool restriction. Do not retry user terminal loops,
+  launch through T3 Code, bypass the restriction or infer offline operation. Evidence
+  is `.build/local-productionization/stream4-native-ghostty-blocker.json`. This blocks
+  offline functional validation, stream 4 acceptance and Final; earlier reviews remain
+  valid. User answer for this new tool-access blocker is pending.
+- Latest user authorization: after being told the unheard xAI reading requires approval
+  to repeat, Aidan answered `Ok repeat`. Authorize exactly one additional reading of
+  `This is a short speech check.` No additional paid Dictation, long reading or bulk
+  comparison is authorized. Continue remaining free Local validation afterward.
+- User result for the authorized repeat: Aidan answered `Yes, heard the full sentence`
+  when asked whether he heard `This is a short speech check.` Audible xAI playback
+  is confirmed. The additional single-sentence allowance is now consumed.
+- Offline relaunch coordination: Aidan answered `Yes, I think` when asked whether
+  the isolated app was relaunched with the offline script in Ghostty. Lead must
+  verify the current process, offline profile and microphone access before capture.
+- Aidan subsequently confirms `Yes, it reopened` after the exact Ghostty commands
+  stopping isolated PID 19185 and running the offline launcher. Verify the new
+  process and permission state, then continue free Local validation.
+- User answer: Aidan now reports Microphone Granted after launching the network script
+  from Ghostty. Preserve that launch attribution; do not restart from T3 Code.
+  Aidan now confirms `Yes, finish setup now` after automation paused for human activity.
+  The lead may finish provider selection and focus the disposable TextEdit target while
+  preserving the current Ghostty-launched process. Coordinate physical capture afterward.
+  Aidan reports microphone permission is probably granted; verify it in the
+  isolated app without altering TCC. Aidan authorizes short paid functional checks, not long
+  voice-quality comparison readings or spending toward a US$1 target. Bound this session to
+  one 5–10-second xAI Dictation and one single-sentence xAI Read Aloud, with required normal
+  cleanup requests for that dictation. No long readings, bulk comparisons or repeated paid
+  trials. Keep xAI credentials isolated and require user provisioning if absent. Run remaining
+  local checks without paid calls. Record results; unresolved access remains a gate.
+  Aidan subsequently confirms: `Yes, key entered and app ready`. Configuration is complete
+  and the isolated app may be controlled/restarted for the authorized bounded checks.
+  Coordinate microphone capture with Aidan before each short dictation so actual spoken input
+  is available. Do not ask for the already-provided key or repeat spending approval.
+
 
 ## Resolved S3-UI-01 history: Native Settings acceptance
 
@@ -217,6 +452,12 @@ The following retains the earlier requests and candidate history; they are not c
   require focused review as the lead guide specifies. Work remains uncommitted while blocked.
 
 ## Conventions learned
+
+- Live Dictation evidence must distinguish admission, physical commit and observed target
+  delivery. Silence only pauses presentation; it does not commit. A stale trace cannot
+  attribute a retry, and paste attempted is weaker than fresh target delivery. Coordinate
+  start and commit separately when admission is uncertain; never infer a transport fix
+  from a blank target without an admitted operation.
 
 - Kokoro loads its public FluidAudio model store directly; do not call manager.initialize,
   which fetches unused English G2P. Check the internal repository link resolves to the
@@ -345,3 +586,118 @@ The following retains the earlier requests and candidate history; they are not c
 - Stream 3 accepts its lifecycle/setup/storage, production Settings source/tests and packet/plan records in one scoped commit. Only Parakeet's tokenizer-cache conflict guard is staged; its original timing instrumentation stays dirty for stream 4. README, main demo dispatch, SettingsDemo, test-harness follow-up, consolidated docs/specification and spike deletions retain stream 4 or recorded ownership. Final specification toolbar text is handed to stream 4 with that document.
 - Current signed safe inspection bundles are `SpacerSettingsInspectionLight.app` and `SpacerSettingsInspectionDark.app`. User-owned PIDs 75712/75743 remain open; earlier bundles and observed user processes are untouched. No real setup, download, removal, provider/settings edit, Keychain action, merge or publication occurred during final UI verification.
 - Stream 4 may now begin pruning/demo retirement and required signed production-app offline, mixed-provider, loading, cancellation, removal and combined-memory validation. Controller-disabled Settings copies do not establish that functional gate. Public-release obligations remain the existing explicit hold. No specification drift.
+
+## Stream 4 start and ownership, 2026-10-10
+
+- Base is `868f5ea3e839f3510afa68a9aef3eb7966f100b5`. Accepted streams and final native toolbar contract remain frozen.
+- Adopt remaining Parakeet timing, README/main demo dispatch, SettingsDemo removal and authorized 29 spike-document deletions. Own candidate/dependency pruning and assigned productionization/spec documentation. Preserve app-testing.md, qwen-tts-follow-up.md and unrelated test-harness trial text unless explicitly needed by the packet.
+- Begin with installed-model/corpus and isolation inventory. Keep the bench until required evidence is recorded. No silent download, production application access, user credentials/cache/preference mutation or user-process termination is authorized.
+- Sequential fresh implementation and independent review follow the guide. Signed production-app functional evidence is required before acceptance; a packaging validation host cannot substitute.
+
+- Stream 4 implementation and pre-retirement measurements are complete. Post-retirement 164 Core/87 App tests and signed release pass. Source is frozen for independent review; isolated real-controller UI/MCP validation has established cancellation/retry and live speech removal protection, while required microphone/paid-provider evidence remains pending.
+
+- Stream 4 recovery on 2026-10-10 found a complete durable independent review. S4-R1 is accepted for one bounded correction at the earlier-owner Settings status seam. PID 95594 is absent, so no process was terminated; interrupted long-reading completion remains unproven. The signed functional gate remains required.
+
+- Stream 4 recovery closure passed with no findings after the authorized earlier-owner status
+  correction. Ready now derives only from readiness; success messages are not duplicated.
+  Final R1 signed actual app confirms Ready to Installed after provider unload without stale
+  success text. A fresh MCP replacement settles and releases file-removal protection, but
+  Escape/real hotkey and paid mixed-provider completion remain unproven. Owned PID 95327 is
+  idle on Local. General shows Microphone Not granted, Device Control/Data Access Granted.
+  Stream 4 is Blocked on S4-FUNCTIONAL-01, with no acceptance commit or downstream Final start.
+
+
+## Stream 4 bounded functional session, 2026-10-10
+
+- Aidan confirmed the isolated key and readiness. The orchestrator coordinated speech
+  before the single synthetic capture attempt. No capture was established; the two hotkey
+  presses reached TextEdit as control characters. Permission labeling changed after the
+  owned network-script restart, without permission mutation. Physical-hotkey diagnosis
+  remains pending. The signed candidate and 74 source/package hashes are unchanged.
+- One single-sentence xAI MCP reading was admitted and settled. Audible success remains
+  pending user evidence and no repeat paid call is allowed. Verified disposable Dictation
+  files were restored from read-only originals, without setup or inference overlap.
+- Packet 04 records exact limitations and safe current state. Stream 4 remains Blocked on
+  S4-FUNCTIONAL-01. Earlier technical review/closure and tests remain valid. No acceptance
+  commit or Final review is claimed, and no production/user-root/TCC mutation ran.
+
+- Read-only access diagnosis establishes why permission changed across launches. TCC
+  attributed user PID 2033 to Ghostty with microphone authValue 2. It attributes assistant
+  PID 9478 to T3 Code Nightly and explicitly rejects that responsible app's missing
+  audio-input entitlement, returning authValue 0/authReason 5. Validation app entitlement
+  is present. Network/offline profile difference is only network denial, and neither
+  executable nor redirected home changed. This is an access gate, not a proven app defect.
+- Physical hotkey reaches actual Starting. Source displays Starting before credential,
+  preparation and permission stages; Escape cancels presentation immediately while startup
+  ownership settles after awaited work. No captured audio or insertion is inferred. No
+  paid speech retry is allowed. The existing network log contains no playback evidence.
+- User-terminal NETWORK launch steps and non-capturing preflight/explicit Prepare are
+  recorded in S4-FUNCTIONAL-01. Preserve current PID 9478 for Aidan to quit. No source fix,
+  app control, microphone prompt/capture, paid call, TCC or audio-device change occurred.
+  Earlier signed-candidate tests/review remain valid; no unchanged build was repeated.
+- Fresh independent diagnosis review verified TCC, entitlements, isolation profile and
+  source cancellation sequencing with no Required finding. Durable evidence is
+  `.build/local-productionization/stream4-access-diagnosis.json`. This does not clear
+  required real-app output or the consumed, unheard paid reading. Stream 4 stays Blocked.
+- Fresh focused closure passes after narrowing packet 04's log wording to the retained
+  result at 18:29:51. No source finding remains and no unchanged build was required.
+  The user-terminal access gate and functional evidence remain required.
+
+
+## Stream 4 Ghostty launch recovery, 2026-10-10
+
+- Exact user-launched validation PID 19185, parent zsh PID 19159, is preserved. Read-only
+  General shows both microphone and Device Control/Data Access Granted. The attribution
+  gate is resolved for this process; actual capture and insertion remain required.
+- Explicit installed-only Local Dictation Prepare settled to Ready. All 74 source hashes
+  match, isolated key metadata is present and native Ctrl+Option+D is confirmed.
+- CUA reported human activity during provider selection, so the lead stopped UI actions.
+  Owned preferences still show Local Dictation/xAI Read Aloud. No capture or paid request
+  ran. Orchestrator coordination is required before target/provider setup resumes.
+- Stream 4 remains Blocked on S4-FUNCTIONAL-01. The paid reading remains consumed,
+  unheard and unverified. No repeat or functional waiver is inferred.
+
+
+## Stream 4 physical input handoff, 2026-10-10
+
+- Latest user outcome: Aidan reports the open TextEdit window is empty and did not
+  observe the pill closely enough to identify recording, processing or an error.
+  This is no successful insertion evidence. The orchestrator explained the expected
+  click/start/wait/speak/stop sequence and asked him to hold off on another attempt
+  pending read-only diagnosis. No additional paid request is authorized by this report.
+- Subsequent user outcome: `Ok I manually did a ctrl+opt+D dictation into an active
+  text edit and it worked`. This supplies successful physical Dictation/insertion
+  evidence. Lead checks current provider attribution and settlement read-only;
+  no repeat paid Dictation is needed or requested.
+
+- Aidan authorized completing setup with `Yes, finish setup now`. Ghostty PID 19185,
+  parent zsh PID 19159, start 18:38:25 remains preserved. Owned preferences are now
+  xAI Dictation and Local Read Aloud. Installed-only speech Prepare settled Ready
+  with Zero KB download. xAI Dictation shows Ready; enabled Test microphone proves
+  controller idle without invoking it. No new capture or paid request was initiated.
+- TextEdit `Untitled`, blank `First Text View`, is focused for physical Ctrl+Option+D.
+  The phrase is `EchoType turns this short sentence into text. I am testing the
+  microphone once.` The orchestrator supplied 5–10-second start/speak/stop instructions.
+- No user outcome has arrived. Read-only observations show no inserted output. This
+  does not prove an attempt occurred or consume the paid Dictation allowance. Preserve
+  the ready target and process until Aidan reports the result.
+- Stream 4 remains Blocked on S4-FUNCTIONAL-01. Actual input/insertion/settlement,
+  the remaining free Local checks and the consumed unheard paid reading remain
+  concrete functional gates. No acceptance commit or downstream Final review starts.
+
+
+## Stream 4 acceptance and Final handoff, 2026-10-11
+
+- Stream 4 is Accepted. Pruning and bench retirement, recorded combined-set evidence,
+  unchanged signed candidate checks, S4-R1 remediation, independent technical closure
+  and the final signed-app functional evidence are complete. Fresh live-evidence review
+  and focused closure have no Required findings. S4-FUNCTIONAL-01 is resolved above.
+- Read-only final provenance matches all 74 source/package hashes, two remediation test
+  hashes and both signed executable hashes. Existing 164 Core/88 App test and release
+  verification remain valid; no source change required another build or inference run.
+- Drift: bounded signed validation identity/home isolation was adopted and independently
+  reviewed to preserve real credentials/preferences/models. Product architecture, native
+  UI and model pins did not change. Public-release obligations remain a separate hold.
+- Final may now begin its required whole-feature review against the recorded starting
+  commit and main comparison base. Preserve unrelated dirty work, the user's dictated
+  TextEdit content and the offline R1 PID. No merging or publication is authorized.

@@ -50,11 +50,11 @@ struct EchoTypeApp: App {
 
   var body: some Scene {
     Window("EchoType Settings", id: "settings-inspection") {
-      SettingsView(store: store, controller: nil)
+      SettingsView(store: store, controller: Bundle.main.isIsolatedValidation ? controller : nil)
         .onAppear { presentWindow {} }
     }
     .defaultSize(width: 790, height: 590)
-    .defaultLaunchBehavior(Self.inspectingSettings ? .presented : .suppressed)
+    .defaultLaunchBehavior(Self.inspectingSettings || Bundle.main.isIsolatedValidation ? .presented : .suppressed)
     .restorationBehavior(.disabled)
     .commandsRemoved()
     MenuBarExtra(isInserted: .constant(!Self.inspectingSettings)) {

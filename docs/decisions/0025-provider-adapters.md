@@ -15,29 +15,30 @@ meant editing each of them.
 - A `Provider` describes one provider: its `id`, `name`, one-line `summary`, `credential`
   and its services. Transcription (`TranscriptionService`) and read aloud
   (`VoiceService`) are required; cleanup (`CleanupService`) is optional, and a provider
-  without it inserts uncleaned text. The user picks one provider and it supplies every
-  service; services are never split across providers. The contracts, `ProviderError` and
+  without it inserts uncleaned text. The user independently selects Dictation and Read
+  Aloud providers. Dictation keeps transcription and cleanup together. The contracts, `ProviderError` and
   the description live in `Sources/EchoTypeCore/Providers/Provider.swift`, following
   [0019](0019-native-macos-app-and-core-boundary.md).
 - `Providers.all` in `Providers/Providers.swift` lists every provider in Settings order; the
   first is the default. `Providers[id]` gives the provider with that id, or the default for
-  an unknown one. It lists xAI, the default, then Apple.
-- `Settings.provider` only chooses a provider. The app reads the selected provider with
-  `Providers[settings.provider]` from the settings snapshot each dictation, Test or reading
-  takes, and hands that `Provider` to the operation, which reads its credential, services
+  an unknown one. It lists xAI, the default, Apple and Local.
+- `Settings.dictationProvider` chooses Dictation and Test; `Settings.readAloudProvider`
+  chooses reading and MCP speech. The app resolves each from the operation's settings snapshot, and hands that `Provider` to the operation, which reads its credential, services
   and readiness from it. Requests are built from the settings and that provider
   (`TranscriptionRequest(settings:provider:credential:)`, `SpeechRequest`,
   `ReadinessRequest`), so nothing below the choice looks the registry up again. Errors are
   worded with the provider the operation ran with.
 - Each provider's adapters and description live in `Providers/<Name>/`. Outside that
-  folder and the registry, code names no provider. The `XAI` and `Apple` namespaces are
-  internal to `EchoTypeCore`, so the app can only reach them through `Provider.xAI` and
-  `Provider.apple`. Shared HTTP and WebSocket helpers are in `Providers/HTTP/`.
+  folder and the registry, operation code consumes the captured Provider. Settings has
+  explicit Local setup/storage controls because installation belongs to that provider.
+  Runtime namespaces stay internal to `EchoTypeCore`; the app uses `Provider.xAI`,
+  `Provider.apple` and `Provider.local`. Shared HTTP and WebSocket helpers are in
+  `Providers/HTTP/`.
 - `Credential` is `.none` or `.apiKey(placeholder:)`. A provider with `.none` always counts
   as having its credential; one with `.apiKey` needs its Keychain item, whose account is the
   provider id (see [0010](0010-settings-storage-and-api-key.md)). Dictation and reading
-  fail with "Add your <name> API key in EchoType Settings" when it is missing, and the menu
-  bar shows "Add your <name> API key in Settings".
+  fail with "Add your <name> API key in EchoType Settings" when it is missing. The menu
+  identifies which selected feature is blocked; the other feature remains usable.
 - Failures reach the app as `ProviderError` and are worded with the provider's name, as
   [0006](0006-api-key-and-error-surface.md) describes.
 - `Provider.readiness` defaults to `Readiness.always`. A provider whose services can exist and still be
@@ -78,7 +79,10 @@ meant editing each of them.
   green, red or in-progress status mark, the provider's message under its name, and an Open
   button when the state carries a link. Apple's `changes` stream covers System Settings changes,
   because it observes installed voices and Apple Intelligence availability. The app makes one
-  check at launch to start setup, and operations check at start.
+  reporting-only check when needed. Local installation is explicit in Settings. An operation
+  visibly prepares its installed feature and keeps a RuntimeLease through teardown. Status
+  checks never install or load models. Switching providers releases unused local runtimes
+  after active leases and setup settle, while preserving installed files.
 - The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
   credential status separate when the selection changes. Storage and validation are
   described in [0010](0010-settings-storage-and-api-key.md).
@@ -152,7 +156,11 @@ a free fallback; lower quality than xAI is acceptable, and xAI stays the default
   dictation with cleanup, read aloud, MCP speech, Test transcription, wrong-key rejection
   and recovery, and the Provider tab in both themes on 2026-10-01.
 
-## Extensibility report
+## Historical Apple extensibility report
+
+The following table records the 2026-10-01 Apple implementation. Its single-selection and
+launch-setup descriptions are historical; [0026](0026-local-model-stack.md) and the current
+[specification](../specs/local-models-productionization.md) supersede those behaviors.
 
 Adding Apple, the second provider, tested this design. Its adapters, description and language
 regions sit in `Providers/Apple/`, and the registry gained one entry. Everything else the

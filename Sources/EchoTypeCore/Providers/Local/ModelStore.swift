@@ -33,7 +33,7 @@ enum ModelStoreError: LocalizedError {
 /// whatever interrupted an earlier download. A file that verified stays in `Incomplete/`, so a
 /// retry resumes after the last such file; nothing there is ever read as a model.
 final class ModelStore: Sendable {
-  /// Shared by the app and the bench.
+  /// Managed downloads and generated files owned by EchoType.
   static let defaultRoot = FileManager.default
     .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     .appending(path: "EchoType/Models", directoryHint: .isDirectory)

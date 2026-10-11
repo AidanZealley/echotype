@@ -3,9 +3,9 @@ import Foundation
 /// Converts Float32 audio into the format the xAI streaming endpoint expects: 16 kHz, mono,
 /// little-endian Int16.
 ///
-/// A test and bench helper, not production code. The app converts captured audio with
+/// An opt-in live-test helper, not production code. The app converts captured audio with
 /// `AVAudioConverter`, which resamples properly; this exists only to feed a recorded WAV to the
-/// bench and the live protocol tests, where what is being validated is event ordering and
+/// live protocol tests, where what is being validated is event ordering and
 /// latency rather than transcription accuracy. It lives in `EchoTypeTestSupport` so that nothing
 /// in the app has two resamplers to choose between.
 ///

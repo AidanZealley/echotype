@@ -1,13 +1,16 @@
 @preconcurrency import CoreML
 import FluidAudio
 import Foundation
+import OSLog
 import Synchronization
 
 /// The loaded Parakeet Unified runtime, shared by every session: the streaming recogniser, the
 /// voice activity model that marks utterances and, for keyterm boosting, the CTC spotting model.
 /// Sessions share the weights and nothing else: each starts from a reset recogniser.
 final class ParakeetModel: Sendable {
+  typealias Start = @Sendable (TranscriptionRequest) async throws -> any LiveTranscriber
   static let sampleRate = 16_000
+  private static let logger = Logger(subsystem: "com.aidanzealley.echotype", category: "ParakeetModel")
 
   let asr: StreamingUnifiedAsrManager
   let vad: VadManager
@@ -24,19 +27,24 @@ final class ParakeetModel: Sendable {
   /// Loads the models from their installed directories, never through FluidAudio's downloader,
   /// then runs a little silence through each so the first dictation does not pay for compiling.
   static func load(unified: URL, voiceActivity: URL, keywordSpotting: URL?) async throws -> ParakeetModel {
+    var phaseStart = ProcessInfo.processInfo.systemUptime
     // The 640 ms configuration: 70 frames of left context, 560 ms chunks, 80 ms of look-ahead.
     let asr = StreamingUnifiedAsrManager(
       config: UnifiedConfig(leftFrames: 70, chunkFrames: 7, rightFrames: 1), encoderPrecision: .int8)
     try await asr.loadModels(from: unified)
+    logLoadPhase("unified-load", since: phaseStart)
 
+    phaseStart = ProcessInfo.processInfo.systemUptime
     let vadConfiguration = MLModelConfiguration()
     vadConfiguration.computeUnits = VadConfig.default.computeUnits
     let vadModel = try await MLModel.load(
       contentsOf: voiceActivity.appending(path: ModelNames.VAD.sileroVadFile), configuration: vadConfiguration)
     let vad = VadManager(config: .default, vadModel: vadModel)
+    logLoadPhase("vad-load", since: phaseStart)
 
     var ctc: CtcModels?
     if let keywordSpotting {
+      phaseStart = ProcessInfo.processInfo.systemUptime
       // Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache
       // folder, whichever way the model was loaded, so that folder points at the store's copy.
       let tokenizerCache = CtcModels.defaultCacheDirectory()
@@ -44,6 +52,7 @@ final class ParakeetModel: Sendable {
       guard tokenizerCache.resolvingSymlinksInPath().standardizedFileURL == keywordSpotting.resolvingSymlinksInPath().standardizedFileURL
       else { throw ProviderError.failed("The Parakeet tokenizer cache belongs to another installation. Resolve the cache conflict before preparing Dictation.") }
       ctc = try await CtcModels.loadDirect(from: keywordSpotting)
+      logLoadPhase("ctc-load", since: phaseStart)
     }
     let model = ParakeetModel(asr: asr, vad: vad, ctc: ctc)
     try await model.warm()
@@ -71,17 +80,30 @@ final class ParakeetModel: Sendable {
   }
 
   private func warm() async throws {
+    var phaseStart = ProcessInfo.processInfo.systemUptime
     let silence = [Float](repeating: 0, count: 2 * Self.sampleRate)
     try await asr.appendAudio(ParakeetTranscriber.buffer(of: silence))
     try await asr.processBufferedAudio()
     _ = try await asr.finish()
     try await asr.reset()
+    Self.logLoadPhase("unified-warm", since: phaseStart)
+    phaseStart = ProcessInfo.processInfo.systemUptime
     _ = try await vad.processStreamingChunk(
       Array(silence.prefix(VadManager.chunkSize)), state: vad.makeStreamState())
+    Self.logLoadPhase("vad-warm", since: phaseStart)
     if let ctc {
+      phaseStart = ProcessInfo.processInfo.systemUptime
       let word = TokenTiming(token: " echo", tokenId: 0, startTime: 0.2, endTime: 0.6, confidence: 1)
       let boosting = try await Self.boosting(["EchoType"], models: ctc)
       _ = await boosting.rescore(text: " echo", tokenTimings: [word], audioSamples: silence)
+      Self.logLoadPhase("ctc-warm", since: phaseStart)
     }
+  }
+
+  // Keep loading and first inference separate: CoreML can build its execution plan during
+  // either phase, and a total readiness time cannot tell us which stage needs attention.
+  private static func logLoadPhase(_ phase: String, since start: TimeInterval) {
+    let milliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+    logger.info("phase=\(phase, privacy: .public) duration_ms=\(milliseconds, privacy: .public)")
   }
 }

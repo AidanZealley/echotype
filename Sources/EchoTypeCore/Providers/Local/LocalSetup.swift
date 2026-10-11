@@ -57,13 +57,13 @@ final class LocalLifecycle: Sendable {
   }
   private let state = Mutex(State())
   private let store: ModelStore
-  private let transcription: LocalModel<TranscriptionCandidate.Start>?
+  private let transcription: LocalModel<ParakeetModel.Start>?
   private let cleanup: LocalModel<CleanupModel>?
-  private let voice: LocalModel<VoiceCandidate.Speak>?
+  private let voice: LocalModel<KokoroModel.Speak>?
 
   init(
-    store: ModelStore, transcription: LocalModel<TranscriptionCandidate.Start>?,
-    cleanup: LocalModel<CleanupModel>?, voice: LocalModel<VoiceCandidate.Speak>?
+    store: ModelStore, transcription: LocalModel<ParakeetModel.Start>?,
+    cleanup: LocalModel<CleanupModel>?, voice: LocalModel<KokoroModel.Speak>?
   ) {
     self.store = store
     self.transcription = transcription
