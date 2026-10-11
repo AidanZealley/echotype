@@ -131,19 +131,29 @@ final class LocalModel<Loaded: Sendable>: Sendable {
   }
 }
 
-/// Points `link`, a folder a runtime reads from a fixed path, at a model's verified `directory`,
-/// so the runtime finds the store's copy instead of downloading its own. A link already there is
-/// left alone, and a real folder, from another tool using the same runtime, is never touched. Only
-/// a missing or stale link is written, so two processes loading at once do not fight over it:
-/// whoever loses finds the link already right.
-func linkFolder(at link: URL, to directory: URL) throws {
+/// Connects a runtime's fixed path to verified models. Conflicting folders and foreign
+/// links stay intact for the loader's conflict guard. Only links to this model's
+/// revision directories in EchoType's managed store may be replaced.
+func linkFolder(at link: URL, to directory: URL, modelName: String,
+  ownedRoot: URL = ModelStore.defaultRoot) throws {
   let files = FileManager.default
-  func pointsAtStore() -> Bool {
-    (try? files.destinationOfSymbolicLink(atPath: link.path)) == directory.path
+  let destination = directory.resolvingSymlinksInPath().standardizedFileURL
+  func target() -> URL? {
+    guard let path = try? files.destinationOfSymbolicLink(atPath: link.path) else { return nil }
+    return URL(fileURLWithPath: path, relativeTo: link.deletingLastPathComponent())
+      .resolvingSymlinksInPath().standardizedFileURL
   }
-  if let type = try? files.attributesOfItem(atPath: link.path)[.type] as? FileAttributeType {
-    guard type == .typeSymbolicLink, !pointsAtStore() else { return }
-    try? files.removeItem(at: link)
+  func pointsAtStore() -> Bool { target() == destination }
+  if let existing = target() {
+    guard existing != destination else { return }
+    let name = existing.lastPathComponent
+    let revision = name.dropFirst(modelName.count + 1)
+    guard existing.deletingLastPathComponent() == ownedRoot.resolvingSymlinksInPath().standardizedFileURL,
+      name.hasPrefix(modelName + "-"), revision.count == 40, revision.allSatisfy(\.isHexDigit)
+    else { return }
+    try files.removeItem(at: link)
+  } else if (try? files.attributesOfItem(atPath: link.path)) != nil {
+    return
   }
   try files.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
   do {

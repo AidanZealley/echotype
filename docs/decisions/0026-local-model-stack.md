@@ -1,8 +1,10 @@
 # 0026 A fixed local model stack with explicit setup
 
-Status: accepted choices, 2026-10-09. Production implementation is pending the
-[workflow](../productionization/implementation/README.md). This record consolidates
-useful spike findings; it does not claim the production acceptance checks have passed.
+Status: accepted choices, 2026-10-09; implementation streams 1–4 and required functional/UI
+gates Accepted, 2026-10-11. The bench is retired. Whole-feature corrections and independent
+closure are Accepted on 2026-10-11 in the [workflow](../productionization/implementation/README.md).
+Public release remains held for licensing/provenance and Developer ID/notarization.
+This record preserves measured evidence and its limits.
 
 ## Context and decision
 
@@ -21,7 +23,7 @@ Setup explicitly downloads, verifies and prepares requested features before show
 Aidan accepts a long initial preparation in that flow. Status checks never initiate setup.
 The selected runtime is reused; after restart or unloading, visible preparation may recur.
 The [productionization spec](../specs/local-models-productionization.md) owns exact product
-behavior. It supersedes 0025's single-provider selection rule for this planned implementation;
+behavior. It supersedes 0025's single-provider selection rule for this implementation;
 0025's adapter/service boundaries remain relevant.
 
 ## Pinned inputs
@@ -149,10 +151,23 @@ specialization caches; production UI must calculate actual revised manifest requ
 Kokoro's first load generated about 242 MB of bench cache. Setup/storage requirements and
 release obligations are consolidated in [local models](../local-models.md).
 
-Still validate the full boosted/cleanup/speech set, signed-app loading and offline isolation,
-provider switches, cancellation and owned removal. First load after reboot/OS update, energy,
-output-device latency and Developer ID notarization remain unmeasured. Resolve the recorded
+Streams 1–4 accepted combined-model measurements and signed-app functional evidence,
+including offline isolation, provider switches, cancellation and owned removal. Whole-feature
+review corrections and independent closure are Accepted on 2026-10-11. First load after reboot/OS update,
+energy, output-device latency and Developer ID notarization remain unmeasured. Resolve the recorded
 Parakeet provenance and eSpeak public-release obligations before publication.
+
+## Accepted signed-app evidence, 2026-10-11
+
+Stream 4 accepted physical Local capture followed by the user's next Dictation shortcut,
+which inserted a paragraph into the previously blank TextEdit target and settled idle.
+Paragraph fidelity was not measured. Silence only showed Paused; it did not commit text.
+Earlier evidence covers physical xAI Dictation with Local Read Aloud selected, audible
+xAI MCP speech with Local Dictation selected, offline audible Local MCP completion,
+captured-provider/lease protection, physical Escape and settled controls. Successful
+Local selection-reading hotkey playback is not claimed. These checks are retained evidence;
+the Final cache-ownership correction receives new deterministic/build/signature checks,
+without another inference or physical session. Whole-feature acceptance passed on 2026-10-11.
 
 ## Productionization measurements, 2026-10-10
 
@@ -216,5 +231,5 @@ git ls-tree -r --name-only 2f231b9 docs/spikes/local-models
 Historical raw runs are under `~/Library/Application Support/EchoTypeBench/runs/`; listening
 ratings/audio under `~/Library/Application Support/EchoTypeBench/listening/`. These are local
 artifacts, not checked-in fixtures. Losing those files does not erase the archived conclusions.
-The productionization cleanup records remaining measurements, then retires the model bench
-before merging. The [testing follow-up](../specs/app-testing.md) starts independently.
+The productionization cleanup recorded the remaining measurements and retired the model
+bench before merging. The [testing follow-up](../specs/app-testing.md) starts independently.

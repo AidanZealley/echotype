@@ -1,7 +1,10 @@
 # Local models productionization workflow
 
-Status: approved by Aidan on 2026-10-09. Execution is in progress. Streams 1–3 are accepted; stream 4 has recorded combined-model
-evidence and retired the bench. Final signed-app functional validation remains pending.
+Status: approved by Aidan on 2026-10-09. Streams 1–4 and their required functional/UI
+gates are Accepted. Combined-model evidence is recorded and the bench is retired.
+Whole-feature review, bounded F-R1/F-R2 corrections and independent focused closure
+are Accepted on 2026-10-11. No merge or publication occurred. Public release remains held for licensing/provenance
+and Developer ID/notarization checks.
 
 ## Role files
 
