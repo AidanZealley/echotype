@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-09-25 (settings gate G1), updated 2026-09-30 for compatible speech-speed validation
 and 2026-10-01 for the retired `cleanUp` key, the `provider` key and one Keychain item per
-provider, and per-provider reading choices.
+provider, and per-provider reading choices. Updated 2026-10-10 for independent feature
+choices and legacy migration.
 Replaces the hand-seeded key in [0006](0006-api-key-and-error-surface.md).
 
 ## Context
@@ -16,7 +17,7 @@ Keychain item the app cannot read without a prompt.
 
 - `EchoTypeCore` owns the encoding. `Settings` is stored as JSON under the `UserDefaults`
   key `settings`, with the keys `hotkey` (`{"keyCode": UInt16, "modifiers": UInt8}`),
-  `provider`, `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
+  `dictationProvider`, `readAloudProvider`, `keyterms`, `language`, `inputDeviceID` (omitted when `nil`),
   `readAloudHotkey` (shaped like `hotkey`), `reading` and
   `sendReplyRequests`. The key names and
   the modifier bit positions are the stored contract.
@@ -29,9 +30,10 @@ Keychain item the app cannot read without a prompt.
   back to 1. Each field and provider entry decodes independently. Reading requests and
   persistence apply the same validation, preserving valid fractional speeds. The slider
   uses the provider's range in 0.1 steps.
-- `provider` is the selected provider's id ([0025](0025-provider-adapters.md)). A missing
-  id, or one no registered provider has, gives the first entry of `Providers.all`, today
-  `xai`.
+- `dictationProvider` chooses transcription and cleanup; `readAloudProvider` chooses
+  selection reading and MCP speech. Each independently falls back to xAI for an invalid
+  stored id. Decode legacy `provider` only for an absent feature field; encode only the new
+  choices. Explicit feature fields take precedence. See [0026](0026-local-model-stack.md).
 - The menu bar's `hotkeysActive` choice is stored under its own `UserDefaults` key and
   defaults to on. Other stored settings are fields the window edits. `silenceTimeout`, `hardCap` and
   `finalizeTimeout` stay code defaults, so today's values are not frozen into every
@@ -49,13 +51,15 @@ Keychain item the app cannot read without a prompt.
   reads the current hotkey on every key event, so a change applies without a relaunch.
   The coordinator snapshots settings when reserving dictation, Test or reading.
 - Each provider's API key lives only in the Keychain, as one generic password item whose
-  service is the bundle identifier in `Resources/Info.plist` and whose account is the
+  service is `com.aidanzealley.echotype` and whose account is the
   provider id, `xai` for xAI. The wrapper reads, saves and removes only the selected
   provider's item; reading no longer accepts an item under any other account name, and
   there is no migration for one. `Keychain.save` updates the existing item, so its access
   rule survives a changed key, and adds one when there is none. Because the app writes the
   item itself, it reads it back without a prompt. Keychain calls can block on a prompt, so
-  the app makes them from detached tasks.
+  the app makes them from detached tasks. Signed stream 4 validation copies use a separate
+  service only when explicit validation metadata and the dedicated validation bundle-id
+  prefix both match. Ordinary builds retain the production service.
 
 ## Consequences
 

@@ -4,7 +4,7 @@ import MLXLLM
 import MLXLMCommon
 import Tokenizers
 
-/// A loaded cleanup model, shared by every candidate. It sends `Reviser`'s prompt and window
+/// A loaded cleanup model, for Qwen3. It sends `Reviser`'s prompt and window
 /// unchanged and returns the reply as plain text, with greedy sampling.
 ///
 /// The fixed prompt is the start of every request, so its key-value cache is built once and
@@ -29,23 +29,21 @@ final class CleanupModel: Sendable {
 
   private let container: ModelContainer
   private let prompt: PromptCache
-  private let templateContext: [String: any Sendable]
 
-  private init(container: ModelContainer, prompt: PromptCache, templateContext: [String: any Sendable]) {
+  private init(container: ModelContainer, prompt: PromptCache) {
     self.container = container
     self.prompt = prompt
-    self.templateContext = templateContext
   }
 
   /// Loads the weights, prefills the prompt and runs one short request, so the first real one
   /// does not pay for compiling kernels.
-  static func load(from directory: URL, templateContext: [String: any Sendable]) async throws -> CleanupModel {
+  static func load(from directory: URL) async throws -> CleanupModel {
     Memory.cacheLimit = bufferCacheLimit
     let container = try await LLMModelFactory.shared.loadContainer(from: directory, using: TokenizerLoader())
     let prompt = try await container.perform { context in
-      try prefill(Reviser.prompt, context: context, templateContext: templateContext)
+      try prefill(Reviser.prompt, context: context)
     }
-    let model = CleanupModel(container: container, prompt: prompt, templateContext: templateContext)
+    let model = CleanupModel(container: container, prompt: prompt)
     _ = try await model.revise(
       CleanupRequest(
         prompt: Reviser.prompt, text: "Let's meet on Tuesday, no, Wednesday.", final: false,
@@ -62,7 +60,7 @@ final class CleanupModel: Sendable {
   /// text that silently lost its end.
   private func generate(_ request: CleanupRequest, context: ModelContext) async throws -> String {
     try Task.checkCancellation()
-    let tokens = try Self.template(request.prompt, request.text, context, templateContext)
+    let tokens = try Self.template(request.prompt, request.text, context)
     let windowTokens = context.tokenizer.encode(text: request.text, addSpecialTokens: false).count
     let parameters = GenerateParameters(
       maxTokens: Self.outputLimit(windowTokens: windowTokens),
@@ -108,20 +106,20 @@ final class CleanupModel: Sendable {
   }
 
   private static func template(
-    _ system: String, _ user: String, _ context: ModelContext, _ templateContext: [String: any Sendable]
+    _ system: String, _ user: String, _ context: ModelContext
   ) throws -> [Int] {
     try context.tokenizer.applyChatTemplate(
       messages: [["role": "system", "content": system], ["role": "user", "content": user]],
-      tools: nil, additionalContext: templateContext)
+      tools: nil, additionalContext: [:])
   }
 
   /// Runs the tokens every request starts with through the model. Two different windows show
   /// where they end: the template's text before the window is the same for both.
   private static func prefill(
-    _ system: String, context: ModelContext, templateContext: [String: any Sendable]
+    _ system: String, context: ModelContext
   ) throws -> PromptCache {
-    let first = try template(system, "a", context, templateContext)
-    let second = try template(system, "b", context, templateContext)
+    let first = try template(system, "a", context)
+    let second = try template(system, "b", context)
     let shared = zip(first, second).prefix { $0 == $1 }.map(\.0)
     let cache = try context.model.newCache(parameters: nil)
     _ = context.model(LMInput.Text(tokens: MLXArray(shared)[.newAxis]), cache: cache, state: nil)

@@ -103,7 +103,7 @@ private struct NeverSpeech: SpeechStream {
     try FileManager.default.createDirectory(at: incomplete, withIntermediateDirectories: true)
     try Data([1, 2, 3]).write(to: incomplete.appending(path: "file"))
     let store = ModelStore(root: root)
-    let voice = LocalModel<VoiceCandidate.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
     let lifecycle = LocalLifecycle(store: store, transcription: nil, cleanup: nil, voice: voice)
     let requirements = lifecycle.controls.requirements([.readAloud])
     #expect(requirements.count == 1)
@@ -119,7 +119,7 @@ private struct NeverSpeech: SpeechStream {
     let store = ModelStore(root: root, source: .init { _, destination, _ in try Data([1, 2, 3]).write(to: destination) })
     let entered = AsyncStream.makeStream(of: Void.self)
     let release = AsyncStream.makeStream(of: Void.self)
-    let voice = LocalModel<VoiceCandidate.Speak>(manifests: [fixture()], loadingMessage: "Loading", store: store) { _ in
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [fixture()], loadingMessage: "Loading", store: store) { _ in
       entered.continuation.yield()
       for await _ in release.stream { break }
       return { _ in NeverSpeech() }
@@ -144,10 +144,10 @@ private struct NeverSpeech: SpeechStream {
     let dictation = fixture("dictation"), speech = fixture("speech")
     let store = ModelStore(root: root, source: .init { _, destination, _ in try Data([1, 2, 3]).write(to: destination) })
     try await store.install(dictation); try await store.install(speech)
-    let transcriber = LocalModel<TranscriptionCandidate.Start>(manifests: [dictation], loadingMessage: "Loading", store: store) { _ in
+    let transcriber = LocalModel<ParakeetModel.Start>(manifests: [dictation], loadingMessage: "Loading", store: store) { _ in
       { _ in throw ProviderError.unavailable }
     }
-    let voice = LocalModel<VoiceCandidate.Speak>(manifests: [speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
     let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
     lifecycle.controls.select([.dictation])
     var lease: RuntimeLease? = try await lifecycle.prepare(.dictation)
@@ -173,7 +173,7 @@ private struct NeverSpeech: SpeechStream {
       let store = ModelStore(root: root, source: .init { _, destination, _ in try Data([1, 2, 3]).write(to: destination) })
       let entered = AsyncStream.makeStream(of: Void.self)
       let release = AsyncStream.makeStream(of: Void.self)
-      let voice = LocalModel<VoiceCandidate.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in
+      let voice = LocalModel<KokoroModel.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in
         entered.continuation.yield()
         for await _ in release.stream { break }
         return { _ in NeverSpeech() }
@@ -209,10 +209,10 @@ private struct NeverSpeech: SpeechStream {
     let store = ModelStore(root: root, source: .init { _, destination, _ in
       fetches.withLock { $0 += 1 }; try Data([1, 2, 3]).write(to: destination)
     })
-    let transcriber = LocalModel<TranscriptionCandidate.Start>(manifests: [fixture("dictation")], loadingMessage: "Loading", store: store) { _ in
+    let transcriber = LocalModel<ParakeetModel.Start>(manifests: [fixture("dictation")], loadingMessage: "Loading", store: store) { _ in
       dictationLoads.withLock { $0 += 1 }; return { _ in throw ProviderError.unavailable }
     }
-    let voice = LocalModel<VoiceCandidate.Speak>(manifests: [fixture("speech")], loadingMessage: "Loading", store: store) { _ in
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [fixture("speech")], loadingMessage: "Loading", store: store) { _ in
       speechLoads.withLock { $0 += 1 }; return { _ in NeverSpeech() }
     }
     let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
@@ -272,11 +272,11 @@ private struct NeverSpeech: SpeechStream {
       }
       try Data([1, 2, 3]).write(to: destination)
     })
-    let transcriber = LocalModel<TranscriptionCandidate.Start>(manifests: [shared], loadingMessage: "Loading", store: store) { _ in
+    let transcriber = LocalModel<ParakeetModel.Start>(manifests: [shared], loadingMessage: "Loading", store: store) { _ in
       dictationLoads.withLock { $0 += 1 }
       return { _ in throw ProviderError.unavailable }
     }
-    let voice = LocalModel<VoiceCandidate.Speak>(manifests: [shared, speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [shared, speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
     let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
     let dictation = Task { () -> Bool in
       do { try await lifecycle.controls.install([.dictation]); return true } catch { return false }
@@ -330,11 +330,11 @@ private struct NeverSpeech: SpeechStream {
           readingEntered.continuation.yield()
         }
       })
-      let transcriber = LocalModel<TranscriptionCandidate.Start>(manifests: [shared], loadingMessage: "Loading", store: store) { _ in
+      let transcriber = LocalModel<ParakeetModel.Start>(manifests: [shared], loadingMessage: "Loading", store: store) { _ in
         dictationLoads.withLock { $0 += 1 }
         return { _ in throw ProviderError.unavailable }
       }
-      let voice = LocalModel<VoiceCandidate.Speak>(manifests: [shared, speech], loadingMessage: "Loading", store: store) { _ in
+      let voice = LocalModel<KokoroModel.Speak>(manifests: [shared, speech], loadingMessage: "Loading", store: store) { _ in
         speechLoads.withLock { $0 += 1 }
         return { _ in NeverSpeech() }
       }
@@ -389,8 +389,8 @@ private struct NeverSpeech: SpeechStream {
       }
       try Data([1, 2, 3]).write(to: destination)
     })
-    let transcriber = LocalModel<TranscriptionCandidate.Start>(manifests: [dictationManifest], loadingMessage: "Loading", store: store) { _ in { _ in throw ProviderError.unavailable } }
-    let voice = LocalModel<VoiceCandidate.Speak>(manifests: [speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
+    let transcriber = LocalModel<ParakeetModel.Start>(manifests: [dictationManifest], loadingMessage: "Loading", store: store) { _ in { _ in throw ProviderError.unavailable } }
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
     let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
     let dictation = Task { try? await lifecycle.controls.install([.dictation]) }
     for await _ in entered.stream { break }

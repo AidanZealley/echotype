@@ -4,6 +4,7 @@ import Foundation
 /// The loaded Kokoro-82M runtime, shared by every reading. FluidAudio runs the seven-stage
 /// Core ML chain; the bundled eSpeak frontend supplies phonemes for each utterance.
 final class KokoroModel: Sendable {
+  typealias Speak = @Sendable (SpeechRequest) -> any SpeechStream
   /// Emma (UK) first, as the default, then Heart (US).
   static let voices = [Voice(id: "bf_emma", name: "Emma"), Voice(id: "af_heart", name: "Heart")]
 

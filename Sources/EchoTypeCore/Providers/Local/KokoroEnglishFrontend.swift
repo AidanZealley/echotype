@@ -107,7 +107,7 @@ actor KokoroEnglishFrontend {
     initialized = true
   }
 
-  /// Bundle.module uses the same generated pronunciation data in the app, tests and bench.
+  /// Bundle.module uses the same generated pronunciation data in the app and tests.
   static func resourceRoot() throws -> URL {
     guard let root = Bundle.module.url(forResource: "EnglishPronunciation", withExtension: "bundle") else {
       throw ProviderError.failed("The English pronunciation resource bundle is missing.")
