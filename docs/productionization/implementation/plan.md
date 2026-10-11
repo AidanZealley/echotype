@@ -720,3 +720,14 @@ The following retains the earlier requests and candidate history; they are not c
 - Final is Accepted. Current correction passed 166 Core/88 App deterministic tests, 8 focused fixture/frontend tests, release build, separate candidate packaging, strict signing and diff checks. Closure independently matched source/resource/test/log inventories and candidate identities. Evidence is `final-review-candidate.json`; final-review.md records applicability of the earlier exact signed-app functional evidence. No new inference or paid call was needed for this preservation-only cache fix.
 - Completion status was finalized after closure without code/resource changes. No Final specification drift or unresolved escalation remains. Public-release licensing/provenance and Developer ID/notarization holds remain. No merge, PR or publication ran.
 - Final commits only its cache-link source/tests, accepted documentation corrections and Final/plan completion records. Pre-existing untracked lead-guide, implementation-brief, starter-prompt, app-testing and qwen follow-up remain owned by their prior authors. Every existing app/process, user TextEdit paragraph and real storage/preference/permission/device choice remains preserved.
+
+## Post-acceptance documentation resolution
+
+- Aidan subsequently requested `Ok resolve those docs`. This authorizes adding the three
+  referenced workflow documents and the two linked follow-up specs in a scoped documentation
+  commit. The workflow instructions are archived with completion dates and links to this plan.
+  App testing remains a deferred, unapproved draft; Qwen3-TTS remains deferred research.
+  Their inclusion does not authorize implementation or reopen accepted productionization work.
+- The earlier untracked-file records describe their state at each acceptance handoff.
+  This documentation cleanup changes no product code or release holds and authorizes no merge
+  or publication.
