@@ -23,8 +23,9 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: missing.path))
   }
 
-  @Test("A conflicting repository folder is preserved and rejected before FluidAudio")
-  func conflictingRepository() async throws {
+  @Test("A conflicting repository path is preserved and rejected before FluidAudio",
+    arguments: ["folder", "valid", "dangling"])
+  func conflictingRepository(kind: String) async throws {
     let files = FileManager.default
     let root = files.temporaryDirectory.appending(path: UUID().uuidString)
     try files.createDirectory(at: root, withIntermediateDirectories: true)
@@ -37,16 +38,28 @@ import Testing
       try Data().write(to: path)
     }
     let repository = root.appending(path: "kokoro-82m-coreml")
-    try files.createDirectory(at: repository, withIntermediateDirectories: true)
+    let foreign = root.appending(path: "foreign")
+    if kind == "folder" {
+      try files.createDirectory(at: repository, withIntermediateDirectories: true)
+    } else {
+      if kind == "valid" { try files.createDirectory(at: foreign, withIntermediateDirectories: true) }
+      try files.createSymbolicLink(atPath: repository.path, withDestinationPath: "foreign")
+    }
     let sentinel = repository.appending(path: "preserve.txt")
     let contents = Data("Unrelated existing directory".utf8)
-    try contents.write(to: sentinel)
+    if kind != "dangling" { try contents.write(to: sentinel) }
     await #expect(throws: ProviderError.failed(
       "The speech model folder contains a conflicting kokoro-82m-coreml directory. Resolve that folder conflict before preparing speech."
     )) { try await KokoroModel.load(from: root) }
-    #expect(try files.attributesOfItem(atPath: repository.path)[.type] as? FileAttributeType == .typeDirectory)
-    #expect(try Data(contentsOf: sentinel) == contents)
-    #expect(try files.contentsOfDirectory(atPath: repository.path) == ["preserve.txt"])
+    if kind == "folder" {
+      #expect(try files.attributesOfItem(atPath: repository.path)[.type] as? FileAttributeType == .typeDirectory)
+    } else {
+      #expect(try files.destinationOfSymbolicLink(atPath: repository.path) == "foreign")
+    }
+    if kind != "dangling" {
+      #expect(try Data(contentsOf: sentinel) == contents)
+      #expect(try files.contentsOfDirectory(atPath: repository.path) == ["preserve.txt"])
+    }
     #expect(!files.fileExists(atPath: root.appending(path: "ANE/bf_emma.bin").path))
   }
 

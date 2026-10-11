@@ -1,10 +1,10 @@
 # Local model setup, storage and release notes
 
-Status: implemented on the productionization branch, 2026-10-10. Packaging, feature
-selection and Settings/lifecycle work are accepted. Combined installed-model evidence
-is recorded in the [model decision](decisions/0026-local-model-stack.md). Final signed-app
-functional validation remains a separate [workflow](productionization/implementation/README.md)
-acceptance gate. Public release remains held.
+Status: implemented on the productionization branch, 2026-10-11. Streams 1–4,
+including signed-app functional validation, are Accepted. Combined installed-model evidence
+is recorded in the [model decision](decisions/0026-local-model-stack.md). Whole-feature
+[review](productionization/implementation/final-review.md) corrections and independent
+closure are Accepted on 2026-10-11. Public release remains held.
 
 ## Setup and readiness
 
@@ -45,12 +45,12 @@ preferences and assets still needed by another feature. It cannot overlap active
 preparation or operations. Stop/Cancel and a reason explain disabled actions. Deletion failures
 remain visible and retryable; removed models are never silently downloaded again.
 
-FluidAudio uses fixed cache locations for some assets. The spike creates links for the CTC
+FluidAudio uses fixed cache locations for some assets. The loaders create links for the CTC
 tokenizer and Kokoro resources, plus generated voice packs and Core ML specialization caches.
 These are different kinds of storage. The production inventory must record actual paths and
 ownership; only EchoType-owned links/generated files may be removed. Never replace or delete
-another tool's real cache directory. OS-managed specialization caches may be shared or omitted
-from process memory/disk estimates; do not promise to reclaim data EchoType does not own.
+another tool's real cache directory or foreign symlink. OS-managed specialization caches
+may be shared or omitted from process memory/disk estimates; do not promise to reclaim data EchoType does not own.
 
 Before uninstalling, use Manage files to remove local assets. Dragging the app to Trash leaves
 its downloaded models behind. If already uninstalled, the managed Models root can be removed

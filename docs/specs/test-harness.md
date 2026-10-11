@@ -1,13 +1,21 @@
 # Test harness
 
-Status: approved, 2026-10-03. Built alongside the local models spike, its first consumer. The
-[model decision record](../decisions/0026-local-model-stack.md) consolidates the findings;
-the original spike specification remains at commit `2f231b9`.
+Status: archived, 2026-10-11. This is the historical direction approved on 2026-10-03,
+not the current verification workflow. EchoTypeBench, its test target, corpus and commands
+were retired after productionization measurements. The executable targets, paths and command
+examples below are unavailable in the current tree. App-driver and scenario sections describe
+proposals, not shipped automation. Shared audio helpers remain where current tests use them.
 
-The confirmed [productionization pass](local-models-productionization.md) now retires
-the bench after its final measurements, before merging. This historical direction
-does not require retaining the tool. The [testing follow-up](app-testing.md) proposes
-independent unit/integration, end-to-end and scripted evaluation tooling.
+The [model decision record](../decisions/0026-local-model-stack.md) retains measured results.
+Use the [productionization workflow](../productionization/implementation/README.md) for
+current checks and the [testing follow-up](app-testing.md) for future tooling.
+Read the archived specification, corpus or source without restoring retired files:
+
+```sh
+git show 2f231b9:docs/specs/test-harness.md
+git show 2f231b9:Corpus/manifest.json
+git ls-tree -r --name-only 2f231b9 Sources/EchoTypeBench Tests/EchoTypeBenchTests Corpus
+```
 
 ## Goal
 
@@ -54,7 +62,7 @@ lists checks still verified only by reading.
 The corpus is permanent test data, recorded once and replayed against every later
 provider change, prompt edit or model swap.
 
-[`Corpus/manifest.json`](../../Corpus/manifest.json) is committed. It lists the corpus
+The archived `Corpus/manifest.json`, recoverable with the command above, lists the corpus
 keyterms and every sample, each with an id, a kind and tags:
 
 | Kind | Fields | Reference |

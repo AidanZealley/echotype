@@ -1,6 +1,6 @@
 # Local models productionization plan
 
-Status: approved by Aidan on 2026-10-09; execution in progress.
+Status: approved by Aidan on 2026-10-09; implementation and Final review Accepted on 2026-10-11. Public release remains held.
 
 ## Orchestration record
 
@@ -23,7 +23,7 @@ Status: approved by Aidan on 2026-10-09; execution in progress.
 | 2 | [Feature provider selection](02-feature-providers.md) | 1 | Accepted |
 | 3 | [Explicit local setup and native Settings](03-local-setup-settings.md) | 2 | Accepted |
 | 4 | [Pruning and combined validation](04-pruning-validation.md) | 3 and UI gate | Accepted |
-| Final | [Whole-feature review](final-review.md) | 1–4 | Not started |
+| Final | [Whole-feature review](final-review.md) | 1–4 | Accepted |
 
 ## Why these boundaries
 
@@ -701,3 +701,22 @@ The following retains the earlier requests and candidate history; they are not c
 - Final may now begin its required whole-feature review against the recorded starting
   commit and main comparison base. Preserve unrelated dirty work, the user's dictated
   TextEdit content and the offline R1 PID. No merging or publication is authorized.
+
+
+## Final review start, 2026-10-11
+
+- Streams 1–4 are Accepted at HEAD `1d4deecbb217dd1e8fd71d99ddffeb18a1937c76`. Fresh whole-feature review covers execution base `077a1ec3973cd9629c527e7f9c419c6e4263ee93` and the complete net merge diff from `4669f80f43a9be81008f8e01a4bb854f914b1b68`, including retained spike work.
+- Final owns final-review.md and its plan transitions. Existing implementation-brief.md, lead-guide.md and starter-prompt.md remain untracked workflow references; app-testing.md and qwen-tts-follow-up.md retain unrelated ownership. No blanket adoption or commit is authorized.
+- Native Settings and resolved physical Dictation/MCP functional evidence remain accepted. Preserve offline PID 62901, TextEdit content, other apps and every user storage/permission/device choice. Paid scope is exhausted. Public release holds remain separate.
+
+- Fresh whole-feature review found F-R1, preparation replacing foreign cache symlinks, and F-R2, inaccurate retirement/completion/navigation docs. Both are accepted for one narrow remediation pass. Optional Prose visibility stays deferred. Independent focused closure follows current-revision deterministic tests, release build and signing. Fixtures and a separate Final candidate preserve all real cache/model paths and existing app bundles/processes.
+
+- F-R1/F-R2 remediation passed 8 focused tests, 166 Core/88 App deterministic tests, release build and separate FinalReviewCandidate strict signing. Existing production/R1 candidates remain unchanged. Final source/resource/test hashes and logs are in `.build/local-productionization/final-review-candidate.json`. Fresh focused closure now verifies the accepted fixes, their boundary effects and supplied functional evidence applicability. No app launch or inference was repeated.
+
+
+## Final acceptance, 2026-10-11
+
+- Fresh whole-feature review audited the complete execution-start diff and net merge diff from recorded main comparison base, including retained spike work. F-R1 foreign-cache link protection and F-R2 retirement/status/navigation documentation were accepted, corrected once and independently closed with no Required findings. Optional Prose visibility remains deferred.
+- Final is Accepted. Current correction passed 166 Core/88 App deterministic tests, 8 focused fixture/frontend tests, release build, separate candidate packaging, strict signing and diff checks. Closure independently matched source/resource/test/log inventories and candidate identities. Evidence is `final-review-candidate.json`; final-review.md records applicability of the earlier exact signed-app functional evidence. No new inference or paid call was needed for this preservation-only cache fix.
+- Completion status was finalized after closure without code/resource changes. No Final specification drift or unresolved escalation remains. Public-release licensing/provenance and Developer ID/notarization holds remain. No merge, PR or publication ran.
+- Final commits only its cache-link source/tests, accepted documentation corrections and Final/plan completion records. Pre-existing untracked lead-guide, implementation-brief, starter-prompt, app-testing and qwen follow-up remain owned by their prior authors. Every existing app/process, user TextEdit paragraph and real storage/preference/permission/device choice remains preserved.

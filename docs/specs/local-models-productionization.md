@@ -2,7 +2,7 @@
 
 Status: product choices confirmed, updated 2026-10-09. Productionization is on a branch
 from the completed local-model spike. Both model sets and the Settings direction are
-confirmed. Aidan approved the implementation workflow on 2026-10-09. Streams 1–4 are accepted; whole-feature review remains before final acceptance.
+confirmed. Aidan approved the implementation workflow on 2026-10-09. Streams 1–4 and whole-feature review are Accepted on 2026-10-11. Public release remains held; no merge or publication occurred.
 
 ## Goal
 

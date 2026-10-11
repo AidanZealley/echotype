@@ -86,7 +86,7 @@ owned links and remaining public-release obligations.
 
 ### Updating
 
-**Settings → Updates** shows your version and links to the latest release. To update,
+**Settings → About → Updates** shows your version and links to the latest release. To update,
 quit EchoType, download the new DMG, drag EchoType into Applications and choose
 **Replace**.
 
