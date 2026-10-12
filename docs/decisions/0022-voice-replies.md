@@ -55,7 +55,7 @@ because of code blocks, paths and markdown, and speech is billed per character.
   Core retains a throwing delivery closure and has no macOS notification types. The obsolete
   fire-and-forget path is removed.
 
-- **Setup is text to copy.** Settings has an Agents tab with the registration
+- **Setup is text to copy.** Settings has an Agents page with the registration
   command for Claude Code and Codex and optional instructions to paste into an agent's
   instruction file. EchoType doesn't edit another tool's config, run its CLI or report
   whether an agent is connected. T3 Code needs no step of its own, since it runs those

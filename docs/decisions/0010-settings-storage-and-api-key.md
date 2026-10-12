@@ -57,9 +57,7 @@ Keychain item the app cannot read without a prompt.
   there is no migration for one. `Keychain.save` updates the existing item, so its access
   rule survives a changed key, and adds one when there is none. Because the app writes the
   item itself, it reads it back without a prompt. Keychain calls can block on a prompt, so
-  the app makes them from detached tasks. Signed stream 4 validation copies use a separate
-  service only when explicit validation metadata and the dedicated validation bundle-id
-  prefix both match. Ordinary builds retain the production service.
+  the app makes them from detached tasks.
 
 ## Consequences
 

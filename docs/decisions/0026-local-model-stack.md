@@ -1,10 +1,7 @@
 # 0026 A fixed local model stack with explicit setup
 
-Status: accepted choices, 2026-10-09; implementation streams 1–4 and required functional/UI
-gates Accepted, 2026-10-11. The bench is retired. Whole-feature corrections and independent
-closure are Accepted on 2026-10-11 in the [workflow](../productionization/implementation/README.md).
-Public release remains held for licensing/provenance and Developer ID/notarization.
-This record preserves measured evidence and its limits.
+Status: accepted, 2026-10-09. Updated 2026-10-12 for installed loading and setup.
+Public release remains held for licensing, provenance and Developer ID/notarization.
 
 ## Context and decision
 
@@ -19,12 +16,41 @@ providers; Dictation keeps transcription and cleanup together.
 | Cleanup | Qwen3-4B-Instruct-2507, four-bit; MLX Swift LM | Conservative editing with fewer harmful deletions than tested alternatives |
 | Read Aloud | Kokoro-82M v1.0 Core ML, eSpeak NG English frontend; Heart and Emma | Accepted voice quality, repeatability and substantially lower resource cost than Qwen TTS |
 
-Setup explicitly downloads, verifies and prepares requested features before showing Ready.
-Aidan accepts a long initial preparation in that flow. Status checks never initiate setup.
-The selected runtime is reused; after restart or unloading, visible preparation may recur.
-The [productionization spec](../specs/local-models-productionization.md) owns exact product
-behavior. It supersedes 0025's single-provider selection rule for this implementation;
-0025's adapter/service boundaries remain relevant.
+## Runtime and installation policy
+
+Selecting Local loads its installed models at launch and when the selection changes.
+It never downloads missing models. Local status checks only report readiness.
+Dictation waits for transcription and starts cleanup loading in the background.
+If cleanup is not ready when dictation starts, that dictation skips it and shows
+"No cleanup". Escape or stop ends a slow preparation wait immediately. The shared
+load can continue for the next operation.
+
+Keep selected models resident. Only critical memory pressure releases the cleanup
+model, and only when no dictation holds it. Warning pressure is normal with all
+models loaded on the measured 16 GB M1 Pro. The next dictation starts cleanup
+loading in the background again. Switching away releases unused runtimes after
+active leases and setup finish, while retaining installed files.
+
+A failed load is remembered until setup retries it from Settings. Loads check
+manifest file sizes rather than hashing every model. Installation verifies size
+and SHA-256. A corrupt installed set is deleted and downloaded again. Verified
+files from an interrupted download remain available for retry.
+
+Settings installs one feature at a time in request order. A queued feature shows
+"Waiting for Dictation setup" or "Waiting for Read Aloud setup". Cancel removes a
+waiting feature or stops the running install and load. Setup loads all of a
+feature's services before completing. A feature installed while not selected is
+released after setup. Installation does not select it.
+
+Keyterm boosting applies only when the user has saved keyterms. No built-in
+"EchoType" keyterm is added. The reply trigger accepts "echo type". CTC still loads
+and warms with Parakeet so every dictation uses the same prepared model set.
+Boosting improves vocabulary but costs finalization time and can cause false
+substitutions, as the measurements below show.
+
+[0025](0025-provider-adapters.md) owns the provider setup contract.
+[0015](0015-settings-window-layout.md) owns Settings navigation.
+[Local storage notes](../local-models.md) own file ownership and removal.
 
 ## Pinned inputs
 
@@ -44,7 +70,7 @@ checksums and transitive dependencies; this table is an evidence/recovery refere
 
 ## Evaluation limits
 
-The spike ran on an M1 Pro with 16 GiB memory, macOS 27.2, Xcode 27.0 and Swift 6.4,
+The evaluation ran on an M1 Pro with 16 GiB memory, macOS 27.2, Xcode 27.0 and Swift 6.4,
 under variable desktop load. Cleanup's initial comparisons were debug builds; later
 cleanup, local transcription and speech measurements were release builds. Apple/xAI
 transcription comparisons used earlier debug runs. System memory pressure is not solely
@@ -84,8 +110,11 @@ The original boosted installed-load concern was 44.176 seconds in
 boosted preparation 46.874 seconds, then 797 and 751 ms; unboosted took 322, 321 and 292 ms.
 The slow run split almost evenly between Unified and CTC loading, with little warm-up.
 Compiler activity supports specialization, without proving cache causality. Keep the current
-runtime. The [loading report](../productionization/parakeet.md) retains phase timings,
-verification, run ids, license provenance and limits. These are preparation, not hotkey, timings.
+runtime. These are preparation timings, not hotkey timings. In the first run,
+Unified loading took 22.497 seconds and CTC loading 23.671 seconds. Subsequent
+CTC loading took 250 to 254 ms and warming 194 to 228 ms. `ANECompilerService` was
+active during the slow run. No cache was deleted or moved. These observations do
+not prove which rebuild, system change or cache eviction causes specialization.
 
 ## Cleanup evidence and tradeoffs
 
@@ -106,8 +135,9 @@ fallbacks/overruns. Warm stop-to-insert p50/p95 was 561/1699 ms; cancellation 14
 Preparation was 4.043 seconds, peak footprint 2591 MiB and ready 2397 MiB. Concurrent
 boosted Dictation plus cleanup in 20261005T064539Z-local had warm stop-to-insert
 1240/2716 ms, zero deadline fallbacks/overruns and peak footprint 2781 MiB. This does not
-prove cancellation during an over-budget prefill. The moved older MLX pins and Qwen TTS
-residency confounded later measurements; revalidate the restored chosen pins.
+prove cancellation during an over-budget prefill. Older MLX pins and Qwen TTS
+residency confounded intervening measurements. The combined runs below revalidated
+the restored chosen pins.
 
 ## Speech evidence and frontend choice
 
@@ -119,86 +149,95 @@ Those ratings and timings describe the old frontend, not a quality score for the
 
 The always-weak article correction was rejected before vowels. Aidan accepted the
 phrase-aware eSpeak comparison on 9 October. It retains written-form normalization,
-explicit a.m./p.m. preparation, serialized accent switching and bounded phoneme chunks.
-The [comparison record](../productionization/kokoro-espeak-comparison.md) retains the
-accepted audition, smoke measurements and remaining reproducible-packaging work.
-The [loading report](../productionization/kokoro-loading.md) retains Kokoro's observed
-11–13 second versus 2.4–2.6 second loads; cache eviction is plausible, not proven.
+explicit a.m./p.m. preparation. A dotted meridiem after a valid 12-hour clock is
+prepared as letter names before sentence splitting. Ambiguous prose is left alone.
+The phrase-aware frontend adapts eSpeak phonemes to Kokoro's Misaki alphabet.
+One actor serializes process-global accent selection and conversion. Phonemes split
+at word or punctuation boundaries to stay within 510 Unicode scalars. The earlier
+word-by-word frontend could not distinguish "the" from "thee" or use following
+sound context. No maintained FluidAudio fork was needed.
+
+The accepted comparison smoke run `20261009T111948Z-local` synthesized pronunciation
+and number passages twice through Heart. Real-time factor was 0.06 and first audio
+331 to 730 ms after readiness, with no recorded violations. It was not a controlled
+speed comparison. Production-resource checks later loaded the seven stages in
+10.89 seconds, then 1.44 seconds in subsequent processes. An isolated signed host
+produced finite 24 kHz audio with networking denied. These checks do not establish
+full-app launch latency.
+
+Earlier Kokoro installed loads took 11 to 13 seconds or 2.4 to 2.6 seconds. Paired runs
+`20261007T114030Z-local` and `20261007T114034Z-local` took 11.159 and 2.474 seconds.
+The first added 242,222,067 bytes of Core ML cache in 66 files. Cache disappearance
+during a later unrelated download supports possible eviction under disk pressure,
+without proving its cause. Keep the loader and warm-up. No custom cache manager or
+compute-unit change is justified by this evidence.
 
 Historical Kokoro synthesis was about sixteen times real time versus Qwen's 1.8. The
 reference set with unboosted Unified, cleanup and Kokoro peaked at 3062 MiB, ready 2806 MiB,
-in 20261007T104327Z-local; Qwen speech raised the combination to 5201 MiB and critical
-pressure in 20261007T104448Z-local. Neither measured the complete chosen boosted set.
+in 20261007T104327Z-local. This did not measure the complete chosen boosted set.
 The benchmark's audio-ready-after-pause number did not measure total buffered production;
 boundedness relies on stream design/tests, with footprint only supporting evidence.
 
-Signed-app checks covered Kokoro playback, speed, pause/resume, stop, MCP speech and offline
-reading. Earlier Dictation checks waived switching away during download; the boosted model
-was not the auditioned default. Qwen's incomplete reading was also waived for the spike,
-not accepted for production. Those waivers do not carry into production acceptance.
-
 ## Alternatives and remaining checks
 
-Remove Whisper/WhisperKit, SmolLM3, Qwen TTS/MLX Audio Swift and candidate selection machinery.
-Preserve the [Qwen voice follow-up](../specs/qwen-tts-follow-up.md) instead of dormant code.
-Pocket was replaced by Qwen in auditions. Pocket, Supertonic, Kitten, other Parakeet variants,
-Qwen3.5, Gemma and Llama were research options, not evaluated production candidates.
-Their old estimates and source survey remain available in the archive if needed.
+Whisper, SmolLM3 and Qwen TTS were removed with their candidate-selection machinery.
+Qwen Ryan sounded realistic but its tone, laughs and sighs were inconsistent.
+A fixed calm narration instruction made no useful difference in Aidan's audition.
+The tested `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit` revision was
+`f35faf19b0cc2160865af64ecf0f22f83d335135`, with MLX Audio Swift
+`bf14ae0c26e4e85553dd989571cae29d70fa6735`. It downloaded 2,311,984,361 bytes.
+Installed loading took 1.4 seconds in one run. Voice-only memory was about 2.5 GiB
+ready and 2.9 GiB peak. The combined unboosted set reached 4,775 MiB ready and
+5,201 MiB peak with critical pressure in `20261007T104448Z-local`.
+
+Three of eight Ryan listening passages ended at the runtime's codec-step cap.
+Generation cancellation had no awaitable completion handle, so teardown could
+race shared codec state. Its dependency forced older MLX pins across cleanup.
+These are reasons to reject that revision even if future voice consistency improves.
+No lower-temperature, fixed-seed, cloning or VoiceDesign comparison was measured.
+
+Pocket was replaced by Qwen in auditions. Supertonic, Kitten, other Parakeet variants,
+Qwen3.5, Gemma and Llama were research options, not evaluated candidates.
 
 Historical chosen manifests totaled 3,084,340,346 download bytes and about 3.11 GB allocated
 installed data. Those totals included old Kokoro frontend assets and exclude external
 specialization caches; production UI must calculate actual revised manifest requirements.
-Kokoro's first load generated about 242 MB of bench cache. Setup/storage requirements and
-release obligations are consolidated in [local models](../local-models.md).
+The current UI calculates requirements from the supported manifests.
 
-Streams 1–4 accepted combined-model measurements and signed-app functional evidence,
-including offline isolation, provider switches, cancellation and owned removal. Whole-feature
-review corrections and independent closure are Accepted on 2026-10-11. First load after reboot/OS update,
-energy, output-device latency and Developer ID notarization remain unmeasured. Resolve the recorded
-Parakeet provenance and eSpeak public-release obligations before publication.
+First load after reboot or OS update, energy and output-device latency remain
+unmeasured. Licensing and release checks below remain open.
 
 ## Accepted signed-app evidence, 2026-10-11
 
-Stream 4 accepted physical Local capture followed by the user's next Dictation shortcut,
-which inserted a paragraph into the previously blank TextEdit target and settled idle.
-Paragraph fidelity was not measured. Silence only showed Paused; it did not commit text.
-Earlier evidence covers physical xAI Dictation with Local Read Aloud selected, audible
-xAI MCP speech with Local Dictation selected, offline audible Local MCP completion,
-captured-provider/lease protection, physical Escape and settled controls. Successful
-Local selection-reading hotkey playback is not claimed. These checks are retained evidence;
-the Final cache-ownership correction receives new deterministic/build/signature checks,
-without another inference or physical session. Whole-feature acceptance passed on 2026-10-11.
+Physical Local capture followed by the next Dictation shortcut inserted a paragraph
+into a previously blank TextEdit target and settled idle. Paragraph fidelity was
+not measured. Silence only showed Paused; it did not commit text. Other checks
+covered physical xAI Dictation with Local Read Aloud selected, audible xAI MCP
+speech with Local Dictation selected, offline audible Local MCP completion,
+captured-provider lease protection, physical Escape and settled controls.
+Successful Local selection-reading hotkey playback is not claimed. These checks
+precede the current loading and Settings changes.
 
-## Productionization measurements, 2026-10-10
+## Combined-model measurements, 2026-10-10
 
-Before retiring the bench, serial release runs revalidated the restored pins and production
-feature preparation/leases at `868f5ea3e839f3510afa68a9aef3eb7966f100b5` plus stream 4
-uncommitted changes. No model choice changed. All declared installed files matched manifest
-sizes and SHA-256, including the 37-file Kokoro copy retained by stream 1. All fifteen
-recordings and reviewed references were present. No download or paid provider request ran.
-
-Validation copied models/recordings into
-`.build/local-productionization/validation-home/Library/Application Support/`.
-`CFFIXED_USER_HOME` redirected Foundation home, Application Support and Caches there.
-`sandbox-exec` denied networking and access to the user's real model, FluidAudio, bench,
-cache/preferences directories and `/Applications/EchoType.app`. Real user models,
-recordings, results, preferences, credentials and inspection processes were preserved.
+Serial release runs revalidated the restored pins and feature preparation with
+installed models in a separate home. All declared files matched manifest sizes and
+SHA-256. All fifteen recordings and reviewed references were present. Networking
+and access to the user's real models, caches and preferences were denied. No
+download or paid request ran. These measurements precede retirement of the bench
+and do not verify the final signed app.
 
 | Run | Configuration and result |
 | --- | --- |
-| `20261010T121805Z-local` | Required paced boosted Dictation + cleanup, keyterms-stack. Preparation 57.704 s; stop-to-final 309 ms; no errors/violations. Peak bench footprint 4103 MiB; system pressure critical during this first isolated preparation. |
-| `20261010T121826Z-local` | Required fast cleanup, all twelve cases with production Dictation resident. 8/11 counted exact, no wrong deletions, 13 missed edits, one safe fallback, no deadline failures. Preparation 5.492 s. |
-| `20261010T121854Z-local` | Required fast Heart ordinary prose. Preparation 11.562 s; first audio 310 ms; 9.3 s audio; RTF 0.07; no violations. |
+| `20261010T121805Z-local` | Paced boosted Dictation + cleanup, keyterms-stack. Preparation 57.704 s; stop-to-final 309 ms; no errors/violations. Peak bench footprint 4103 MiB; system pressure critical during this first isolated preparation. |
+| `20261010T121826Z-local` | Fast cleanup, all twelve cases with production Dictation resident. 8/11 counted exact, no wrong deletions, 13 missed edits, one safe fallback, no deadline failures. Preparation 5.492 s. |
+| `20261010T121854Z-local` | Fast Heart ordinary prose. Preparation 11.562 s; first audio 310 ms; 9.3 s audio; RTF 0.07; no violations. |
 | `20261010T121907Z-local` | Combined boosted Parakeet, Qwen cleanup and Kokoro resident; four recordings twice, paced Dictation. Preparation 7.436 s; warm stop-to-insert p50/p95 1114/1447 ms, transcription 278/297 ms, cleanup 818/1150 ms. Peak/ready bench footprint 4482/2747 MiB; system pressure warning; zero deadline failures/errors/violations. |
 | `20261010T122021Z-local` | Same combined residency; all twelve cleanup cases twice, paced. 16/22 counted exact, zero wrong deletions, 20 missed edits, two safe output-cap fallbacks, no validation rejections/deadline failures. Warm stop-to-insert p50/p95 658/1844 ms; cancellation 155/177 ms. Preparation 7.945 s; peak/ready footprint 4486/2745 MiB; system pressure warning. |
 | `20261010T122339Z-local` | Same combined residency; Heart long reading, speed 1, pause/resume and cancellation, with explicit speech teardown join before lease release. Preparation 7.372 s; first audio 260 ms; 58.0 s audio, 583 chunks, maximum 100 ms, zero gaps/errors/violations. Pending-pull cancellation 0.055 ms, then joined teardown. Peak/ready footprint 4490/2746 MiB; system pressure normal. |
 
-`20261010T122141Z-local` is provisional and superseded by the last speech run because
-its legacy bench caller had not yet joined speech teardown. Raw artifacts remain for audit.
-Bench builds passed in 23.23 s and 21.70 s after the teardown correction. Source/package
-hash inventories, logs, sandbox and raw runs remain under `.build/local-productionization/`.
-Run directories retain configuration, preparation, trace, machine samples, reports and audio.
-These measurements precede retirement and do not verify the final signed production app.
+`20261010T122141Z-local` was superseded by the last speech run because its caller
+had not joined speech teardown.
 
 The combined Dictation pass had 6.1% WER, 9.8% formatted WER and 18/22 keyterms across
 four distinct recordings repeated twice. Its technical-word errors include Vite/shadcn;
@@ -216,20 +255,49 @@ compiler/XPC costs and is not the combined set's total system memory. Initial sp
 background pressure and cache reuse confound preparation comparisons. No first-load after
 reboot, energy, output-device latency or broad speech-quality study was performed.
 
+## Build and release checks
+
+MLX Swift 0.32.3 needs Xcode's Metal Toolchain. Dependency bundles, including
+`mlx-swift_Cmlx.bundle`, must be staged under `Contents/Resources` before signing.
+Missing shader resources can fail at first inference.
+
+A SwiftPM plugin compiles English pronunciation resources from the pinned eSpeak
+source and library. The runtime reads `EnglishPronunciation.bundle` through
+`Bundle.module`. It needs no runtime compiler, Homebrew installation or developer
+model cache. Kokoro loads only its seven-stage Core ML chain, vocabulary and Heart
+and Emma voices. It bypasses FluidAudio's unused G2P initialization. The signed
+release packaging check on 10 October measured 72,048 KiB allocated for the app,
+including 928 KiB of compiled pronunciation resources. No eSpeak source bundle
+was staged.
+
+The pinned [Unified conversion card](https://huggingface.co/FluidInference/parakeet-unified-en-0.6b-coreml/blob/d32e972dd4315f1dc3f6be28fb2aab0ab3e80358/README.md)
+declares CC-BY-4.0 and identifies NVIDIA's model as its base, but its repository
+contains no license or Notice file. The [NVIDIA model card](https://huggingface.co/nvidia/parakeet-unified-en-0.6b)
+names the NVIDIA Open Model License. Different labels do not establish the
+conversion's provenance. Before release, document a basis for the conversion's
+license claim and how direct-download installation delivers required terms and
+notices. The [NVIDIA agreement](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/)
+requires agreement and Notice delivery under section 3.1 and has continuing
+conditions under sections 2.1 and 2.3. No maintainer confirmation was obtained.
+
+CTC is recorded CC-BY-4.0 and Silero MIT. Qwen cleanup and Kokoro weights and voices
+are recorded Apache-2.0. Preserve licenses, notices, attribution and conversion
+identification for exact pinned assets. Metadata labels alone do not settle
+release obligations.
+
+eSpeak is GPLv3. Its license ships in the pronunciation resources and app notices.
+The repository's license has not changed. Public distribution still needs a
+GPL-compatible combined-program license, corresponding source, build instructions
+and notices. Audio acceptance did not settle these obligations.
+
+Verify nested resources, Developer ID signing, notarization and release CI before
+publication. Apple Development builds and isolated signed-host checks do not
+establish public-release readiness.
+
 ## Evidence recovery
 
-Full research, results and completed workflow records are preserved in spike commit
-`2f231b9` on `spike/local-models`; they are intentionally absent from the production tree.
-Read them without restoring them:
-
-```sh
-git show 2f231b9:docs/spikes/local-models/results.md
-git show 2f231b9:docs/spikes/local-models/research.md
-git ls-tree -r --name-only 2f231b9 docs/spikes/local-models
-```
-
-Historical raw runs are under `~/Library/Application Support/EchoTypeBench/runs/`; listening
-ratings/audio under `~/Library/Application Support/EchoTypeBench/listening/`. These are local
-artifacts, not checked-in fixtures. Losing those files does not erase the archived conclusions.
-The productionization cleanup recorded the remaining measurements and retired the model
-bench before merging. The [testing follow-up](../specs/app-testing.md) starts independently.
+Full evaluation research and results remain in commit `2f231b9`. Historical raw
+runs are under `~/Library/Application Support/EchoTypeBench/runs/`, with listening
+ratings and audio under `~/Library/Application Support/EchoTypeBench/listening/`.
+They are local artifacts, not checked-in fixtures. This record retains the
+conclusions if those files are lost.

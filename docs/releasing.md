@@ -15,7 +15,7 @@ Privacy & Security.
    `/Applications` folder is shared between accounts; `scripts/install.sh` asks for
    administrator access when another account owns the installed bundle.
 4. Tag the commit as `v<version>` and attach the DMG to a GitHub Release with the same
-   version. The Updates tab links to the latest published release.
+   version. Settings → About → Updates links to the latest published release.
 
 To update manually, quit EchoType, download the new DMG, drag EchoType into
 `/Applications`, choose **Replace**, and launch it again. Keep the bundle identifier

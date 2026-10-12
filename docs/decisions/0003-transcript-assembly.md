@@ -1,6 +1,6 @@
 # 0003 Transcript assembly rules
 
-Status: accepted, 2026-09-22 (EchoTypeCore workstream 2), extended 2026-09-24 (overlay)
+Status: accepted, 2026-09-22, extended 2026-09-24 (overlay)
 and 2026-09-27 (live revision). Since the provider adapters change (2026-10-01) the
 assembly rules describe the xAI transcription adapter in `Providers/XAI/`. The neutral
 `Transcript` and the snapshot rules apply to every provider.

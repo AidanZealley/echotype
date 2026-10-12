@@ -5,7 +5,7 @@
 <h1 align="center">EchoType</h1>
 
 <p align="center">
-  Dictation and read aloud for macOS, powered by xAI or on-device by Apple.
+  Dictation and read aloud for macOS, powered by xAI or on-device with Local and Apple.
 </p>
 
 EchoType lives in the menu bar. Press a hotkey in any app and start talking. Your words
@@ -26,13 +26,13 @@ when you stop. Select some text and press a second hotkey to hear it read back.
   dropped while you talk. Cleanup runs whenever the selected provider supports it. Your
   words are never swapped for different ones.
 - **Keyterms.** Add names and bits of jargon so they're spelled correctly. The selected
-  provider sets the limit, currently 99 saved terms with xAI, Apple or Local.
+  provider sets the limit, currently 100 saved terms with xAI, Apple or Local.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
   pauses. Voice and speed are remembered for each provider.
 - **Providers.** Choose Dictation and Read Aloud providers independently in Settings.
   Dictation includes cleanup. xAI is the default and needs an API key. Apple and Local
   need no key. Local uses Parakeet with keyterm boosting, Qwen cleanup and Kokoro speech.
-  Explicitly download and prepare each local feature in Settings before using it offline.
+  Install local features in Settings before using them offline.
 - **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
   and copies it as JSON.
 - **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
@@ -61,7 +61,7 @@ Apple or Local. Local requires an Apple silicon Mac and several gigabytes for mo
 4. Allow **Device Control and Data Access** (Accessibility on older versions of macOS)
    when asked. EchoType needs it for the hotkeys and to paste text.
 5. Click the waveform icon in the menu bar, choose **Settings…**, and paste your key into
-   the **Providers → xAI** page. **Save** keeps it in the Keychain. Choose providers on
+   the **xAI** page. **Save** keeps it in the Keychain. Choose providers on
    **Dictation** and **Read Aloud**. Apple needs no key. For Local, use its feature's
    **Download** button to install and prepare the required models. Selecting Local alone
    does not download anything. **Test** records five seconds and shows what it heard.
@@ -73,16 +73,14 @@ to the <kbd>⌃</kbd><kbd>⌥</kbd> version in Settings.
 
 ### Local storage and uninstalling
 
-Switching providers retains downloaded models and saved keys. Settings shows installed
-files separately from prepared runtimes. Initial preparation can take tens of seconds;
-Cancel and Retry retain verified files without silently installing missing models.
+Switching providers retains downloaded models and saved keys. Initial model loading can
+take tens of seconds. [Local model policy](docs/decisions/0026-local-model-stack.md#runtime-and-installation-policy)
+describes launch loading, cancellation and the install queue.
 
-Before uninstalling, open **Providers → Local → Manage files** and remove the model sets
-or all local files. Stop active work first. Dragging the app to Trash leaves model files in
-`~/Library/Application Support/EchoType/Models/`. If the app is already removed and no
-process uses those files, delete that directory to reclaim its managed models. Preserve
-other tools' FluidAudio and Core ML caches. [Storage notes](docs/local-models.md) list
-owned links and remaining public-release obligations.
+Before uninstalling, open **Settings → Local → Manage Files** and remove supported models
+and retained downloads. Stop active work first. Dragging the app to Trash leaves model files in
+`~/Library/Application Support/EchoType/Models/`. [Storage notes](docs/local-models.md)
+explain how to remove supported models and owned links after uninstalling.
 
 ### Updating
 
@@ -96,7 +94,7 @@ End a dictation with "reply with EchoType" and it sends itself. The agent calls 
 tool to read a version of its reply aloud, then writes the full reply as usual. Register the
 server once in each agent: open **Settings → Agents**, copy the command for Claude Code or Codex,
 run it in a terminal, and start a new agent session. EchoType has to be running for `speak` to
-work. The Agents tab also has optional instructions you can copy into your agent's instruction
+work. The Agents page also has optional instructions you can copy into your agent's instruction
 file to make spoken replies more reliable without shortening written answers.
 
 ## Development
@@ -150,11 +148,11 @@ logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell a
 [`docs/releasing.md`](docs/releasing.md) covers packaging a DMG for release.
 
 The [local model decision](docs/decisions/0026-local-model-stack.md) records the chosen
-stack and measurements. [Local model setup and storage](docs/local-models.md) describes
-the confirmed productionization behavior and remaining release checks.
+stack and measurements. [Local model storage](docs/local-models.md) describes
+file ownership and removal. The decision also records remaining release checks.
 
 To add a provider, create `Sources/EchoTypeCore/Providers/<Name>/` with its description
-and service adapters, give it a readiness check if a Mac's setup can rule its services
-out, add it to `Providers.all`, and add fixture tests. Settings and operation wiring use
+and service adapters. Declare readiness and optional setup capabilities, add it to
+`Providers.all`, and add fixture tests. Settings and operation wiring use
 the registry. The [provider adapter decision](docs/decisions/0025-provider-adapters.md)
 sets out the contracts and required defaults.

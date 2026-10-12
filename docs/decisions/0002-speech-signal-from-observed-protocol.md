@@ -1,6 +1,6 @@
 # 0002 Detect speech from what the endpoint actually sends
 
-Status: accepted, 2026-09-22 (EchoTypeCore workstreams 3 and 4). Since the provider
+Status: accepted, 2026-09-22. Since the provider
 adapters change (2026-10-01) this record describes the xAI transcription adapter in
 `Providers/XAI/`, not the session.
 

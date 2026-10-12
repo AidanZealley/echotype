@@ -13,7 +13,7 @@ Status: open. Remove each item as it is resolved.
   wrong chord, and pressing ⌥D as it says types a character into the target app instead
   of committing. The hint should follow the chosen hotkey.
 - **Verified only by reading:** tap re-enable after `tapDisabledByTimeout`, two
-  insertions within the 800ms pasteboard restore window, and the pill appearing on the
+  insertions within the 400 ms pasteboard restore window, and the pill appearing on the
   second display when that display holds the focused window.
 - **Bluetooth input** runs in the headset profile, which gave wrong transcripts before
   [0012](0012-capture-with-avcapturesession.md). See
@@ -24,11 +24,6 @@ Status: open. Remove each item as it is resolved.
   dictation and Test blame the key; a read-aloud 400 does too. The language now comes
   from a fixed list, so an unsupported tag no longer causes one. Other unexpected TTS
   statuses show Swift case names.
-- **Long readings can queue substantial audio.** The REST response arrived about
-  five times faster than playback in the read-aloud spike. Each decoded buffer is
-  scheduled as it arrives, with no limit on audio held ahead of playback. At the
-  60,000-character cap, the measured sample suggests roughly 300 MB of Float32
-  buffers. Revisit if long readings show memory pressure.
 - **The rapid dictation-to-reading clipboard sequence has not been checked by hand.**
   [0020](0020-pasteboard-insertion-and-selection-copy.md) makes reading wait for a
   pending paste window. Build and tests pass, but the two hotkeys in quick succession
@@ -50,3 +45,4 @@ Status: open. Remove each item as it is resolved.
   Settings and the waiting pill following it, keyterm spellings in real jargon dictation,
   a sentence over 250 characters read aloud, and cancelling while a model loads. A
   synthetic recording spelled EchoType, Zustand and TanStack wrong even as keyterms.
+- Remove the Apple provider in a future pass; Local replaces it as the free on-device option.
