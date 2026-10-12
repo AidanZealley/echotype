@@ -50,57 +50,58 @@ final class LocalModel<Loaded: Sendable>: Sendable {
   }
 
   /// Concurrent callers join one installed-only load. A cancelled setup cannot publish Ready.
-  func beginPreparation() throws -> Task<Void, Never>? {
+  /// A failed load stays failed until `retrying` is set, which only setup in Settings does.
+  func beginPreparation(retrying: Bool = false) throws {
     let directories = try manifests.map { manifest in
       guard case .installed(let directory) = store.state(of: manifest) else {
         throw ProviderError.failed("Download models in Settings > Local.")
       }
       return directory
     }
-    let task = state.withLock { state -> Task<Void, Never>? in
-      if state.loaded != nil { return nil }
-      if let task = state.task { return task }
+    let started = try state.withLock { state -> Bool in
+      if state.loaded != nil || state.task != nil { return false }
+      if let failure = state.failure, !retrying { throw ProviderError.failed(failure) }
       let generation = UUID()
       state.generation = generation; state.failure = nil
       let task = Task.detached { [self] in
+        var loaded: Loaded?
+        var failure: String?
         do {
-          for manifest in manifests { try store.verifyInstalled(manifest) }
-          try Task.checkCancellation()
-          let result = try await load(directories)
-          try Task.checkCancellation()
-          self.state.withLock {
-            guard $0.generation == generation else { return }
-            $0.loaded = result
-          }
+          loaded = try await load(directories)
         } catch {
-          self.state.withLock {
-            guard $0.generation == generation else { return }
-            $0.failure = error is CancellationError ? nil : error.localizedDescription
-          }
+          failure = error is CancellationError ? nil : error.localizedDescription
         }
-        self.state.withLock { $0.task = nil }
+        self.state.withLock {
+          guard $0.generation == generation else { return }
+          $0.loaded = loaded; $0.failure = failure; $0.task = nil
+        }
         notify()
       }
       state.task = task
-      return task
+      return true
     }
-    notify()
-    return task
+    if started { notify() }
   }
 
   func prepare() async throws {
     try Task.checkCancellation()
-    try await waitForPreparation(beginPreparation())
+    try beginPreparation()
+    try await waitForPreparation()
   }
 
-  func waitForPreparation(_ task: Task<Void, Never>?) async throws {
-    await task?.value
+  /// Returns when the current load ends, or at once when the caller is cancelled. The load
+  /// itself keeps running for the next caller.
+  func waitForPreparation() async throws {
+    var updates = changes().makeAsyncIterator()
+    while preparing, await updates.next() != nil {}
     try Task.checkCancellation()
     guard loaded != nil else { throw ProviderError.failed(check().message ?? "Preparation cancelled.") }
   }
 
   func cancel() {
-    state.withLock { $0.generation = nil; $0.task?.cancel(); $0.loaded = nil; $0.failure = nil }
+    state.withLock {
+      $0.generation = nil; $0.task?.cancel(); $0.task = nil; $0.loaded = nil; $0.failure = nil
+    }
     notify()
   }
 

@@ -60,6 +60,7 @@ final class LocalLifecycle: Sendable {
   private let transcription: LocalModel<ParakeetModel.Start>?
   private let cleanup: LocalModel<CleanupModel>?
   private let voice: LocalModel<KokoroModel.Speak>?
+  private let memoryPressure = DispatchSource.makeMemoryPressureSource(eventMask: .critical)
 
   init(
     store: ModelStore, transcription: LocalModel<ParakeetModel.Start>?,
@@ -69,7 +70,19 @@ final class LocalLifecycle: Sendable {
     self.transcription = transcription
     self.cleanup = cleanup
     self.voice = voice
+    // Cleanup is the largest model and the only one a dictation can start without, so it
+    // goes first. The next dictation loads it again in the background. A 16 GB Mac reaches
+    // warning pressure with every model loaded, so only critical pressure releases it.
+    memoryPressure.setEventHandler { [weak self] in
+      guard let self, cleanup?.loaded != nil,
+        state.withLock({ $0.operations[.dictation, default: 0] == 0 })
+      else { return }
+      cleanup?.release()
+    }
+    memoryPressure.activate()
   }
+
+  deinit { memoryPressure.cancel() }
 
   private func manifests(_ features: Set<ProviderFeature>) -> [ModelManifest] {
     var seen: Set<String> = []
@@ -95,9 +108,9 @@ final class LocalLifecycle: Sendable {
     }
     if feature == .dictation {
       guard let transcription else { throw ProviderError.unavailable }
+      // Cleanup loads in the background; a dictation that starts first skips cleanup.
+      try? cleanup?.beginPreparation()
       try await transcription.prepare()
-      // The existing policy permits transcription if cleanup cannot prepare.
-      try? await cleanup?.prepare()
     } else {
       guard let voice else { throw ProviderError.unavailable }
       try await voice.prepare()
@@ -174,13 +187,13 @@ final class LocalLifecycle: Sendable {
   ) async throws {
     guard let model else { return }
     try Task.checkCancellation()
-    let task = try state.withLock { state in
+    try state.withLock { state in
       guard features.allSatisfy({ state.setupGenerations[$0] == generation }) else {
         throw CancellationError()
       }
-      return try model.beginPreparation()
+      try model.beginPreparation(retrying: true)
     }
-    try await model.waitForPreparation(task)
+    try await model.waitForPreparation()
   }
 
   var controls: LocalSetup {
@@ -296,12 +309,20 @@ final class LocalLifecycle: Sendable {
         try store.remove(files, manifests: manifests(Set(ProviderFeature.allCases)))
       }, removalBlock: { [self] files in state.withLock { removalBlock(files, state: $0) } },
       select: { [self] selected in
-        state.withLock {
+        let added = state.withLock {
+          let added = selected.subtracting($0.selected)
           $0.releaseAfterSetup.formUnion($0.selected.subtracting(selected).intersection($0.setup))
           $0.releaseAfterSetup.subtract(selected)
           $0.selected = selected
           releaseUnused(&$0, features: Set(ProviderFeature.allCases))
+          return added
         }
+        // Load what is installed so the first operation does not wait. This never downloads.
+        if added.contains(.dictation) {
+          try? transcription?.beginPreparation()
+          try? cleanup?.beginPreparation()
+        }
+        if added.contains(.readAloud) { try? voice?.beginPreparation() }
       },
       availableBytes: { [store] in store.availableBytes() })
   }

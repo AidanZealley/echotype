@@ -71,6 +71,62 @@ private struct NeverSpeech: SpeechStream {
     #expect(cancelled.check().status != .ready)
   }
 
+  @Test("A cancelled wait returns at once while the load continues for the next caller")
+  func cancelledWait() async throws {
+    let release = AsyncStream.makeStream(of: Void.self)
+    let model = LocalModel<Int>(manifests: [], loadingMessage: "Loading", store: ModelStore(root: URL(filePath: "/nonexistent"))) { _ in
+      for await _ in release.stream { break }
+      return 1
+    }
+    try model.beginPreparation()
+    let waiter = Task { try await model.waitForPreparation() }
+    waiter.cancel()
+    await #expect(throws: CancellationError.self) { try await waiter.value }
+    #expect(model.preparing)
+    release.continuation.finish()
+    try await model.prepare()
+    #expect(model.loaded == 1)
+  }
+
+  @Test("Cancelling a load clears it, so the next preparation loads again")
+  func cancelledLoad() async throws {
+    let entered = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+    let loads = Mutex(0)
+    let model = LocalModel<Int>(manifests: [], loadingMessage: "Loading", store: ModelStore(root: URL(filePath: "/nonexistent"))) { _ in
+      let count = loads.withLock { $0 += 1; return $0 }
+      if count == 1 {
+        entered.continuation.yield()
+        for await _ in release.stream { break }
+      }
+      return count
+    }
+    try model.beginPreparation()
+    // The first load is running before it is cancelled, so the next one cannot take its place.
+    for await _ in entered.stream { break }
+    model.cancel()
+    #expect(!model.preparing)
+    try await model.prepare()
+    #expect(model.loaded == 2)
+    release.continuation.finish()
+  }
+
+  @Test("A failed load is remembered until setup retries it")
+  func rememberedFailure() async throws {
+    let loads = Mutex(0)
+    let model = LocalModel<Int>(manifests: [], loadingMessage: "Loading", store: ModelStore(root: URL(filePath: "/nonexistent"))) { _ in
+      let count = loads.withLock { $0 += 1; return $0 }
+      if count == 1 { throw ProviderError.failed("Broken") }
+      return count
+    }
+    await #expect(throws: (any Error).self) { try await model.prepare() }
+    await #expect(throws: (any Error).self) { try await model.prepare() }
+    #expect(loads.withLock { $0 } == 1)
+    try model.beginPreparation(retrying: true)
+    try await model.waitForPreparation()
+    #expect(model.loaded == 2)
+  }
+
   @Test("Cancelled downloads cannot publish even if their source ignores cancellation; retry reuses verified files")
   func downloadCancellation() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

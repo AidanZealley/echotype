@@ -620,6 +620,27 @@ struct DictationOperationTests {
     #expect(active.withLock { $0 } == 0)
   }
 
+  @Test("Escape during a slow preparation ends the operation without opening capture")
+  func escapeWhilePreparing() async {
+    let h = Harness()
+    let entered = AsyncStream.makeStream(of: Void.self)
+    let loading = AsyncStream.makeStream(of: Void.self)
+    h.prepare = { _ in
+      entered.continuation.yield()
+      // Ends only when the wait is cancelled.
+      for await _ in loading.stream {}
+      try Task.checkCancellation()
+      return RuntimeLease()
+    }
+    let operation = h.operation()
+    let task = Task { await operation.run() }
+    for await _ in entered.stream { break }
+    operation.cancel()
+    let result = await task.value
+    #expect(result.outcome == .nothing && h.insertions.isEmpty)
+    #expect(h.points.count(.captureStart) == 0)
+  }
+
   // MARK: Revision and insertion
 
   @Test("Escape cancels through drain, closing and final revision", arguments: [Point.captureStop, .finish, .revision])

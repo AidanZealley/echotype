@@ -161,17 +161,30 @@ import Observation
     if clearError { lastError = nil }
   }
 
+  /// What the readiness watchers depend on. Other settings, such as keyterms, leave them running.
+  private struct Followed: Equatable {
+    var dictation: ProviderID, dictationRequest: ReadinessRequest
+    var reading: ProviderID, readingRequest: ReadinessRequest
+  }
+  private var followed: Followed?
+
   private func followAvailability() {
-    dictationStatusTask?.cancel(); readingStatusTask?.cancel()
-    dictationReadiness = nil; readAloudReadiness = nil
     let settings = store.settings
     let dictation = Providers[settings.dictationProvider]
     let reading = Providers[settings.readAloudProvider]
+    let dictationRequest = ReadinessRequest(settings: settings, provider: dictation)
+    let readingRequest = ReadinessRequest(settings: settings, provider: reading)
+    let next = Followed(
+      dictation: dictation.id, dictationRequest: dictationRequest, reading: reading.id, readingRequest: readingRequest)
+    guard next != followed else { return }
+    followed = next
+    dictationStatusTask?.cancel(); readingStatusTask?.cancel()
+    dictationReadiness = nil; readAloudReadiness = nil
     dictationStatusTask = Task { [weak self] in
-      await dictation.readiness.follow(ReadinessRequest(settings: settings, provider: dictation)) { self?.dictationReadiness = $0 }
+      await dictation.readiness.follow(dictationRequest) { self?.dictationReadiness = $0 }
     }
     readingStatusTask = Task { [weak self] in
-      await reading.readiness.follow(ReadinessRequest(settings: settings, provider: reading)) { self?.readAloudReadiness = $0 }
+      await reading.readiness.follow(readingRequest) { self?.readAloudReadiness = $0 }
     }
   }
 

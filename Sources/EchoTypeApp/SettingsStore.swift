@@ -9,30 +9,42 @@ import Observation
   private static let key = "settings"
   private static let activeKey = "hotkeysActive"
 
+  private let defaults: UserDefaults?
+  private let providers: [Provider]
+
   var settings: Settings {
     didSet {
-      UserDefaults.standard.set(settings.encoded(), forKey: Self.key)
-      updateLocalSelection()
+      defaults?.set(settings.encoded(), forKey: Self.key)
+      updateSelection()
     }
   }
   let localInstallation = LocalInstallation()
 
   var hotkeysActive: Bool {
     didSet {
-      UserDefaults.standard.set(hotkeysActive, forKey: Self.activeKey)
+      defaults?.set(hotkeysActive, forKey: Self.activeKey)
     }
   }
 
-  init() {
-    settings = Settings(decoding: UserDefaults.standard.data(forKey: Self.key))
-    hotkeysActive = UserDefaults.standard.object(forKey: Self.activeKey) as? Bool ?? true
-    updateLocalSelection()
+  /// Tests pass nil defaults, which keeps settings in memory, and no providers, so they never
+  /// load real models.
+  init(defaults: UserDefaults? = .standard, providers: [Provider] = Providers.all) {
+    self.defaults = defaults
+    self.providers = providers
+    settings = Settings(decoding: defaults?.data(forKey: Self.key))
+    hotkeysActive = defaults?.object(forKey: Self.activeKey) as? Bool ?? true
+    updateSelection()
   }
-  private func updateLocalSelection() {
-    var selected: Set<ProviderFeature> = []
-    if settings.dictationProvider == "local" { selected.insert(.dictation) }
-    if settings.readAloudProvider == "local" { selected.insert(.readAloud) }
-    Provider.local.localSetup?.select(selected)
+
+  /// Tells each provider with setup which features it serves, so it can load or release them.
+  private func updateSelection() {
+    for provider in providers {
+      guard let setup = provider.localSetup else { continue }
+      var selected: Set<ProviderFeature> = []
+      if settings.dictationProvider == provider.id { selected.insert(.dictation) }
+      if settings.readAloudProvider == provider.id { selected.insert(.readAloud) }
+      setup.select(selected)
+    }
   }
 }
 
