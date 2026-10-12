@@ -41,7 +41,7 @@ at 24 kHz and `curl --trace-time`. Times are from the request being sent.
   values survive unchanged.
   See [0010](0010-settings-storage-and-api-key.md).
 - Read Aloud has its own Opt+S or Ctrl+Opt+S hotkey, Ara or Altair voice, and speed
-  from 0.7 to 1.5. It uses the General tab's language. The reading hotkey or
+  from 0.7 to 1.5. It uses the selected provider's resolved language. The reading hotkey or
   Escape stops playback. Space pauses or resumes it. The dictation hotkey stops playback and
   starts dictation. A reading press during dictation or a settings test is ignored.
 - Copy the focused selection through the pasteboard as [0020](0020-pasteboard-insertion-and-selection-copy.md)

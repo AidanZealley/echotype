@@ -1,41 +1,39 @@
-# 0015 Settings in tabs, with a masked saved key
+# 0015 Settings in a sidebar, with a masked saved key
 
-Status: accepted, 2026-09-25, updated 2026-10-01 for the Provider tab. Replaces the key field handling in
-[0013](0013-test-button-and-system-rows.md).
+Status: accepted, 2026-09-25. Updated 2026-10-12 for the sidebar and keyterm input.
+Replaces the key field handling in [0013](0013-test-button-and-system-rows.md).
 
 ## Context
 
-The settings window was one grouped form with a box around every section. The key sat in
-a one-line secure field on the right of its row, so a pasted key scrolled sideways and
-could not be checked, and removing it meant emptying the field.
+Tabs limited navigation growth. Putting providers and app controls on one long page
+mixed unrelated tasks. A sidebar gives each feature its own controls and keeps
+provider setup separate.
 
 ## Decision
 
-- The window has General, Keyterms, Read Aloud, Agents, Provider and Updates tabs.
-  General uses the columns form style, with labels in one column and controls in the next.
-  The Provider tab replaces API Key. It lists the registered providers in a picker, then
-  the selected provider's summary, its features, its key row if needed, and Test.
-- Features come from the services. Live transcription and Read aloud are required and
-  show green SF Symbol check marks; Cleanup shows a green check when its service exists
-  and a grey mark otherwise. Colours follow the system theme, with no cards or pills.
-- The key spans the width of the Provider tab, with buttons on the right. Switching
-  provider creates a separate key editor, so a draft, revealed key or async result cannot
-  carry into another provider's editor. Providers that need no key show Test without a
-  key row. Test uses the selected provider and is disabled while the controller is busy.
-- Read Aloud lists that provider's voices by display name and its speed range with a 0.1
-  slider step. Both edits are remembered per provider. Keyterms shows the selected
-  provider's limit minus one for the built-in EchoType term. General has no cleanup
-  toggle; cleanup runs whenever the provider supplies it.
-- A saved key is never shown in an editable field. It shows masked, as its prefix, enough
-  bullets to fill the line and its last four characters, with a button at the end of the
-  line that reveals it wrapped and selectable.
-  Test, Replace and Remove act on the saved key. Remove asks first.
-- With no key, or after Replace, a field that wraps takes the key, and Save writes it.
-  Masked text cannot wrap, so the key being entered is visible. Nothing is written until
-  Save, so leaving the window mid-edit discards the edit.
-- Key writes disable the key buttons until they finish, so two cannot race.
+- `NavigationSplitView` has a `List(selection:)` sidebar driven by a `Pane` enum.
+  Each pane carries its title and SF Symbol. The sidebar toggle is removed.
+- The first group is Dictation and Read Aloud. The second lists providers with an API
+  key or setup capability, currently xAI and Local. The last is General, Keyterms,
+  Agents and About. Apple has nothing to configure and gets no provider page.
+- Pages use grouped `Form` sections and navigation titles. Feature pages own the
+  provider picker, service status and feature options. Provider pages own credentials
+  and installation controls. [0025](0025-provider-adapters.md) owns the generic setup
+  contract. Permissions appear only under General.
+- Read Aloud shows the selected provider's voices and speed range. Choices are saved
+  per provider. About contains version information and Updates.
+- Keyterms are removable chips in one input. Return adds the draft. Backspace in an
+  empty draft removes the last term. Each chip also has a remove button. The count
+  uses the selected Dictation provider's limit.
+- A saved key appears masked in `LabeledContent`, with its prefix and last four
+  characters when long enough. Replace opens a visible draft field. Save writes it
+  to the Keychain. Remove asks for confirmation. Key writes disable the buttons
+  until they finish. The editor's identity uses the provider id.
+- Test belongs to Dictation and uses its selected provider and saved credential.
+  It never saves a key and is disabled while the controller is busy.
 
 ## Consequences
 
-- Test no longer saves anything, so it always tests the key the Keychain holds.
-- The key is visible on screen while it is pasted.
+Feature choices and provider setup have separate destinations. New providers appear
+through their declared capabilities. A key is visible while it is entered, and
+leaving an unfinished editor discards its draft.
