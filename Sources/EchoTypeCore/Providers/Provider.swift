@@ -197,7 +197,7 @@ public struct ServiceState: Equatable, Sendable {
 /// Live transcription. `start` opens one session; nothing is opened until it is called, since an
 /// idle open session may be billed.
 public struct TranscriptionService: Sendable {
-  /// The most keyterms a session accepts, including the built-in one.
+  /// The most keyterms a session accepts.
   public var keytermLimit: Int
   public var start: @Sendable (TranscriptionRequest) async throws -> any LiveTranscriber
 
@@ -213,7 +213,7 @@ public struct TranscriptionService: Sendable {
 public struct TranscriptionRequest: Equatable, Sendable {
   /// BCP-47 language tag.
   public var language: String
-  /// `EchoType` first, then the saved terms, cut to the service's `keytermLimit`.
+  /// The saved terms, cut to the service's `keytermLimit`.
   public var keyterms: [String]
   public var credential: String?
 
@@ -223,14 +223,11 @@ public struct TranscriptionRequest: Equatable, Sendable {
     self.credential = credential
   }
 
-  /// The request for one dictation with `provider`, cut to its transcription `keytermLimit`. A
-  /// saved `EchoType` in any case is dropped, since the built-in term already leads the list.
+  /// The request for one dictation with `provider`, cut to its transcription `keytermLimit`.
   public init(settings: Settings, provider: Provider, credential: String?) {
-    let builtIn = "EchoType"
-    let saved = settings.keyterms.filter { $0.caseInsensitiveCompare(builtIn) != .orderedSame }
     self.init(
       language: settings.language(for: provider),
-      keyterms: Array(([builtIn] + saved).prefix(provider.transcription.keytermLimit)),
+      keyterms: Array(settings.keyterms.prefix(provider.transcription.keytermLimit)),
       credential: credential)
   }
 }
