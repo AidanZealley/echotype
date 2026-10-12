@@ -40,7 +40,6 @@ import Testing
         samples += audio.samples.count
       }
       #expect(samples > 24_000)
-      print("Packaged offline synthesis succeeded for \(voice.id), \(samples) samples")
     }
   }
 
@@ -53,7 +52,6 @@ import Testing
       let banana = try await frontend.phonemes(for: "the banana", voice: voice)
       let university = try await frontend.phonemes(for: "the university", voice: voice)
       let thee = try await frontend.phonemes(for: "I thank thee for the honour.", voice: voice)
-      print("\(voice): apple=\(apple); hour=\(hour); banana=\(banana); university=\(university); thee=\(thee)")
       // eSpeak's unstressed pre-vowel article uses short /ɪ/; literal thee uses /iː/.
       #expect(apple.hasPrefix("ðɪ"))
       #expect(hour.hasPrefix("ðɪ"))

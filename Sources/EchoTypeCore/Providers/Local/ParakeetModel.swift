@@ -16,11 +16,10 @@ final class ParakeetModel: Sendable {
 
   let asr: StreamingUnifiedAsrManager
   let vad: VadManager
-  /// Nil when keyterm boosting is unavailable.
-  private let ctc: CtcModels?
+  private let ctc: CtcModels
   private let session = Mutex<ParakeetTranscriber?>(nil)
 
-  private init(asr: StreamingUnifiedAsrManager, vad: VadManager, ctc: CtcModels?) {
+  private init(asr: StreamingUnifiedAsrManager, vad: VadManager, ctc: CtcModels) {
     self.asr = asr
     self.vad = vad
     self.ctc = ctc
@@ -28,7 +27,7 @@ final class ParakeetModel: Sendable {
 
   /// Loads the models from their installed directories, never through FluidAudio's downloader,
   /// then runs a little silence through each so the first dictation does not pay for compiling.
-  static func load(unified: URL, voiceActivity: URL, keywordSpotting: URL?) async throws -> ParakeetModel {
+  static func load(unified: URL, voiceActivity: URL, keywordSpotting: URL) async throws -> ParakeetModel {
     var phaseStart = ProcessInfo.processInfo.systemUptime
     // The 640 ms configuration: 70 frames of left context, 560 ms chunks, 80 ms of look-ahead.
     let asr = StreamingUnifiedAsrManager(
@@ -44,15 +43,12 @@ final class ParakeetModel: Sendable {
     let vad = VadManager(config: .default, vadModel: vadModel)
     logLoadPhase("vad-load", since: phaseStart)
 
-    var ctc: CtcModels?
-    if let keywordSpotting {
-      phaseStart = ProcessInfo.processInfo.systemUptime
-      // Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache
-      // folder, whichever way the model was loaded, so that folder points at the store's copy.
-      try link(CtcModels.defaultCacheDirectory(), to: keywordSpotting)
-      ctc = try await CtcModels.loadDirect(from: keywordSpotting)
-      logLoadPhase("ctc-load", since: phaseStart)
-    }
+    phaseStart = ProcessInfo.processInfo.systemUptime
+    // Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache
+    // folder, whichever way the model was loaded, so that folder points at the store's copy.
+    try link(CtcModels.defaultCacheDirectory(), to: keywordSpotting)
+    let ctc = try await CtcModels.loadDirect(from: keywordSpotting)
+    logLoadPhase("ctc-load", since: phaseStart)
     let model = ParakeetModel(asr: asr, vad: vad, ctc: ctc)
     try await model.warm()
     return model
@@ -66,7 +62,7 @@ final class ParakeetModel: Sendable {
       await previous.waitForClose()
     }
     var boosting: VocabularyBoostingSession?
-    if !request.keyterms.isEmpty, let ctc {
+    if !request.keyterms.isEmpty {
       boosting = try await Self.boosting(request.keyterms, models: ctc)
     }
     let transcriber = ParakeetTranscriber(model: self, boosting: boosting)
@@ -92,14 +88,12 @@ final class ParakeetModel: Sendable {
     _ = try await vad.processStreamingChunk(
       Array(silence.prefix(VadManager.chunkSize)), state: vad.makeStreamState())
     Self.logLoadPhase("vad-warm", since: phaseStart)
-    if let ctc {
-      phaseStart = ProcessInfo.processInfo.systemUptime
-      // Any word compiles the model; this one is not a keyterm.
-      let word = TokenTiming(token: " warm", tokenId: 0, startTime: 0.2, endTime: 0.6, confidence: 1)
-      let boosting = try await Self.boosting(["warm"], models: ctc)
-      _ = await boosting.rescore(text: " warm", tokenTimings: [word], audioSamples: silence)
-      Self.logLoadPhase("ctc-warm", since: phaseStart)
-    }
+    phaseStart = ProcessInfo.processInfo.systemUptime
+    // Any word compiles the model; this one is not a keyterm.
+    let word = TokenTiming(token: " warm", tokenId: 0, startTime: 0.2, endTime: 0.6, confidence: 1)
+    let boosting = try await Self.boosting(["warm"], models: ctc)
+    _ = await boosting.rescore(text: " warm", tokenTimings: [word], audioSamples: silence)
+    Self.logLoadPhase("ctc-warm", since: phaseStart)
   }
 
   // Keep loading and first inference separate: CoreML can build its execution plan during

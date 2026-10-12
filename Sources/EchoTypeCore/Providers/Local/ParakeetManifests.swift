@@ -1,5 +1,3 @@
-import Foundation
-
 /// The pinned models Parakeet Unified transcription loads, each from the repository FluidAudio
 /// converted it into. Each lists only the files FluidAudio reads: every file inside the
 /// `.mlmodelc` bundles named in `ParakeetModel`, plus the vocabulary and tokenizer.
@@ -77,8 +75,8 @@ enum ParakeetManifests {
           sha256: "53ecc8b5081146140ab654c89109cf001f2183abddd7a2411c5081feeffff063"),
     ])
 
-  /// The CTC model that spots keyterms in the audio, for `parakeet-unified-keyterms` only. It
-  /// ships the mel stage, the encoder with its CTC head, and the tokenizer boosting needs. The
+  /// The CTC model loaded with Parakeet to spot saved keyterms in the audio. It ships the
+  /// mel stage, the encoder with its CTC head, and the tokenizer boosting needs. The
   /// conversion and upstream (`nvidia/parakeet-tdt_ctc-110m`) are both CC-BY-4.0.
   static let keywordSpotting = ModelManifest(
     name: "parakeet-ctc-110m", repository: "FluidInference/parakeet-ctc-110m-coreml",

@@ -1,5 +1,3 @@
-import Foundation
-
 /// The seven-stage Core ML chain, vocabulary and retained voice packs. English
 /// pronunciation data comes from the app bundle, never the downloaded model store.
 enum KokoroManifests {

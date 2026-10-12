@@ -36,7 +36,6 @@ private final class EmptyProviderSpeech: SpeechStream {
   var readingProviders: [ProviderID] = []
   var dictationProviders: [ProviderID] = []
   var readingSettings: [Settings] = []
-  var dictationSettings: [Settings] = []
   var testFlags: [Bool] = []
   var succeeds = false
   var keys: [ProviderID: String] = [:]
@@ -60,7 +59,7 @@ private final class EmptyProviderSpeech: SpeechStream {
           player: PlaybackFixture().player), onPresentation: present)
       }, focusedScreen: { nil }, showPanel: { _, _ in }, hidePanel: {}, key: { _ in nil },
       makeDictation: { isTest, settings, provider in
-        self.dictationProviders.append(provider.id); self.dictationSettings.append(settings)
+        self.dictationProviders.append(provider.id)
         self.testFlags.append(isTest)
         let operation = DictationOperation(settings: settings, isTest: isTest, dependencies: .init(
           startCapture: { _ in self.captureStarts += 1; return AsyncThrowingStream { $0.finish() } },

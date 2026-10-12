@@ -21,7 +21,6 @@ private final class FakeSource: Sendable {
   }
 
   var fetchCount: Int { fetches.withLock { $0.values.reduce(0, +) } }
-  func fetchCount(for path: String) -> Int { fetches.withLock { $0[path, default: 0] } }
   func repair() { failing.withLock { $0 = nil } }
 
   var source: ModelDownloadSource {

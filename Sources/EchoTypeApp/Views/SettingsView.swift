@@ -493,7 +493,7 @@ private struct KeytermField: View {
 /// first.
 private struct TermInput: NSViewRepresentable {
   /// Lets the surrounding view start editing the field.
-  final class Focus {
+  @MainActor final class Focus {
     weak var field: NSTextField?
     func start() { field?.window?.makeFirstResponder(field) }
   }
