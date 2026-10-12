@@ -59,21 +59,26 @@ final class LocalModel<Loaded: Sendable>: Sendable {
       return directory
     }
     let started = try state.withLock { state -> Bool in
-      if state.loaded != nil || state.task != nil { return false }
+      if state.loaded != nil || state.task?.isCancelled == false { return false }
       if let failure = state.failure, !retrying { throw ProviderError.failed(failure) }
+      let previous = state.task
       let generation = UUID()
       state.generation = generation; state.failure = nil
       let task = Task.detached { [self] in
         var loaded: Loaded?
         var failure: String?
         do {
+          // Cancellation is cooperative; the previous loader may still be using its files.
+          await previous?.value
+          try Task.checkCancellation()
           loaded = try await load(directories)
         } catch {
           failure = error is CancellationError ? nil : error.localizedDescription
         }
         self.state.withLock {
           guard $0.generation == generation else { return }
-          $0.loaded = loaded; $0.failure = failure; $0.task = nil
+          if !Task.isCancelled { $0.loaded = loaded; $0.failure = failure }
+          $0.task = nil
         }
         notify()
       }
@@ -100,7 +105,7 @@ final class LocalModel<Loaded: Sendable>: Sendable {
 
   func cancel() {
     state.withLock {
-      $0.generation = nil; $0.task?.cancel(); $0.task = nil; $0.loaded = nil; $0.failure = nil
+      $0.task?.cancel(); $0.loaded = nil; $0.failure = nil
     }
     notify()
   }

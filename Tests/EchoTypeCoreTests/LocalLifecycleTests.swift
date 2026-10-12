@@ -9,6 +9,21 @@ private struct NeverSpeech: SpeechStream {
   func cancel() {}
 }
 
+private actor LocalLoadGate {
+  private var opened = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    if !opened { await withCheckedContinuation { waiters.append($0) } }
+  }
+
+  func open() {
+    opened = true
+    for waiter in waiters { waiter.resume() }
+    waiters.removeAll()
+  }
+}
+
 @Suite struct LocalLifecycleTests {
   private func fixture(_ name: String = "tiny") -> ModelManifest {
     let data = Data([1, 2, 3])
@@ -88,7 +103,7 @@ private struct NeverSpeech: SpeechStream {
     #expect(model.loaded == 1)
   }
 
-  @Test("Cancelling a load clears it, so the next preparation loads again")
+  @Test("Cancelling a load makes the next preparation load again")
   func cancelledLoad() async throws {
     let entered = AsyncStream.makeStream(of: Void.self)
     let release = AsyncStream.makeStream(of: Void.self)
@@ -105,10 +120,58 @@ private struct NeverSpeech: SpeechStream {
     // The first load is running before it is cancelled, so the next one cannot take its place.
     for await _ in entered.stream { break }
     model.cancel()
-    #expect(!model.preparing)
+    release.continuation.finish()
     try await model.prepare()
     #expect(model.loaded == 2)
-    release.continuation.finish()
+  }
+
+  @Test("Cancelled loaders block removal and replacement loading until they exit")
+  func cancelledLoadRemoval() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = fixture("speech")
+    let store = ModelStore(root: root, source: .init { _, destination, _ in try Data([1, 2, 3]).write(to: destination) })
+    try await store.install(manifest)
+    let firstEntered = LocalLoadGate(), firstRelease = LocalLoadGate()
+    let secondEntered = LocalLoadGate(), secondRelease = LocalLoadGate()
+    let loads = Mutex(0), firstExited = Mutex(false)
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in
+      let count = loads.withLock { $0 += 1; return $0 }
+      if count == 1 {
+        await firstEntered.open()
+        await firstRelease.wait()
+        firstExited.withLock { $0 = true }
+      } else {
+        #expect(firstExited.withLock { $0 })
+        await secondEntered.open()
+        await secondRelease.wait()
+      }
+      return { _ in NeverSpeech() }
+    }
+    let lifecycle = LocalLifecycle(store: store, transcription: nil, cleanup: nil, voice: voice)
+    let files = try lifecycle.controls.inventory().filter { $0.id.lastPathComponent == manifest.directoryName }
+    #expect(!files.isEmpty)
+    lifecycle.controls.select([.readAloud])
+    await firstEntered.wait()
+    lifecycle.controls.select([])
+    #expect(voice.preparing)
+    #expect(voice.loaded == nil)
+    #expect(voice.check().status == .waiting)
+    #expect(lifecycle.controls.removalBlock(files) == "Wait for Read Aloud preparation to finish.")
+    #expect(throws: (any Error).self) { try lifecycle.controls.remove(files) }
+    lifecycle.controls.select([.readAloud])
+    #expect(loads.withLock { $0 } == 1)
+    #expect(voice.preparing)
+    await firstRelease.open()
+    await secondEntered.wait()
+    #expect(loads.withLock { $0 } == 2)
+    #expect(voice.loaded == nil)
+    await secondRelease.open()
+    try await voice.waitForPreparation()
+    #expect(!voice.preparing)
+    #expect(lifecycle.controls.removalBlock(files) == nil)
+    try lifecycle.controls.remove(files)
+    #expect(store.state(of: manifest) == .missing)
   }
 
   @Test("A failed load is remembered until setup retries it")
