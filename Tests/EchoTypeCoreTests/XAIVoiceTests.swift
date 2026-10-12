@@ -4,7 +4,7 @@ import Testing
 
 @Suite(.timeLimit(.minutes(1)))
 struct XAIVoiceTests {
-  @Test("The speech request posts the reading as JSON, with the spike's choices pinned")
+  @Test("The speech request posts the reading and synthesis options as JSON")
   func requestBody() throws {
     let request = XAI.Speech.urlRequest(for: SpeechRequest(
       text: "Hello there.", voice: "altair", speed: 1.25, language: "en-GB", credential: "xai-123"))

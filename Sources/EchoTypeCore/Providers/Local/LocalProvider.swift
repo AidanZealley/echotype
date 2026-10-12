@@ -1,5 +1,3 @@
-import Foundation
-
 /// Fixed offline transcription, cleanup and speech with explicit per-feature setup.
 enum LocalProvider {
   static func make() -> Provider {

@@ -7,7 +7,7 @@ import Testing
 @Suite struct LocalModelTests {
   @Test("Every pinned manifest names a full commit, a licence and a checksum per file")
   func manifestsArePinned() {
-    let manifests = LocalModels.manifests
+    let manifests = LocalModels.transcription + [LocalModels.cleanup] + LocalModels.speech
     for manifest in manifests {
       #expect(manifest.revision.count == 40 && manifest.revision.allSatisfy(\.isHexDigit), "\(manifest.name)")
       #expect(!manifest.license.isEmpty)

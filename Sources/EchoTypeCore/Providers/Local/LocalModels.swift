@@ -1,5 +1,3 @@
-import Foundation
-
 /// The supported local model set. Manifests own pinned files and the shared store owns downloads.
 enum LocalModels {
   static let store = ModelStore()
@@ -28,7 +26,6 @@ enum LocalModels {
           path: "model.safetensors", size: 2_263_022_417,
           sha256: "2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f"),
       ])
-  static let manifests = transcription + [cleanup] + speech
 }
 
 extension Provider {

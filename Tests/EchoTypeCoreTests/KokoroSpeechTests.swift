@@ -64,7 +64,7 @@ import Testing
     let pull = Task { try? await stream.next() }
     for await _ in entered.stream { break }
     stream.cancel()
-    await pull.value
+    _ = await pull.value
     let close = Task { await stream.waitForClose() }
     #expect(stopped.withLock { $0 } == false)
     release.withLock { $0?.resume(); $0 = nil }
