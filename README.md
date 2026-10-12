@@ -5,139 +5,147 @@
 <h1 align="center">EchoType</h1>
 
 <p align="center">
-  Dictation and read aloud for macOS, powered by xAI or on-device with Local.
+  Dictation and read aloud for macOS, using xAI or local models.
 </p>
 
-EchoType lives in the menu bar. Press a hotkey in any app and start talking. Your words
-stream into a small overlay as you speak, and the text is pasted where your cursor was
-when you stop. Select some text and press a second hotkey to hear it read back.
+<p align="center">
+  <a href="https://github.com/AidanZealley/echotype/releases/latest">Download the latest release</a>
+</p>
+
+EchoType lives in the menu bar. Press <kbd>⌥</kbd><kbd>D</kbd> in any app and start
+talking. Your words appear in a small overlay as you speak. Press the hotkey again
+to paste the transcript where your cursor was. Select text and press
+<kbd>⌥</kbd><kbd>S</kbd> to hear it read aloud.
 
 <p align="center">
   <img src="docs/images/dictation.png" width="440" alt="The dictation overlay showing a transcript as it streams in">
 </p>
 
-## Features
+## Download and install
 
-- **Dictate anywhere.** Press <kbd>⌥</kbd><kbd>D</kbd> to start and again to insert the
-  text into the focused app. <kbd>Esc</kbd> discards it.
-- **Live transcript.** An overlay beside the focused window shows words as they arrive,
-  along with the microphone in use and the elapsed time.
-- **Clean up text.** Sentences split by pauses are joined and phrases you take back are
-  dropped while you talk. Cleanup runs whenever the selected provider supports it. Your
-  words are never swapped for different ones.
-- **Keyterms.** Add names and bits of jargon so they're spelled correctly. The selected
-  provider sets the limit, currently 100 saved terms with xAI or Local.
-- **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
-  pauses. Voice and speed are remembered for each provider.
-- **Providers.** Choose Dictation and Read Aloud providers independently in Settings.
-  Dictation includes cleanup. xAI is the default and needs an API key. Local
-  needs no key. Local uses Parakeet with keyterm boosting, Qwen cleanup and Kokoro speech.
-  Install local features in Settings before using them offline.
-- **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
-  and copies it as JSON.
-- **Stays out of the way.** No Dock icon, an optional launch at login, and a menu bar
-  toggle to turn the hotkeys off. Your API key is kept in the Keychain.
+EchoType requires macOS 26 or later. Local models also require an Apple silicon Mac
+and several gigabytes of free space.
+
+1. Download `EchoType-<version>.dmg` from the
+   [latest release](https://github.com/AidanZealley/echotype/releases/latest).
+2. Open the DMG and drag EchoType into **Applications**.
+3. Launch EchoType. The app is not notarized yet. If macOS blocks it, open
+   **System Settings → Privacy & Security** and choose **Open Anyway**.
+4. Allow **Device Control and Data Access** when prompted. EchoType uses this
+   permission for global hotkeys and inserting text.
+5. Open **Settings…** from EchoType's waveform icon in the menu bar and set up a
+   provider below.
+
+macOS asks for microphone access when you first dictate. To update, quit EchoType
+and replace it in Applications with the app from the latest DMG. You can also find
+the release link in **Settings → About**.
+
+## Choose a provider
+
+Choose providers separately on the **Dictation** and **Read Aloud** settings pages.
+You can use xAI for one and Local for the other.
+
+### xAI
+
+xAI uses its online API for transcription, text cleanup and speech. It requires an
+internet connection and your own API key. API usage is paid through your xAI account.
+
+1. Create an API key in the [xAI console](https://console.x.ai).
+2. Open **Settings → xAI**, paste the key and click **Save**. EchoType stores it in
+   your Mac's Keychain.
+3. Choose **xAI** on the **Dictation** and **Read Aloud** pages for the features you
+   want to use.
 
 <p align="center">
-  <img src="docs/images/settings-window-read-aloud.png" width="440" alt="Read aloud settings with hotkey, voice and speed controls">
+  <img src="docs/images/settings-window-provider.png" width="640" alt="The xAI settings page with API key setup">
 </p>
+
+### Local models
+
+Local runs English transcription, text cleanup and speech on your Mac. It needs no
+API key and works offline after setup. EchoType uses Parakeet for transcription,
+Qwen for cleanup and Kokoro for read aloud.
+
+1. Open **Settings → Local**.
+2. Click **Download** for **Dictation**, **Read Aloud**, or both. Wait for the models
+   to download and prepare.
+3. Choose **Local** on the corresponding **Dictation** or **Read Aloud** page.
+
+Selecting Local alone does not download models. The first model load can take tens
+of seconds.
+
 <p align="center">
-  <img src="docs/images/settings-window-provider.png" width="440" alt="Provider settings showing xAI capabilities and API key setup">
+  <img src="docs/images/settings-window-local.png" width="640" alt="The Local settings page showing model setup for Dictation and Read Aloud">
 </p>
+
+Downloaded models stay on your Mac when you switch providers. Use
+**Settings → Local → Manage Files…** to remove them, including before uninstalling
+EchoType. Moving the app to Trash leaves the models behind. See the
+[local storage guide](docs/local-models.md) for details.
+
+## Using EchoType
+
+- Press <kbd>⌥</kbd><kbd>D</kbd> to start, then press it again to insert
+  the text. Press <kbd>Esc</kbd> to discard it. Cleanup joins sentences split by pauses
+  and removes phrases you take back.
+- Select text and press <kbd>⌥</kbd><kbd>S</kbd>. Press
+  <kbd>Space</kbd> to pause. Choose a voice and speed in **Settings → Read Aloud**.
+- Save names and jargon in **Settings → Keyterms** to help
+  dictation spell them correctly. Both providers support up to 100 saved terms.
+- Open **Last Dictation…** from the menu bar to inspect
+  cleanup and copy the details as JSON.
+
 <p align="center">
-  <img src="docs/images/settings-window-keyterms.png" width="440" alt="Keyterms settings with example technology names and the term limit">
+  <img src="docs/images/settings-window-read-aloud.png" width="640" alt="Read Aloud settings with provider, hotkey, voice and speed controls">
 </p>
 
-## Install
+If another app uses the default hotkeys, choose the <kbd>⌃</kbd><kbd>⌥</kbd>
+alternatives in Settings. **Settings → General** also has launch-at-login and
+permission controls. You can disable hotkeys from the menu bar.
 
-You need macOS 26 or later, and an [xAI API key](https://console.x.ai) unless you choose
-Local. Local requires an Apple silicon Mac and several gigabytes for model files.
+### Voice replies from agents
 
-1. Download the latest `EchoType-<version>.dmg` from
-   [Releases](https://github.com/AidanZealley/echotype/releases/latest).
-2. Open the DMG and drag EchoType into Applications.
-3. Launch EchoType. The release isn't notarized yet, so macOS may block the first launch.
-   If it does, open **System Settings → Privacy & Security** and choose **Open Anyway**.
-4. Allow **Device Control and Data Access** (Accessibility on older versions of macOS)
-   when asked. EchoType needs it for the hotkeys and to paste text.
-5. Click the waveform icon in the menu bar, choose **Settings…**, and paste your key into
-   the **xAI** page. **Save** keeps it in the Keychain. Choose providers on
-   **Dictation** and **Read Aloud**. For Local, use its feature's
-   **Download** button to install and prepare the required models. Selecting Local alone
-   does not download anything. **Test** records five seconds and shows what it heard.
-6. Press <kbd>⌥</kbd><kbd>D</kbd> in any text field and start talking. macOS asks for
-   microphone access the first time.
+EchoType includes an MCP server so agents can read their answers aloud. Open
+**Settings → Agents**, copy the command for Claude Code or Codex, run it in a
+terminal, then start a new agent session. Keep EchoType running.
 
-If another app already uses <kbd>⌥</kbd><kbd>D</kbd> or <kbd>⌥</kbd><kbd>S</kbd>, switch
-to the <kbd>⌃</kbd><kbd>⌥</kbd> version in Settings.
-
-### Local storage and uninstalling
-
-Switching providers retains downloaded models and saved keys. Initial model loading can
-take tens of seconds. [Local model policy](docs/decisions/0026-local-model-stack.md#runtime-and-installation-policy)
-describes launch loading, cancellation and the install queue.
-
-Before uninstalling, open **Settings → Local → Manage Files** and remove supported models
-and retained downloads. Stop active work first. Dragging the app to Trash leaves model files in
-`~/Library/Application Support/EchoType/Models/`. [Storage notes](docs/local-models.md)
-explain how to remove supported models and owned links after uninstalling.
-
-### Updating
-
-**Settings → About → Updates** shows your version and links to the latest release. To update,
-quit EchoType, download the new DMG, drag EchoType into Applications and choose
-**Replace**.
-
-## Voice replies
-
-End a dictation with "reply with EchoType" and it sends itself. The agent calls the EchoType MCP's `speak`
-tool to read a version of its reply aloud, then writes the full reply as usual. Register the
-server once in each agent: open **Settings → Agents**, copy the command for Claude Code or Codex,
-run it in a terminal, and start a new agent session. EchoType has to be running for `speak` to
-work. The Agents page also has optional instructions you can copy into your agent's instruction
-file to make spoken replies more reliable without shortening written answers.
+End a dictation with "reply with EchoType" to send it automatically when
+**Send reply requests** is enabled. The agent can call EchoType's `speak` tool to
+read a short summary, then write its full answer. The Agents page has optional
+instructions to copy into your agent's instruction file.
 
 ## Development
 
-You need macOS 26 or later, Xcode 27, and an Apple Development signing certificate in
-your keychain. EchoType has to run as a signed app bundle so macOS can keep its
-microphone and accessibility permissions between builds. MLX compiles its Metal shaders during
-the build, so install Xcode's Metal Toolchain once with
-`xcodebuild -downloadComponent MetalToolchain`.
+You need macOS 26 or later and Xcode 27. Running EchoType also needs an Apple
+Development signing certificate in your Keychain. A signed app bundle lets macOS
+keep microphone and accessibility permissions between builds.
+
+Install Xcode's Metal Toolchain once for the local cleanup runtime:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+```
 
 ```sh
 ./scripts/run.sh              # build, sign and launch .build/EchoType.app
-./scripts/run.sh --hud-demo   # loop the overlay through its states, no mic or key needed
-XAI_API_KEY= ECHOTYPE_FIXTURE_WAV= swift test --enable-code-coverage
-                              # deterministic core and app-adapter tests, no app launch
+./scripts/run.sh --hud-demo   # preview the overlay without a microphone or API key
+XAI_API_KEY= ECHOTYPE_FIXTURE_WAV= swift test
 ./scripts/install.sh          # build a release and replace /Applications/EchoType.app
 ```
 
-`run.sh` and `install.sh` quit any running copy of EchoType before launching the new
-build. If you have more than one Apple Development certificate, set
-`ECHOTYPE_SIGNING_IDENTITY` to the one to use. `security find-identity -v -p codesigning`
-lists them.
+`run.sh` and `install.sh` quit running copies of EchoType before launching the new
+build. If you have multiple signing certificates, set `ECHOTYPE_SIGNING_IDENTITY`.
+Use `security find-identity -v -p codesigning` to list them.
 
-Deterministic tests and `swift build -c release --product EchoTypeApp` need no signing
-certificate. App tests import the executable target without running its entry point.
-The `macOS tests and release build` Actions job defines these checks on GitHub's
-Xcode 27 image, currently a preview. Making it a required merge check needs a separate repository setting.
+Tests and `swift build -c release --product EchoTypeApp` need no signing certificate.
+Integration tests call xAI only when `XAI_API_KEY` is set. The live protocol test
+also needs `ECHOTYPE_FIXTURE_WAV` pointing to a recording.
 
-Integration tests that call xAI are skipped unless `XAI_API_KEY` is set. The live
-protocol test also needs `ECHOTYPE_FIXTURE_WAV` pointing at a recording; see
-`Tests/EchoTypeCoreTests/Integration/LiveProtocolTests.swift`.
+`EchoTypeCore` contains session, provider and settings logic. `EchoTypeApp` contains
+the AppKit and SwiftUI app. For more detail:
 
-The code is split into `EchoTypeCore`, which holds the session, protocol and settings
-logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.
-[`docs/decisions`](docs/decisions/README.md) records why things work the way they do, and
-[`docs/releasing.md`](docs/releasing.md) covers packaging a DMG for release.
-
-The [local model decision](docs/decisions/0026-local-model-stack.md) records the chosen
-stack and measurements. [Local model storage](docs/local-models.md) describes
-file ownership and removal. The decision also records remaining release checks.
-
-To add a provider, create `Sources/EchoTypeCore/Providers/<Name>/` with its description
-and service adapters. Declare readiness and optional setup capabilities, add it to
-`Providers.all`, and add fixture tests. Settings and operation wiring use
-the registry. The [provider adapter decision](docs/decisions/0025-provider-adapters.md)
-sets out the contracts and required defaults.
+- [Architecture decisions](docs/decisions/README.md)
+- [Provider adapter contracts](docs/decisions/0025-provider-adapters.md)
+- [Local models and runtime policy](docs/decisions/0026-local-model-stack.md)
+- [Local model storage](docs/local-models.md)
+- [Packaging and releasing a DMG](docs/releasing.md)
