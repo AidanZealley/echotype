@@ -12,13 +12,13 @@
 	<string>EchoType</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>CFBundleVersion</key>
-	<string>3</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.1</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>EchoType uses the microphone to turn your speech into text.</string>
+	<string>0.3.0</string>
+	<key>CFBundleVersion</key>
+	<string>4</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EchoType uses the microphone to turn your speech into text.</string>
 </dict>
 </plist>
