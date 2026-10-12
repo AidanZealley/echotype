@@ -77,8 +77,8 @@ private final class FakeSpeechStream: SpeechStream {
         },
         cleanup: nil,
         readiness: readiness.map { answer in
-          Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } }, prepare: prepare)
-        } ?? Readiness(check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: nil) }, changes: { AsyncStream { $0.finish() } }, prepare: prepare)), key: {
+          Readiness(check: { answer }, changes: { AsyncStream { _ in } }, prepare: prepare)
+        } ?? Readiness(check: { ServiceReadiness(transcription: .ready, voice: .ready, cleanup: nil) }, changes: { AsyncStream { $0.finish() } }, prepare: prepare)), key: {
         self.keys += 1; self.keyEntered.open()
         if self.suspendKey { await self.keyRelease.wait() }
         return self.storedKey

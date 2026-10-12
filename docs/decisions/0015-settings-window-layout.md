@@ -15,7 +15,7 @@ provider setup separate.
   Each pane carries its title and SF Symbol. The sidebar toggle is removed.
 - The first group is Dictation and Read Aloud. The second lists providers with an API
   key or setup capability, currently xAI and Local. The last is General, Keyterms,
-  Agents and About. Apple has nothing to configure and gets no provider page.
+  Agents and About.
 - Pages use grouped `Form` sections and navigation titles. Feature pages own the
   provider picker, service status and feature options. Provider pages own credentials
   and installation controls. [0025](0025-provider-adapters.md) owns the generic setup

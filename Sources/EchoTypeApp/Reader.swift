@@ -121,7 +121,7 @@ import Observation
     defer { self.preparation = nil }
     runtimeLease = try await preparation.value
     try checkStopped()
-    let services = await provider.readiness.check(ReadinessRequest(settings: settings, provider: provider))
+    let services = await provider.readiness.check()
     try checkStopped()
     try services.voice.requireReady()
     let stream = provider.voice.speak(

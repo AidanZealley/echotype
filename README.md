@@ -5,7 +5,7 @@
 <h1 align="center">EchoType</h1>
 
 <p align="center">
-  Dictation and read aloud for macOS, powered by xAI or on-device with Local and Apple.
+  Dictation and read aloud for macOS, powered by xAI or on-device with Local.
 </p>
 
 EchoType lives in the menu bar. Press a hotkey in any app and start talking. Your words
@@ -26,12 +26,12 @@ when you stop. Select some text and press a second hotkey to hear it read back.
   dropped while you talk. Cleanup runs whenever the selected provider supports it. Your
   words are never swapped for different ones.
 - **Keyterms.** Add names and bits of jargon so they're spelled correctly. The selected
-  provider sets the limit, currently 100 saved terms with xAI, Apple or Local.
+  provider sets the limit, currently 100 saved terms with xAI or Local.
 - **Read aloud.** Select text and press <kbd>⌥</kbd><kbd>S</kbd> to hear it. <kbd>Space</kbd>
   pauses. Voice and speed are remembered for each provider.
 - **Providers.** Choose Dictation and Read Aloud providers independently in Settings.
-  Dictation includes cleanup. xAI is the default and needs an API key. Apple and Local
-  need no key. Local uses Parakeet with keyterm boosting, Qwen cleanup and Kokoro speech.
+  Dictation includes cleanup. xAI is the default and needs an API key. Local
+  needs no key. Local uses Parakeet with keyterm boosting, Qwen cleanup and Kokoro speech.
   Install local features in Settings before using them offline.
 - **Last Dictation.** Shows how your last dictation was cleaned up, request by request,
   and copies it as JSON.
@@ -51,7 +51,7 @@ when you stop. Select some text and press a second hotkey to hear it read back.
 ## Install
 
 You need macOS 26 or later, and an [xAI API key](https://console.x.ai) unless you choose
-Apple or Local. Local requires an Apple silicon Mac and several gigabytes for model files.
+Local. Local requires an Apple silicon Mac and several gigabytes for model files.
 
 1. Download the latest `EchoType-<version>.dmg` from
    [Releases](https://github.com/AidanZealley/echotype/releases/latest).
@@ -62,7 +62,7 @@ Apple or Local. Local requires an Apple silicon Mac and several gigabytes for mo
    when asked. EchoType needs it for the hotkeys and to paste text.
 5. Click the waveform icon in the menu bar, choose **Settings…**, and paste your key into
    the **xAI** page. **Save** keeps it in the Keychain. Choose providers on
-   **Dictation** and **Read Aloud**. Apple needs no key. For Local, use its feature's
+   **Dictation** and **Read Aloud**. For Local, use its feature's
    **Download** button to install and prepare the required models. Selecting Local alone
    does not download anything. **Test** records five seconds and shows what it heard.
 6. Press <kbd>⌥</kbd><kbd>D</kbd> in any text field and start talking. macOS asks for
@@ -125,22 +125,7 @@ Xcode 27 image, currently a preview. Making it a required merge check needs a se
 
 Integration tests that call xAI are skipped unless `XAI_API_KEY` is set. The live
 protocol test also needs `ECHOTYPE_FIXTURE_WAV` pointing at a recording; see
-`Tests/EchoTypeCoreTests/Integration/LiveProtocolTests.swift`. Checks that run Apple's
-frameworks are skipped unless `ECHOTYPE_APPLE_LIVE=1` is set.
-
-To measure transcription readiness in a fresh test process with English speech assets
-already installed, run:
-
-```bash
-ECHOTYPE_APPLE_LIVE=1 swift test --disable-xctest --filter installedTranscriberStartsWithinFiveSeconds
-```
-
-This checks the adapter's five-second readiness target, not the complete signed-app launch.
-The Apple live suites also cover silent sessions, reading pause/resume and cancellation,
-and synthesis with a missing saved voice using an installed fallback. For recorded speech,
-set `ECHOTYPE_FIXTURE_WAV` to a 16-bit PCM WAV. A synthetic fixture, whose script is in
-`AppleTranscriptionLiveTests.swift`, additionally checks pause/resume and the final
-transcript tail.
+`Tests/EchoTypeCoreTests/Integration/LiveProtocolTests.swift`.
 
 The code is split into `EchoTypeCore`, which holds the session, protocol and settings
 logic and is covered by tests, and `EchoTypeApp`, the AppKit and SwiftUI shell around it.

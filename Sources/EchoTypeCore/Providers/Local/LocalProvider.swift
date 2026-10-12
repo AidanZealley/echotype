@@ -30,7 +30,7 @@ enum LocalProvider {
         return try await model.revise(request)
       },
       readiness: Readiness(
-        check: { _ in
+        check: {
           ServiceReadiness(
             transcription: transcriber.check(),
             voice: speaker.check(),

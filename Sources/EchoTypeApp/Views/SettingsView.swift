@@ -135,9 +135,9 @@ private struct DictationPage: View {
         }
       }
     }
-    .task(id: Followed(settings: store.settings, provider: provider)) {
+    .task(id: provider.id) {
       readiness = nil
-      await provider.readiness.follow(ReadinessRequest(settings: store.settings, provider: provider)) {
+      await provider.readiness.follow() {
         readiness = $0
       }
     }
@@ -175,19 +175,28 @@ private struct ReadAloudPage: View {
         // A fixed rate has no choice to make and cannot supply a Slider's non-empty range.
         let range = provider.voice.speedRange
         if range.lowerBound < range.upperBound {
-          Slider(value: reading.speed, in: range, step: 0.1) {
-            Text("Speed")
-          } minimumValueLabel: {
-            Text(verbatim: speed(range.lowerBound))
-          } maximumValueLabel: {
-            Text(verbatim: speed(range.upperBound))
+          LabeledContent("Speed") {
+            HStack {
+              Slider(value: reading.speed, in: range, step: 0.1) {
+                EmptyView()
+              } minimumValueLabel: {
+                Text(verbatim: speed(range.lowerBound))
+              } maximumValueLabel: {
+                Text(verbatim: speed(range.upperBound))
+              }
+              .accessibilityLabel("Speed")
+              .accessibilityValue(speed(reading.speed.wrappedValue))
+              Text(verbatim: speed(reading.speed.wrappedValue))
+                .monospacedDigit()
+                .frame(minWidth: 40, alignment: .trailing)
+            }
           }
         }
       }
     }
-    .task(id: Followed(settings: store.settings, provider: provider)) {
+    .task(id: provider.id) {
       voice = nil
-      await provider.readiness.follow(ReadinessRequest(settings: store.settings, provider: provider)) {
+      await provider.readiness.follow() {
         voice = $0.voice
       }
     }
@@ -210,18 +219,6 @@ private struct ProviderPicker: View {
     } footer: {
       Text(Providers[selection].summary)
     }
-  }
-}
-
-/// What a page follows. Changes when the provider, language or voice does, which restarts the
-/// following.
-private struct Followed: Hashable {
-  var provider: ProviderID
-  var request: ReadinessRequest
-
-  init(settings: EchoTypeCore.Settings, provider: Provider) {
-    self.provider = provider.id
-    request = ReadinessRequest(settings: settings, provider: provider)
   }
 }
 
@@ -252,9 +249,7 @@ private struct ServiceRow: View {
 
   var body: some View {
     LabeledContent {
-      if let fix = state?.fix {
-        Button("Open…") { NSWorkspace.shared.open(fix) }
-      } else if provider.setup != nil, let state, state.status != .ready {
+      if provider.setup != nil, let state, state.status != .ready {
         Button("Set Up…") { pane = .provider(provider.id) }
       } else {
         switch state?.status {
@@ -297,7 +292,7 @@ private struct ProviderPage: View {
       if let state = store.setups[provider.id] {
         SetupSections(state: state)
           .task(id: provider.id) {
-            await state.follow(ReadinessRequest(settings: store.settings, provider: provider))
+            await state.follow()
           }
       }
     }
@@ -796,15 +791,13 @@ extension EchoTypeCore.Settings.Hotkey {
 }
 
 extension Readiness {
-  /// Reports the answer for `request` now without starting setup, and again each time
+  /// Reports readiness now without starting setup, and again each time
   /// `changes` yields. Runs until cancelled, which drops the stream; an answer that arrives after
   /// cancellation is ignored.
-  @MainActor func follow(
-    _ request: ReadinessRequest, update: @MainActor (ServiceReadiness) -> Void
-  ) async {
+  @MainActor func follow(update: @MainActor (ServiceReadiness) -> Void) async {
     let changes = changes()
     func report() async {
-      let answer = await check(request)
+      let answer = await check()
       if !Task.isCancelled { update(answer) }
     }
     await report()

@@ -65,11 +65,11 @@ func unknownProvider() {
   #expect(Settings(decoding: stored).dictationProvider == Providers.all[0].id)
 }
 
-@Test("xAI stays the default, and stored Apple and Local selections load")
+@Test("xAI stays the default, and registered provider selections load")
 func registeredProviders() {
-  #expect(Providers.all.map(\.id) == ["xai", "apple", "local"])
+  #expect(Providers.all.map(\.id) == ["xai", "local"])
   #expect(Settings(decoding: nil).dictationProvider == Provider.xAI.id)
-  for provider in [Provider.apple, .local] {
+  for provider in Providers.all {
     let settings = Settings(dictationProvider: provider.id)
     #expect(Settings(decoding: settings.encoded()).dictationProvider == provider.id)
   }
@@ -98,13 +98,13 @@ func unreadableDataDefaults() {
 @Test("Each missing feature migrates from legacy selection; explicit choices win")
 func featureProviderMigration() throws {
   let cases: [(String, ProviderID, ProviderID)] = [
-    (#"{"provider":"apple"}"#, "apple", "apple"),
-    (#"{"provider":"apple","dictationProvider":"local"}"#, "local", "apple"),
-    (#"{"provider":"local","readAloudProvider":"apple"}"#, "local", "apple"),
-    (#"{"provider":"apple","dictationProvider":"retired","readAloudProvider":"local"}"#, "xai", "local"),
+    (#"{"provider":"local"}"#, "local", "local"),
+    (#"{"provider":"xai","dictationProvider":"local"}"#, "local", "xai"),
+    (#"{"provider":"local","readAloudProvider":"xai"}"#, "local", "xai"),
+    (#"{"provider":"local","dictationProvider":"retired","readAloudProvider":"local"}"#, "xai", "local"),
     (#"{"provider":"local","dictationProvider":false}"#, "xai", "local"),
-    (#"{"provider":"apple","readAloudProvider":null}"#, "apple", "xai"),
-    (#"{"provider":false,"dictationProvider":"local","readAloudProvider":"apple"}"#, "local", "apple"),
+    (#"{"provider":"local","readAloudProvider":null}"#, "local", "xai"),
+    (#"{"provider":false,"dictationProvider":"local","readAloudProvider":"xai"}"#, "local", "xai"),
   ]
   for (json, dictation, reading) in cases {
     let settings = Settings(decoding: Data(json.utf8))
@@ -120,14 +120,50 @@ func featureProviderMigration() throws {
 @Test("Independent provider choices retain unrelated settings and reading preferences")
 func independentProviderStorage() {
   var settings = Settings(
-    hotkey: .controlOptionD, dictationProvider: "apple", readAloudProvider: "local",
+    hotkey: .controlOptionD, dictationProvider: "xai", readAloudProvider: "local",
     keyterms: ["TanStack"], language: "en-GB", inputDeviceID: "mic",
     readAloudHotkey: .controlOptionS,
     reading: ["xai": .init(voice: "altair", speed: 1.25)], sendReplyRequests: false)
   #expect(Settings(decoding: settings.encoded()) == settings)
-  settings.dictationProvider = "xai"
+  settings.dictationProvider = "local"
   #expect(Settings(decoding: settings.encoded()).readAloudProvider == "local")
-  settings.readAloudProvider = "apple"
-  #expect(Settings(decoding: settings.encoded()).dictationProvider == "xai")
+  settings.readAloudProvider = "xai"
+  #expect(Settings(decoding: settings.encoded()).dictationProvider == "local")
   #expect(Settings(decoding: settings.encoded()).reading == settings.reading)
+}
+
+@Test("Removed Apple selections fall back independently and retired reading preferences are discarded")
+func retiredProviderMigration() throws {
+  let cases: [(String, ProviderID, ProviderID)] = [
+    (#"{"provider":"apple"}"#, "xai", "xai"),
+    (#"{"provider":"apple","dictationProvider":"local"}"#, "local", "xai"),
+    (#"{"dictationProvider":"apple","readAloudProvider":"local"}"#, "xai", "local"),
+    (#"{"dictationProvider":"local","readAloudProvider":"apple"}"#, "local", "xai"),
+  ]
+  for (json, dictation, readAloud) in cases {
+    var stored = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    stored["keyterms"] = ["Vite"]
+    stored["reading"] = [
+      "apple": ["voice": "retired-voice", "speed": 1.5],
+      "retired": ["voice": "another-retired-voice", "speed": 1.5],
+      "xai": ["voice": "altair", "speed": 1.25],
+    ]
+    let settings = Settings(decoding: try JSONSerialization.data(withJSONObject: stored))
+    #expect(settings.dictationProvider == dictation)
+    #expect(settings.readAloudProvider == readAloud)
+    #expect(settings.keyterms == ["Vite"])
+    #expect(settings.reading == ["xai": .init(voice: "altair", speed: 1.25)])
+    #expect(Settings(decoding: settings.encoded()) == settings)
+  }
+}
+
+@Test("Encoding reading preferences excludes unregistered providers")
+func retiredReadingPreferencesAreNotStored() throws {
+  let settings = Settings(reading: [
+    "retired": .init(voice: "old-voice", speed: 1.5),
+    "xai": .init(voice: "altair", speed: 1.25),
+  ])
+  let stored = try #require(JSONSerialization.jsonObject(with: settings.encoded()) as? [String: Any])
+  let reading = try #require(stored["reading"] as? [String: Any])
+  #expect(Set(reading.keys) == ["xai"])
 }

@@ -71,9 +71,17 @@ final class ParakeetModel: Sendable {
   }
 
   private static func boosting(_ keyterms: [String], models: CtcModels) async throws -> VocabularyBoostingSession {
-    try await VocabularyBoostingSession(
+    // Keep the normal boost strength, but skip the rescue pass that can replace
+    // ordinary words with loosely matching saved terms.
+    let config = VocabularyRescorer.Config(
+      shortTermCbwTaperPivot: 1,
+      shortTermCbwTaperExponent: 2.0,
+      spotterRescueMinSimilarity: 0.30,
+      spotterRescueMultiWordMinSimilarity: 0.50,
+      spotterRescueEnabled: false)
+    return try await VocabularyBoostingSession(
       vocabulary: CustomVocabularyContext(terms: keyterms.map { CustomVocabularyTerm(text: $0) }),
-      ctcModels: models, config: VocabularyBoostingSession.itnDefaultConfig)
+      ctcModels: models, config: config)
   }
 
   private func warm() async throws {

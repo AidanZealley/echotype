@@ -2,7 +2,9 @@
 
 Status: accepted, 2026-10-01 (provider adapters, registry, credentials and settings).
 Extended 2026-10-03 with readiness and per-provider languages.
-Updated 2026-10-12 for optional setup and independent feature selection.
+Updated 2026-10-12 for optional setup, independent feature selection and removal of the
+Apple provider. Local is the on-device option. The Apple section below records the
+removed implementation.
 
 ## Context
 
@@ -22,13 +24,13 @@ meant editing each of them.
   [0019](0019-native-macos-app-and-core-boundary.md).
 - `Providers.all` in `Providers/Providers.swift` lists every provider in Settings order; the
   first is the default. `Providers[id]` gives the provider with that id, or the default for
-  an unknown one. It lists xAI, the default, Apple and Local.
+  an unknown one. It lists xAI, the default, and Local.
 - `Settings.dictationProvider` chooses Dictation and Test; `Settings.readAloudProvider`
   chooses reading and MCP speech. The app resolves each from the operation's settings snapshot, and hands that `Provider` to the operation, which reads its credential, services
   and readiness from it. Requests are built from the settings and that provider
-  (`TranscriptionRequest(settings:provider:credential:)`, `SpeechRequest`,
-  `ReadinessRequest`), so nothing below the choice looks the registry up again. Errors are
-  worded with the provider the operation ran with.
+  (`TranscriptionRequest(settings:provider:credential:)` and `SpeechRequest`). Nothing
+  below the choice looks the registry up again. Errors are worded with the provider the
+  operation ran with.
 - Each provider's adapters and description live in `Providers/<Name>/`. Outside that
   folder and the registry, operation code consumes the captured `Provider`. Settings
   renders credentials and setup from its capabilities without naming a provider.
@@ -42,11 +44,10 @@ meant editing each of them.
 - Failures reach the app as `ProviderError` and are worded with the provider's name, as
   [0006](0006-api-key-and-error-surface.md) describes.
 - `Provider.readiness` defaults to `Readiness.always`. A provider whose services can exist and still be
-  unusable on a given Mac supplies a `Readiness`: `check(ReadinessRequest)` answers a
+  unusable on a given Mac supplies a `Readiness`: `check()` answers a
   `ServiceReadiness` with a `ServiceState` per service, with nil cleanup when the provider has
   none. A state is a status (`ready`, `waiting` or `unavailable`), the provider's message saying
-  what is wrong and how to fix it, or a note for a ready service, and an optional link to where
-  the user can fix it, such as a System Settings pane. `changes()` yields
+  what is wrong and how to fix it. Ready services need no message. `changes()` yields
   when an earlier answer may be out of date. A provider that leaves the default, such as xAI,
   is always usable once its credential is present. Operations gate on the credential in one
   place, throwing the app-side `MissingCredential`, before they check readiness.
@@ -57,8 +58,7 @@ meant editing each of them.
   installation, progress, inventory, removal and available space. `SettingsStore`
   tells each provider with setup which features it serves through `select` at launch
   and when settings change. Settings renders the same controls for any such provider.
-- A readiness check may start setup managed by the system, such as Apple's speech
-  assets. It never starts a provider's own model download. Local installs only from
+- A readiness check never starts a model download. Local installs only from
   Settings. `Readiness.prepare` prepares an installed feature and returns a
   `RuntimeLease` that keeps it alive through operation teardown. Local's loading and
   installation policy belongs to [0026](0026-local-model-stack.md).
@@ -86,11 +86,9 @@ meant editing each of them.
   "No cleanup". `DictationOperation` checks before opening capture, and `Reader` after the credential
   and before requesting speech. `.waiting` ends the pill in its amber waiting phase and
   `.unavailable` in the red error pill, each showing the provider's message as is. The
-  feature page follows readiness on a change of provider, language or voice and on
-  each `changes()` yield. Each service row shows its status and the provider's message,
-  with a link when available. Apple's updates cover installed voices and Apple
-  Intelligence availability. Readiness watchers restart only when those request inputs
-  change, so editing unrelated settings does not restart setup checks.
+  feature page follows readiness on a change of provider and on each `changes()` yield.
+  Each service row shows its status and the provider's message. Changing language, voice
+  or unrelated settings does not restart readiness checks.
 - The key editor's SwiftUI identity uses the provider id, keeping unsaved key text and
   credential status separate when the selection changes. Storage and validation are
   described in [0010](0010-settings-storage-and-api-key.md).
@@ -105,13 +103,12 @@ meant editing each of them.
 2. List the provider's languages in `languages`, with its default first, and resolve them in
    the adapter. Requests carry the tag `Settings.language(for:)` resolves from the stored
    preference, a bare tag such as `en`; map it to the provider's own form. xAI passes it
-   through, and Apple maps a bare tag to a fixed region. Adding a language means adding it to
-   that provider's list and checking its adapter resolves it.
+   through. Adding a language means adding it to that provider's list and checking its
+   adapter resolves it.
 3. If the Mac, its settings or a download can rule a service out, supply `readiness`. Its
    `check` returns each service's state without waiting for setup, tolerates concurrent
-   calls and reports an unsupported language. Any system-managed setup runs in a task
-   the adapter owns so it survives a provider switch. Provider-owned downloads require
-   explicit Settings setup. Its `changes` returns a fresh stream per call and yields
+   calls. Model downloads require explicit Settings setup. Its `changes` returns a fresh
+   stream per call and yields
    whenever setup starts, finishes or fails, or the system's state changes. The provider
    writes every reason the app shows. Leave the default, `Readiness.always`, when the
    services are always usable once the credential is present.
@@ -127,11 +124,14 @@ error pills, error messages, menu bar status and Keychain pick it up with no fur
 Reading choices use the provider id as their storage key. Cleanup is always on when its
 service is present and ready; no capability flags or cleanup toggle are needed.
 
-## Apple
+## Historical Apple provider
 
-Apple runs every service on the Mac with no key or account: `SpeechTranscriber` for live
-transcription, `AVSpeechSynthesizer` for read aloud and Foundation Models for cleanup. It is
-a free fallback; lower quality than xAI is acceptable, and xAI stays the default.
+Removed on 2026-10-12. This section records its former behavior; its adapters and
+provider-specific tests are no longer part of EchoType.
+
+Apple ran every service on the Mac with no key or account: `SpeechTranscriber` for live
+transcription, `AVSpeechSynthesizer` for read aloud and Foundation Models for cleanup. It
+was a free fallback before Local replaced it.
 
 - **Language.** Apple lists English only. Bare `en` resolves to `en-GB` in every service,
   since the frameworks' own bare-tag matching varies between processes.
@@ -155,8 +155,7 @@ a free fallback; lower quality than xAI is acceptable, and xAI stays the default
   overflow and other failures throw, and `Reviser` keeps the dictated text.
 - **Permissions.** No bundle permission changed. `SpeechTranscriber` transcribed under
   `swift test` with Speech authorisation never requested; the existing microphone permission
-  covers capture. First-use prompts on a signed install are an open check in
-  [0007](0007-known-gaps.md).
+  covered capture. First-use prompts on a signed install were not verified before removal.
 
 ## Consequences
 

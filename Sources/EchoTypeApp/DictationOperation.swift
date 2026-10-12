@@ -213,7 +213,7 @@ import Observation
     defer { self.preparation = nil }
     runtimeLease = try await preparation.value
     try checkStartup()
-    let services = await dependencies.provider.readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
+    let services = await dependencies.provider.readiness.check()
     try checkStartup()
     try services.transcription.requireReady()
     guard !isTest, let state = services.cleanup, state.status != .ready else { return }
