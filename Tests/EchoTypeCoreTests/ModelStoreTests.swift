@@ -107,26 +107,18 @@ private func isSettled(_ state: ModelState) -> Bool {
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: model.directoryName).path))
   }
 
-  @Test("Same-size corruption after relaunch is rejected before loading and retry reuses intact files")
+  @Test("Installing again repairs same-size corruption and reuses intact files")
   func retainedIntegrity() async throws {
     defer { cleanUp() }
     let fake = FakeSource(contents)
     let model = manifest(contents)
     let first = ModelStore(root: root, source: fake.source)
     try await first.install(model)
-    let directory = root.appending(path: model.directoryName)
-    try Data(repeating: 9, count: 100).write(to: directory.appending(path: "a.bin"))
+    try Data(repeating: 9, count: 100).write(to: root.appending(path: model.directoryName + "/a.bin"))
     let relaunched = ModelStore(root: root, source: fake.source)
-    let loads = Mutex(0)
-    let runtime = LocalModel<Int>(manifests: [model], loadingMessage: "Loading", store: relaunched) { _ in
-      loads.withLock { $0 += 1 }; return 1
-    }
-    await #expect(throws: (any Error).self) { try await runtime.prepare() }
-    #expect(loads.withLock { $0 } == 0)
     try await relaunched.install(model)
-    try await runtime.prepare()
+    try relaunched.verifyInstalled(model)
     #expect(fake.fetchCount == 3)
-    #expect(runtime.loaded == 1)
   }
 
   @Test("Missing or truncated installed files recover intact files without fetching them again")

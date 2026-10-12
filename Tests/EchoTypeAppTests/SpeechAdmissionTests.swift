@@ -52,7 +52,7 @@ private final class AdmissionTranscriber: LiveTranscriber {
   }
   init() {
     (audio, chunks) = AsyncThrowingStream.makeStream()
-    controller = DictationController(store: SettingsStore(),
+    controller = DictationController(store: SettingsStore(defaults: nil, providers: []),
     clipboard: Clipboard(access: .init(count: { 0 }, save: { [] }, restore: { _ in }, read: { nil },
       write: { _ in }, post: { _, _ in }, wait: { _ in })),
     makeReader: { source, id, settings, _, present, _ in

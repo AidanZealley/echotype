@@ -148,6 +148,7 @@ import Observation
   func cancel() {
     guard canCancel else { return }
     publish(.cancelled)
+    preparation?.cancel()
     dependencies.stopCapture()
     pump?.cancel()
     finalRevision?.cancel()
@@ -158,6 +159,8 @@ import Observation
   }
 
   private var runtimeLease: RuntimeLease?
+  /// Loading a local model can take seconds. Escape ends the wait, not the load.
+  private var preparation: Task<RuntimeLease, any Error>?
 
   func run() async -> Result {
     defer { runtimeLease = nil }
@@ -203,7 +206,12 @@ import Observation
   /// dictation inserts unrevised text and the pill says so. Checked before capture opens, so a
   /// blocked operation opens nothing.
   private func checkReadiness() async throws {
-    runtimeLease = try await dependencies.provider.readiness.prepare(.dictation)
+    let readiness = dependencies.provider.readiness
+    let preparation = Task { try await readiness.prepare(.dictation) }
+    self.preparation = preparation
+    // A finished task keeps its result, so drop it or it would hold the lease.
+    defer { self.preparation = nil }
+    runtimeLease = try await preparation.value
     try checkStartup()
     let services = await dependencies.provider.readiness.check(ReadinessRequest(settings: settings, provider: dependencies.provider))
     try checkStartup()

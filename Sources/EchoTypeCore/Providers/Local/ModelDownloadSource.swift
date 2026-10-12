@@ -18,6 +18,7 @@ extension ModelDownloadSource {
       var continuation: CheckedContinuation<Void, any Error>?
       /// Set when the body arrived but could not be used, and thrown once the task completes.
       var failure: (any Error)?
+      var cancelled = false
     }
 
     private let destination: URL
@@ -32,13 +33,24 @@ extension ModelDownloadSource {
     func run(_ url: URL) async throws {
       let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
       defer { session.finishTasksAndInvalidate() }
+      // Starting the task and cancelling take the same lock, so a task is never created on a
+      // session that cancellation has already invalidated.
       try await withTaskCancellationHandler {
-        try Task.checkCancellation()
         try await withCheckedThrowingContinuation { continuation in
-        outcome.withLock { $0.continuation = continuation }
-        session.downloadTask(with: url).resume()
+          let started = outcome.withLock {
+            guard !$0.cancelled else { return false }
+            $0.continuation = continuation
+            session.downloadTask(with: url).resume()
+            return true
+          }
+          if !started { continuation.resume(throwing: CancellationError()) }
         }
-      } onCancel: { session.invalidateAndCancel() }
+      } onCancel: {
+        outcome.withLock {
+          $0.cancelled = true
+          session.invalidateAndCancel()
+        }
+      }
     }
 
     func urlSession(

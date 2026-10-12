@@ -48,6 +48,7 @@ import Observation
   func stop() {
     guard !stopped else { return }
     stopped = true
+    preparation?.cancel()
     stream?.cancel(); dependencies.player.stop()
     presentation = .stopped; level = 0
     onPresentation(self)
@@ -96,6 +97,8 @@ import Observation
   }
 
   private var runtimeLease: RuntimeLease?
+  /// Loading a local model can take seconds. Stopping ends the wait, not the load.
+  private var preparation: Task<RuntimeLease, any Error>?
 
   private func read() async throws {
     try checkStopped()
@@ -112,7 +115,11 @@ import Observation
     try checkStopped()
     guard dependencies.provider.credential.isSatisfied(by: apiKey) else { throw MissingCredential() }
     let provider = dependencies.provider
-    runtimeLease = try await provider.readiness.prepare(.readAloud)
+    let preparation = Task { try await provider.readiness.prepare(.readAloud) }
+    self.preparation = preparation
+    // A finished task keeps its result, so drop it or it would hold the lease.
+    defer { self.preparation = nil }
+    runtimeLease = try await preparation.value
     try checkStopped()
     let services = await provider.readiness.check(ReadinessRequest(settings: settings, provider: provider))
     try checkStopped()

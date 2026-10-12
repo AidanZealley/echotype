@@ -31,7 +31,7 @@ private final class EmptyProviderSpeech: SpeechStream {
 }
 
 @MainActor private final class FeatureProviderFixture {
-  let store = SettingsStore()
+  let store = SettingsStore(defaults: nil, providers: [])
   let entered = ProviderGate(), release = ProviderGate()
   var readingProviders: [ProviderID] = []
   var dictationProviders: [ProviderID] = []

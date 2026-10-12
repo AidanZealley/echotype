@@ -217,7 +217,7 @@ private final class FakeSpeechStream: SpeechStream {
   let clipboard = Clipboard(access: .init(count: { 0 }, save: { [] }, restore: { _ in },
     read: { nil }, write: { _ in }, post: { _, _ in }, wait: { _ in }))
   init(first: ReadingFixture) { self.first = first }
-  lazy var controller = DictationController(store: SettingsStore(), clipboard: clipboard,
+  lazy var controller = DictationController(store: SettingsStore(defaults: nil, providers: []), clipboard: clipboard,
     makeReader: { source, id, settings, _, present, level in
       let fixture = self.readers.isEmpty ? self.first : self.readers.count == 1 ? self.next : self.third
       let reader = fixture.reader(source, id: id, settings: settings, onPresentation: present)
