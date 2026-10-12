@@ -18,7 +18,8 @@ import Observation
       updateSelection()
     }
   }
-  let localInstallation = LocalInstallation()
+  /// Setup for each provider that has it, kept while Settings pages change.
+  let setups: [ProviderID: SetupState]
 
   var hotkeysActive: Bool {
     didSet {
@@ -31,6 +32,9 @@ import Observation
   init(defaults: UserDefaults? = .standard, providers: [Provider] = Providers.all) {
     self.defaults = defaults
     self.providers = providers
+    setups = Dictionary(uniqueKeysWithValues: providers.compactMap { provider in
+      provider.setup.map { (provider.id, SetupState(setup: $0, readiness: provider.readiness)) }
+    })
     settings = Settings(decoding: defaults?.data(forKey: Self.key))
     hotkeysActive = defaults?.object(forKey: Self.activeKey) as? Bool ?? true
     updateSelection()
@@ -39,7 +43,7 @@ import Observation
   /// Tells each provider with setup which features it serves, so it can load or release them.
   private func updateSelection() {
     for provider in providers {
-      guard let setup = provider.localSetup else { continue }
+      guard let setup = provider.setup else { continue }
       var selected: Set<ProviderFeature> = []
       if settings.dictationProvider == provider.id { selected.insert(.dictation) }
       if settings.readAloudProvider == provider.id { selected.insert(.readAloud) }
@@ -48,27 +52,31 @@ import Observation
   }
 }
 
-/// Setup survives navigation between Settings pages. No work starts in its initializer.
-/// Features install one at a time, in the order they were requested.
-@MainActor @Observable final class LocalInstallation {
+/// One provider's setup as Settings shows it. It survives navigation between Settings pages, and
+/// no work starts in its initializer. Features install one at a time, in the order requested.
+@MainActor @Observable final class SetupState {
   var readiness: ServiceReadiness?
-  var files: [LocalFile] = []
+  var files: [InstalledFile] = []
   /// Features waiting to install. The first is installing.
   private(set) var queue: [ProviderFeature] = []
+  /// The last failure to list or remove files.
   var message: String?
   var messages: [ProviderFeature: String] = [:]
   /// Installs the queue, then ends. Tests await it.
   @ObservationIgnored private(set) var worker: Task<Void, Never>?
   @ObservationIgnored private var current: Task<Void, any Error>?
-  private let controls: LocalSetup
+  let controls: ProviderSetup
+  private let providerReadiness: Readiness
 
-  init(controls: LocalSetup = Provider.local.localSetup!) { self.controls = controls }
+  init(setup: ProviderSetup, readiness: Readiness = .always) {
+    controls = setup
+    providerReadiness = readiness
+  }
 
-  func follow() async {
+  /// Follows the provider's readiness for `request` until cancelled.
+  func follow(_ request: ReadinessRequest) async {
     await refreshFiles()
-    await Provider.local.readiness.follow(.init(language: "en", voice: "bf_emma")) {
-      self.readiness = $0
-    }
+    await providerReadiness.follow(request) { self.readiness = $0 }
   }
 
   func start(_ feature: ProviderFeature) {
@@ -105,11 +113,11 @@ import Observation
     }
   }
 
-  func remove(_ files: [LocalFile]) async {
+  func remove(_ files: [InstalledFile]) async {
     let controls = controls
     do {
       try await Task.detached { try controls.remove(files) }.value
-      message = "Files removed. Downloaded models can be installed again."
+      message = nil
     } catch { message = error.localizedDescription }
     await refreshFiles()
   }

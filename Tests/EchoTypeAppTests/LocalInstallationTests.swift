@@ -8,11 +8,11 @@ import Testing
 @Suite @MainActor struct LocalInstallationTests {
   private func installation(
     install: @escaping @Sendable (ProviderFeature) async throws -> Void,
-    files initial: [LocalFile] = []
-  ) -> LocalInstallation {
+    files initial: [InstalledFile] = []
+  ) -> SetupState {
     let files = Mutex(initial)
-    return LocalInstallation(controls: LocalSetup(
-      requirements: { _ in [] }, install: install, inventory: { files.withLock { $0 } },
+    return SetupState(setup: ProviderSetup(
+      requirements: { _ in [] }, install: install, progress: { _ in nil }, inventory: { files.withLock { $0 } },
       remove: { removed in files.withLock { $0.removeAll { removed.contains($0) } } },
       removalBlock: { _ in nil }, select: { _ in }, availableBytes: { nil }))
   }
@@ -49,7 +49,7 @@ import Testing
 
   @Test("A failed setup keeps its message while another feature installs and files are removed")
   func failure() async {
-    let file = LocalFile(
+    let file = InstalledFile(
       id: URL(fileURLWithPath: "/test/dictation"), name: "Dictation models",
       category: "Installed", bytes: 1, features: [.dictation])
     let error = ProviderError.failed("Speech preparation failed.")

@@ -267,10 +267,10 @@ extension ModelStore {
   private var externalLinks: [URL] { [CtcModels.defaultCacheDirectory()] }
 
   /// Enumerates the supported models' installed and retained files without following symlinks.
-  func inventory(manifests: [ModelManifest]) throws -> [LocalFile] {
+  func inventory(manifests: [ModelManifest]) throws -> [InstalledFile] {
     let files = FileManager.default
     let supported = Set(manifests.map(\.directoryName))
-    var result: [LocalFile] = []
+    var result: [InstalledFile] = []
     func bytes(_ path: URL) throws -> Int64 {
       let attributes = try files.attributesOfItem(atPath: path.path)
       if attributes[.type] as? FileAttributeType == .typeSymbolicLink { return 0 }
@@ -287,13 +287,13 @@ extension ModelStore {
           for retained in try files.contentsOfDirectory(at: path, includingPropertiesForKeys: nil)
           where supported.contains(retained.lastPathComponent) {
             result.append(
-              LocalFile(
+              InstalledFile(
                 id: retained, name: retained.lastPathComponent, category: "Retained download",
                 bytes: try bytes(retained)))
           }
         } else if supported.contains(path.lastPathComponent) {
           result.append(
-            LocalFile(
+            InstalledFile(
               id: path, name: path.lastPathComponent, category: "Installed and generated",
               bytes: try bytes(path)))
         }
@@ -308,14 +308,14 @@ extension ModelStore {
         supported.contains(resolved.lastPathComponent)
       else { continue }
       result.append(
-        LocalFile(
+        InstalledFile(
           id: link, name: link.lastPathComponent + " cache link", category: "Runtime link", bytes: 0
         ))
     }
     return result.sorted { $0.id.path < $1.id.path }
   }
 
-  func remove(_ requested: [LocalFile], manifests: [ModelManifest]) throws {
+  func remove(_ requested: [InstalledFile], manifests: [ModelManifest]) throws {
     try book.withLock { book in
       guard requested.allSatisfy({ book.tasks[$0.id.lastPathComponent] == nil }) else {
         throw ProviderError.failed("Wait for these downloads to stop before removing files.")
