@@ -296,29 +296,20 @@ extension ModelStore {
       .volumeAvailableCapacityForImportantUsage
   }
 
-  private var externalLinks: [URL] {
-    let home = FileManager.default.homeDirectoryForCurrentUser
-    return [
-      CtcModels.defaultCacheDirectory(), home.appending(path: ".cache/fluidaudio/Models/kokoro"),
-    ]
-  }
+  /// The only link outside the store: FluidAudio reads the CTC tokenizer from its own cache.
+  private var externalLinks: [URL] { [CtcModels.defaultCacheDirectory()] }
 
-  /// Enumerates without following symlinks, including generated, retained and obsolete files.
+  /// Enumerates without following symlinks, including generated and retained files, and
+  /// earlier revisions of the supported models.
   func inventory(manifests: [ModelManifest]) throws -> [LocalFile] {
     let files = FileManager.default
     let supported = Set(manifests.map(\.directoryName))
-    // Preserve these ownership names after experimental runtimes are pruned.
-    let historicalNames: Set<String> = [
-      "parakeet-unified-en-0.6b-640ms-int8", "silero-vad-256ms-v6.2.1", "parakeet-ctc-110m",
-      "whisper-large-v3-turbo-626mb", "whisper-large-v3-tokenizer", "qwen3-4b-instruct-2507-4bit",
-      "smollm3-3b-4bit", "kokoro-82m-ane-en", "qwen3-tts-12hz-1.7b-customvoice-4bit",
-      "qwen3-tts-12hz-0.6b-customvoice-4bit",
-    ]
+    let names = Set(manifests.map(\.name))
     func owned(_ name: String) -> Bool {
-      if supported.contains(name) || name == "espeak-english-trial-fd28f646" { return true }
+      if supported.contains(name) { return true }
       guard name.count > 41, name.suffix(40).allSatisfy(\.isHexDigit), name.dropLast(40).last == "-"
       else { return false }
-      return historicalNames.contains(String(name.dropLast(41)))
+      return names.contains(String(name.dropLast(41)))
     }
     var result: [LocalFile] = []
     func bytes(_ path: URL) throws -> Int64 {
@@ -342,28 +333,12 @@ extension ModelStore {
                 bytes: try bytes(retained)))
           }
         } else if owned(path.lastPathComponent) {
-          let oldFrontendNames = [
-            "G2PEncoder.mlmodelc", "G2PDecoder.mlmodelc", "g2p_vocab.json", "us_lexicon_cache.json",
-          ]
-          var legacy: [LocalFile] = []
-          if path.lastPathComponent.hasPrefix("kokoro-") {
-            for name in oldFrontendNames {
-              let obsolete = path.appending(path: name)
-              if files.fileExists(atPath: obsolete.path) {
-                legacy.append(
-                  LocalFile(
-                    id: obsolete, name: name, category: "Obsolete speech frontend",
-                    bytes: try bytes(obsolete)))
-              }
-            }
-          }
           result.append(
             LocalFile(
               id: path, name: path.lastPathComponent,
               category: supported.contains(path.lastPathComponent)
                 ? "Installed and generated" : "Obsolete",
-              bytes: max(0, try bytes(path) - legacy.reduce(0) { $0 + $1.bytes })))
-          result += legacy
+              bytes: try bytes(path)))
         }
       }
     }

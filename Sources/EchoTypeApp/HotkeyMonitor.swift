@@ -43,7 +43,7 @@ import EchoTypeCore
     // Accessibility trust check; macOS 27 shows it to the user as Device Control and
     // Data Access. The key is the value of kAXTrustedCheckOptionPrompt, which Swift 6
     // rejects as a mutable global.
-    AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": !Bundle.main.isIsolatedValidation] as CFDictionary)
+    AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     retryUntilInstalled()
   }
 

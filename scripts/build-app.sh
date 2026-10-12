@@ -22,8 +22,6 @@ cp Resources/AppIcon.icns "$staged/EchoType.app/Contents/Resources/"
 # Metal shaders. Bundle.module finds them only in Contents/Resources, and a missing one fails at
 # the first use rather than at build time, so every bundle is staged before signing.
 for bundle in "$bin"/*.bundle; do
-  # Incremental SwiftPM builds may leave the retired 64 MB eSpeak source bundle.
-  [[ $(basename "$bundle") == espeak-ng_data.bundle ]] && continue
   cp -R "$bundle" "$staged/EchoType.app/Contents/Resources/"
 done
 # The build plugin generates this from pinned inputs for app and tests alike.

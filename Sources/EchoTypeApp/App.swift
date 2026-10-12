@@ -5,33 +5,20 @@ import SwiftUI
 
 struct EchoTypeApp: App {
   @State private var store: SettingsStore
-  /// Inspection and HUD demos have no hotkeys, microphone or GUI MCP observer.
+  /// Nil for `--hud-demo`, which shows the overlay and must not start the hotkey monitor or
+  /// open the microphone. It records no dictation, so it has no Last Dictation window.
   @State private var controller: DictationController?
-
-  /// Inspection bundles use their own defaults domain and launch the real Settings directly.
-  private static var inspectingSettings: Bool {
-    Bundle.main.object(forInfoDictionaryKey: "EchoTypeSettingsInspection") as? Bool == true
-      && Bundle.main.bundleIdentifier?.hasPrefix("com.aidanzealley.echotype.stream3-inspection-")
-        == true
-  }
 
   init() {
     let store = SettingsStore()
     _store = State(initialValue: store)
-    if Self.inspectingSettings {
-      _controller = State(initialValue: nil)
-      NSApplication.shared.setActivationPolicy(.regular)
-      NSApplication.shared.appearance = NSAppearance(
-        named:
-          Bundle.main.object(forInfoDictionaryKey: "InspectionTheme") as? String == "Dark"
-          ? .darkAqua : .aqua)
-    } else if CommandLine.arguments.contains("--hud-demo") {
+    if CommandLine.arguments.contains("--hud-demo") {
       _controller = State(initialValue: nil)
       Task { await PillDemo.run() }
     } else {
       _controller = State(initialValue: DictationController(store: store))
     }
-    if !Self.inspectingSettings { Self.claimLoginItem() }
+    Self.claimLoginItem()
   }
 
   /// `SMAppService.mainApp` answers `status` by bundle identifier, but the login item launches
@@ -49,15 +36,7 @@ struct EchoTypeApp: App {
   }
 
   var body: some Scene {
-    Window("EchoType Settings", id: "settings-inspection") {
-      SettingsView(store: store, controller: Bundle.main.isIsolatedValidation ? controller : nil)
-        .onAppear { presentWindow {} }
-    }
-    .defaultSize(width: 790, height: 590)
-    .defaultLaunchBehavior(Self.inspectingSettings || Bundle.main.isIsolatedValidation ? .presented : .suppressed)
-    .restorationBehavior(.disabled)
-    .commandsRemoved()
-    MenuBarExtra(isInserted: .constant(!Self.inspectingSettings)) {
+    MenuBarExtra {
       Text(statusLine)
       Divider()
       if controller != nil {

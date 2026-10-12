@@ -8,7 +8,7 @@ import SwiftUI
 /// next dictation or reading.
 struct SettingsView: View {
   @Bindable var store: SettingsStore
-  /// Nil in Settings inspection and overlay demos, which have no controller.
+  /// Nil in the overlay demo, which has no controller.
   let controller: DictationController?
 
   @State private var destination = "dictation"
@@ -411,27 +411,6 @@ extension EchoTypeCore.Settings.Hotkey {
     case .controlOptionS: "⌃⌥S"
     default: "⌥D"
     }
-  }
-}
-
-/// Green when ready, red when unavailable and progress while waiting or not yet checked.
-private struct StatusMark: View {
-  let status: ServiceState.Status?
-  let offered: Bool
-
-  var body: some View {
-    Group {
-      if !offered {
-        Image(systemName: "minus.circle").foregroundStyle(.secondary)
-      } else {
-        switch status {
-        case .ready: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        case .unavailable: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-        case .waiting, nil: ProgressView().controlSize(.small)
-        }
-      }
-    }
-    .frame(width: 16, height: 16)
   }
 }
 

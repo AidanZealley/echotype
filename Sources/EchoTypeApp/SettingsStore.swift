@@ -1,4 +1,3 @@
-import Darwin
 import EchoTypeCore
 import Foundation
 import Observation
@@ -9,42 +8,10 @@ import Observation
   /// Renaming this key would reset every install's settings.
   private static let key = "settings"
   private static let activeKey = "hotkeysActive"
-  private let validationPreferences: URL?
-
-  /// The CFPreferences daemon does not honor the validation process's redirected home.
-  /// Only the signed validation identity writes this owned plist directly.
-  static func validationPreferencePath(
-    environment: [String: String] = ProcessInfo.processInfo.environment,
-    redirectedHome: URL = FileManager.default.homeDirectoryForCurrentUser
-  ) throws -> URL {
-    guard let configured = environment["CFFIXED_USER_HOME"], configured.hasPrefix("/"),
-      let account = getpwuid(getuid()), let realPath = account.pointee.pw_dir
-    else { throw ProviderError.failed("Isolated validation requires an explicit owned home.") }
-    let root = URL(fileURLWithPath: configured).standardizedFileURL
-    let realHome = URL(fileURLWithPath: String(cString: realPath)).standardizedFileURL
-    guard root == redirectedHome.standardizedFileURL, root != realHome,
-      root.resolvingSymlinksInPath() != realHome.resolvingSymlinksInPath()
-    else { throw ProviderError.failed("The validation home must redirect away from the user's real home.") }
-    return root.appending(path: "Library/Preferences/\(Bundle.main.bundleIdentifier!).plist")
-  }
-
-  private static var isolatedPreferences: URL? {
-    guard Bundle.main.isIsolatedValidation else { return nil }
-    // Fail closed before any defaults read or write if the validation launch is not isolated.
-    return try! validationPreferencePath()
-  }
-
-  private func saveValidationPreferences() {
-    guard let validationPreferences else { return }
-    let data = try! PropertyListSerialization.data(
-      fromPropertyList: [Self.key: settings.encoded(), Self.activeKey: hotkeysActive], format: .xml, options: 0)
-    try! data.write(to: validationPreferences, options: .atomic)
-  }
 
   var settings: Settings {
     didSet {
-      if validationPreferences != nil { saveValidationPreferences() }
-      else { UserDefaults.standard.set(settings.encoded(), forKey: Self.key) }
+      UserDefaults.standard.set(settings.encoded(), forKey: Self.key)
       updateLocalSelection()
     }
   }
@@ -52,24 +19,13 @@ import Observation
 
   var hotkeysActive: Bool {
     didSet {
-      if validationPreferences != nil { saveValidationPreferences() }
-      else { UserDefaults.standard.set(hotkeysActive, forKey: Self.activeKey) }
+      UserDefaults.standard.set(hotkeysActive, forKey: Self.activeKey)
     }
   }
 
-  init(validationPreferences: URL? = SettingsStore.isolatedPreferences) {
-    self.validationPreferences = validationPreferences
-    if let validationPreferences {
-      let data = try? Data(contentsOf: validationPreferences)
-      let values = data.flatMap {
-        try? PropertyListSerialization.propertyList(from: $0, options: [], format: nil) as? [String: Any]
-      }
-      settings = Settings(decoding: values?[Self.key] as? Data)
-      hotkeysActive = values?[Self.activeKey] as? Bool ?? true
-    } else {
-      settings = Settings(decoding: UserDefaults.standard.data(forKey: Self.key))
-      hotkeysActive = UserDefaults.standard.object(forKey: Self.activeKey) as? Bool ?? true
-    }
+  init() {
+    settings = Settings(decoding: UserDefaults.standard.data(forKey: Self.key))
+    hotkeysActive = UserDefaults.standard.object(forKey: Self.activeKey) as? Bool ?? true
     updateLocalSelection()
   }
   private func updateLocalSelection() {
