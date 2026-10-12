@@ -101,13 +101,13 @@ public enum ProviderError: Error, Equatable, Sendable {
 /// every service it uses is `.ready`.
 public struct Readiness: Sendable {
   /// Reports availability without downloading or preparing local runtimes.
-  public var check: @Sendable (ReadinessRequest) async -> ServiceReadiness
+  public var check: @Sendable () async -> ServiceReadiness
   /// Yields when an earlier answer may be out of date, such as setup finishing or failing.
   public var changes: @Sendable () -> AsyncStream<Void>
   public var prepare: @Sendable (ProviderFeature) async throws -> RuntimeLease
 
   public init(
-    check: @escaping @Sendable (ReadinessRequest) async -> ServiceReadiness,
+    check: @escaping @Sendable () async -> ServiceReadiness,
     changes: @escaping @Sendable () -> AsyncStream<Void>,
     prepare: @escaping @Sendable (ProviderFeature) async throws -> RuntimeLease = { _ in RuntimeLease() }
   ) {
@@ -120,26 +120,8 @@ public struct Readiness: Sendable {
   /// the provider has, so it answers `.ready` for cleanup too; operations use cleanup only when
   /// the provider has it. Its answer never changes, so `changes` finishes at once.
   public static let always = Readiness(
-    check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) },
+    check: { ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) },
     changes: { AsyncStream { $0.finish() } })
-}
-
-public struct ReadinessRequest: Hashable, Sendable {
-  /// The app's BCP-47 tag; the provider resolves its own form.
-  public var language: String
-  /// One of the voice service's voice ids.
-  public var voice: String
-
-  public init(language: String, voice: String) {
-    self.language = language
-    self.voice = voice
-  }
-
-  /// The request for the provider's dictation language and the stored voice.
-  public init(settings: Settings, provider: Provider) {
-    self.init(
-      language: settings.language(for: provider), voice: settings.readingChoice(for: provider).voice)
-  }
 }
 
 public struct ServiceReadiness: Equatable, Sendable {
@@ -167,30 +149,21 @@ public struct ServiceState: Equatable, Sendable {
   }
 
   public var status: Status
-  /// What is wrong and how to fix it, or for a ready service, a note such as which voice stands
-  /// in for a missing one. Required unless ready.
+  /// What is wrong and how to fix it. Required unless ready.
   public var message: String?
-  /// Where the user can fix it, such as a System Settings pane.
-  public var fix: URL?
-
-  public init(status: Status, message: String?, fix: URL? = nil) {
+  public init(status: Status, message: String?) {
     self.status = status
     self.message = message
-    self.fix = fix
   }
 
   public static let ready = Self(status: .ready, message: nil)
-
-  public static func ready(_ note: String, fix: URL? = nil) -> Self {
-    Self(status: .ready, message: note, fix: fix)
-  }
 
   public static func waiting(_ message: String) -> Self {
     Self(status: .waiting, message: message)
   }
 
-  public static func unavailable(_ message: String, fix: URL? = nil) -> Self {
-    Self(status: .unavailable, message: message, fix: fix)
+  public static func unavailable(_ message: String) -> Self {
+    Self(status: .unavailable, message: message)
   }
 }
 

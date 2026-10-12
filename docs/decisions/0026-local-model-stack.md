@@ -48,6 +48,17 @@ and warms with Parakeet so every dictation uses the same prepared model set.
 Boosting improves vocabulary but costs finalization time and can cause false
 substitutions, as the measurements below show.
 
+As of 2026-10-12, the spotter rescue pass is disabled to reduce false substitutions.
+The normal boost strength is retained, with short-term tapering disabled after
+an initial trial weakened keyterm recognition. Settled words are corrected at
+speech pauses, with the existing 15-second fallback for continuous speech. The
+last word remains provisional until another word arrives or dictation finishes,
+so correction never commits a word that may still be growing.
+The existing similarity floors remain
+0.30 for single-word rescue and 0.50 for multi-word rescue, although the disabled
+rescue pass does not use them. These settings still need comparison on real
+dictation for missed keyterms and incorrect insertions.
+
 [0025](0025-provider-adapters.md) owns the provider setup contract.
 [0015](0015-settings-window-layout.md) owns Settings navigation.
 [Local storage notes](../local-models.md) own file ownership and removal.

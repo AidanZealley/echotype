@@ -44,30 +44,27 @@ import Testing
 
 extension SettingsValidationTests {
   @Test func providerChoicesSurviveSwitchingAndStorage() {
-    var first = Providers.all[0]
-    first.id = "first"
-    var second = first
-    second.id = "second"
-    second.voice.voices = [Voice(id: "second-voice", name: "Second voice")]
-    second.voice.speedRange = 0.5...2
+    let first = Provider.xAI
+    let second = Provider.local
     var settings = Settings(readAloudProvider: first.id, reading: [
-      "first": .init(voice: "altair", speed: 1.25),
-      "second": .init(voice: "second-voice", speed: 1.8),
+      "xai": .init(voice: "altair", speed: 1.25),
+      "local": .init(voice: "bf_emma", speed: 1.8),
     ])
     #expect(settings.readingChoice(for: first) == .init(voice: "altair", speed: 1.25))
     settings.readAloudProvider = second.id
-    #expect(settings.readingChoice(for: second) == .init(voice: "second-voice", speed: 1.8))
+    #expect(settings.readingChoice(for: second) == .init(voice: "bf_emma", speed: 1.8))
     settings.readAloudProvider = first.id
     #expect(settings.readingChoice(for: first) == .init(voice: "altair", speed: 1.25))
     #expect(Settings(decoding: settings.encoded()).reading == settings.reading)
   }
 
   @Test func readingFieldsAndEntriesDecodeIndependently() {
-    let stored = Data(#"{"language":"en-GB","reading":{"xai":{"voice":42,"speed":1.25},"other":{"voice":"remembered","speed":"bad"},"broken":false}}"#.utf8)
+    let stored = Data(#"{"language":"en-GB","reading":{"xai":{"voice":42,"speed":1.25},"local":{"voice":"bf_emma","speed":"bad"}}}"#.utf8)
     let settings = Settings(decoding: stored)
     #expect(settings.readingChoice(for: Providers.all[0]) == .init(voice: "ara", speed: 1.25))
-    #expect(settings.reading["other"] == .init(voice: "remembered", speed: 1))
-    #expect(settings.reading["broken"] == nil)
+    #expect(settings.reading["local"] == .init(voice: "bf_emma", speed: 1))
+    let brokenEntry = Settings(decoding: Data(#"{"reading":{"xai":{"voice":"altair","speed":1.25},"local":false}}"#.utf8))
+    #expect(brokenEntry.reading == ["xai": .init(voice: "altair", speed: 1.25)])
     let retiredVoice = Settings(reading: ["xai": .init(voice: "retired", speed: 1.2)])
     #expect(retiredVoice.readingChoice(for: Providers.all[0]) == .init(voice: "ara", speed: 1.2))
     let badSpeed = Settings(reading: ["xai": .init(voice: "altair", speed: 2)])

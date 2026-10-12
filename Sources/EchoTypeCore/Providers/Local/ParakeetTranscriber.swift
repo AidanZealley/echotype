@@ -9,13 +9,14 @@ import Foundation
 /// - `.transcript` whenever the committed or provisional text changes. Every uncommitted token
 ///   is provisional: keyterm rescoring may still rewrite it.
 /// - Without boosting, an utterance's text is committed when the voice activity model ends it.
-/// - With boosting, text is committed only once rescored: after 15 s of audio, or at `finish()`.
+/// - With boosting, settled words are rescored at speech pauses or after 15 s of audio.
+///   The last word stays provisional until another word arrives or `finish()` rescores the tail.
 /// - `finish()` drains the recogniser, commits the tail, sends a last `.transcript` if it changed,
 ///   then `.finished`.
 ///
 /// Unified's streaming manager has no end-of-utterance signal, so `VadManager` supplies utterance
 /// boundaries and speech evidence. The manager's own boosting cannot say which text it has
-/// released, so with boosting this rescores in the same segments, with the same
+/// released, so with boosting this rescores at pauses and in bounded segments, with the same
 /// `VocabularyBoostingSession`, and commits exactly what it has rescored.
 ///
 /// `send` queues audio and returns at once; a worker runs inference off the caller's executor.
@@ -146,7 +147,9 @@ final class ParakeetTranscriber: LiveTranscriber {
         if voice.ended { transcript.commit(first: transcript.pending.count) }
       } else {
         audio += samples
-        if audio.count >= Self.segmentSamples { await rescore(upTo: transcript.settledCount) }
+        if voice.ended || audio.count >= Self.segmentSamples {
+          await rescore(upTo: transcript.settledCount)
+        }
         trimAudio()
       }
       return events(speech: voice.speech)

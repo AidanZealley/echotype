@@ -223,8 +223,8 @@ private struct Insertion: Equatable {
             return request.text
           } : nil,
           readiness: readiness.map { answer in
-            Readiness(check: { _ in answer }, changes: { AsyncStream { _ in } }, prepare: prepare)
-          } ?? Readiness(check: { _ in ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) }, changes: { AsyncStream { $0.finish() } }, prepare: prepare)),
+            Readiness(check: { answer }, changes: { AsyncStream { _ in } }, prepare: prepare)
+          } ?? Readiness(check: { ServiceReadiness(transcription: .ready, voice: .ready, cleanup: .ready) }, changes: { AsyncStream { $0.finish() } }, prepare: prepare)),
         key: { [storedKey] in
           await points.pass(.key)
           return storedKey

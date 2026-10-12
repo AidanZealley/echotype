@@ -223,7 +223,8 @@ extension Settings: Codable {
     if container.contains(.reading) {
       // Decode entries independently so one malformed provider cannot reset another.
       if let entries = try? container.nestedContainer(keyedBy: ReadingKey.self, forKey: .reading) {
-        for key in entries.allKeys {
+        let registeredIDs = Set(Providers.all.map { $0.id.rawValue })
+        for key in entries.allKeys where registeredIDs.contains(key.stringValue) {
           reading[key.stringValue] = try? entries.decode(Reading.self, forKey: key)
         }
       }
@@ -242,7 +243,8 @@ extension Settings: Codable {
     try container.encode(language, forKey: .language)
     try container.encodeIfPresent(inputDeviceID, forKey: .inputDeviceID)
     try container.encode(readAloudHotkey, forKey: .readAloudHotkey)
-    var storedReading = reading
+    let registeredIDs = Set(Providers.all.map { $0.id.rawValue })
+    var storedReading = reading.filter { registeredIDs.contains($0.key) }
     for provider in Providers.all {
       if let choice = storedReading[provider.id.rawValue] {
         storedReading[provider.id.rawValue] = choice.validated(for: provider.voice)

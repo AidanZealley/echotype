@@ -73,10 +73,10 @@ import Observation
     providerReadiness = readiness
   }
 
-  /// Follows the provider's readiness for `request` until cancelled.
-  func follow(_ request: ReadinessRequest) async {
+  /// Follows the provider's readiness until cancelled.
+  func follow() async {
     await refreshFiles()
-    await providerReadiness.follow(request) { self.readiness = $0 }
+    await providerReadiness.follow() { self.readiness = $0 }
   }
 
   func start(_ feature: ProviderFeature) {

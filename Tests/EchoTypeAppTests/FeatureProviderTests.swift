@@ -90,7 +90,7 @@ private final class EmptyProviderSpeech: SpeechStream {
       return EmptyProviderSpeech()
     }
     captured.cleanup = nil
-    captured.readiness = Readiness(check: { _ in
+    captured.readiness = Readiness(check: {
       await MainActor.run { self.readinessChecks += 1 }
       return ServiceReadiness(
         transcription: .ready, voice: .ready, cleanup: nil)
@@ -110,7 +110,7 @@ private final class EmptyProviderSpeech: SpeechStream {
       keyterms: ["Captured"], reading: ["xai": .init(voice: "altair", speed: 1.2)])
     f.controller.hotkeyPressed()
     await f.entered.wait()
-    f.store.settings.dictationProvider = "apple"
+    f.store.settings.dictationProvider = choices.1
     f.store.settings.keyterms = ["Changed"]
     f.release.open()
     await f.controller.waitForCompletion()
@@ -121,7 +121,7 @@ private final class EmptyProviderSpeech: SpeechStream {
     #expect(!f.transcriptionRequests[0].keyterms.contains("Changed"))
 
     #expect(f.controller.speak("MCP reply"))
-    f.store.settings.readAloudProvider = "apple"
+    f.store.settings.readAloudProvider = choices.0
     await f.controller.waitForCompletion()
     #expect(f.controller.lastError == nil)
     #expect(f.readingProviders == [choices.1])
@@ -137,7 +137,7 @@ private final class EmptyProviderSpeech: SpeechStream {
     f.store.settings = Settings(dictationProvider: "xai", readAloudProvider: "local")
     let task = Task { await f.controller.test() }
     await f.entered.wait()
-    f.store.settings.dictationProvider = "apple"
+    f.store.settings.dictationProvider = "local"
     f.release.open()
     guard case .failed(let message) = await task.value else { Issue.record("Expected missing key"); return }
     #expect(message == "Add your Captured xAI API key in EchoType Settings")
@@ -150,7 +150,7 @@ private final class EmptyProviderSpeech: SpeechStream {
     f.store.settings = Settings(dictationProvider: "local", readAloudProvider: "xai")
     f.controller.readAloudPressed()
     await f.entered.wait()
-    f.store.settings.readAloudProvider = "apple"
+    f.store.settings.readAloudProvider = "local"
     f.release.open()
     await f.controller.waitForCompletion()
     #expect(f.readingProviders == ["xai"] && f.dictationProviders.isEmpty)
