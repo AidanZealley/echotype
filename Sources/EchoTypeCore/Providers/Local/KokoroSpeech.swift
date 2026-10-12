@@ -10,7 +10,7 @@ final class KokoroSpeech: SpeechStream {
   typealias Synthesize = @Sendable (String) async throws -> SpeechAudio
 
   /// The first utterance is cut shorter than the rest, at a clause or a word, so first audio does
-  /// not wait for a long opening sentence. See the workstream 2 handoff for how it was chosen.
+  /// not wait for a long opening sentence.
   static let firstUtteranceLimit = 100
   /// Later utterances are whole sentences up to this many scalars, which keeps each well inside
   /// Kokoro's 510-phoneme input and 2000-frame output at the slowest speed.

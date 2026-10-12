@@ -1,5 +1,4 @@
 @testable import EchoTypeCore
-import EchoTypeTestSupport
 import Foundation
 import Testing
 
@@ -271,7 +270,7 @@ actor SessionLog {
     audioSeconds += seconds
   }
 
-  /// The artefact: everything a reader needs to answer the workstream's questions.
+  /// The artefact: everything a reader needs to judge the session.
   func report() -> String {
     """
 

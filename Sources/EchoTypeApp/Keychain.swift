@@ -8,16 +8,12 @@ import Security
 /// Every call can block while macOS asks whether EchoType may use the item, so call them off
 /// the main actor, where they would otherwise stall the event tap.
 enum Keychain {
-  static func service(for bundle: Bundle = .main) -> String {
-    // A signed validation copy must never read or mutate the user's credentials.
-    if bundle.isIsolatedValidation, let id = bundle.bundleIdentifier { return id }
-    return "com.aidanzealley.echotype"
-  }
+  private static let service = "com.aidanzealley.echotype"
 
   private static func query(_ provider: ProviderID) -> [CFString: Any] {
     [
       kSecClass: kSecClassGenericPassword,
-      kSecAttrService: service(),
+      kSecAttrService: service,
       kSecAttrAccount: provider.rawValue,
     ]
   }
@@ -55,13 +51,5 @@ enum Keychain {
   static func remove(for provider: ProviderID) -> Bool {
     let status = SecItemDelete(Self.query(provider) as CFDictionary)
     return status == errSecSuccess || status == errSecItemNotFound
-  }
-}
-
-extension Bundle {
-  /// Only explicit, separately signed validation identities use isolated credentials and no prompts.
-  var isIsolatedValidation: Bool {
-    object(forInfoDictionaryKey: "EchoTypeIsolatedValidation") as? Bool == true
-      && bundleIdentifier?.hasPrefix("com.aidanzealley.echotype.stream4-validation-") == true
   }
 }

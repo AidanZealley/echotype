@@ -1,5 +1,4 @@
 @testable import EchoTypeCore
-import EchoTypeTestSupport
 import Foundation
 import Speech
 import Testing
