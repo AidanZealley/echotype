@@ -234,7 +234,7 @@ private struct NeverSpeech: SpeechStream {
     lease = nil
   }
 
-  @Test("Inventory counts generated/retained/obsolete bytes without following external links")
+  @Test("Inventory counts only supported models' bytes without following links")
   func inventory() throws {
     let parent = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: parent) }
@@ -244,14 +244,14 @@ private struct NeverSpeech: SpeechStream {
     try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
     try Data(repeating: 1, count: 17).write(to: unrelated.appending(path: "keep"))
     try Data(repeating: 2, count: 9).write(to: root.appending(path: "Incomplete/" + fixture().directoryName + "/partial"))
-    try FileManager.default.createSymbolicLink(at: root.appending(path: "tiny-" + String(repeating: "b", count: 40)), withDestinationURL: unrelated)
+    try FileManager.default.createSymbolicLink(at: root.appending(path: fixture().directoryName), withDestinationURL: unrelated)
     try Data([9]).write(to: root.appending(path: "unrelated-notes.txt"))
     let retired = root.appending(path: "tiny-" + String(repeating: "a", count: 40))
     try FileManager.default.createDirectory(at: retired, withIntermediateDirectories: true)
     let store = ModelStore(root: root)
     let inventory = try store.inventory(manifests: [fixture()])
     #expect(inventory.reduce(0) { $0 + $1.bytes } == 9)
-    #expect(inventory.contains { $0.id.lastPathComponent == retired.lastPathComponent && $0.category == "Obsolete" }, "\(inventory.map { $0.id.path + ":" + $0.category })")
+    #expect(!inventory.contains { $0.id == retired })
     try store.remove(inventory, manifests: [fixture()])
     #expect(try Data(contentsOf: unrelated.appending(path: "keep")).count == 17)
     #expect(try Data(contentsOf: root.appending(path: "unrelated-notes.txt")) == Data([9]))

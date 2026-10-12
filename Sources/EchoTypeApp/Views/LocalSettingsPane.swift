@@ -198,7 +198,7 @@ private struct LocalFilesSheet: View {
         let affected = Set(selectedFiles.flatMap(\.features)).map(\.title).sorted().joined(
           separator: " and ")
         Text(
-          "Affected features: \(affected.isEmpty ? "Obsolete or retained files only" : affected). This removes \(size(selectedFiles.reduce(0) { $0 + $1.bytes })). Removing installed models makes their feature unavailable until setup runs again. Active operations and preparation protect their files."
+          "Affected features: \(affected.isEmpty ? "Retained downloads only" : affected). This removes \(size(selectedFiles.reduce(0) { $0 + $1.bytes })). Removing installed models makes their feature unavailable until setup runs again. Active operations and preparation protect their files."
         )
       }
   }

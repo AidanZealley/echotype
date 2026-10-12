@@ -299,18 +299,10 @@ extension ModelStore {
   /// The only link outside the store: FluidAudio reads the CTC tokenizer from its own cache.
   private var externalLinks: [URL] { [CtcModels.defaultCacheDirectory()] }
 
-  /// Enumerates without following symlinks, including generated and retained files, and
-  /// earlier revisions of the supported models.
+  /// Enumerates the supported models' installed and retained files without following symlinks.
   func inventory(manifests: [ModelManifest]) throws -> [LocalFile] {
     let files = FileManager.default
     let supported = Set(manifests.map(\.directoryName))
-    let names = Set(manifests.map(\.name))
-    func owned(_ name: String) -> Bool {
-      if supported.contains(name) { return true }
-      guard name.count > 41, name.suffix(40).allSatisfy(\.isHexDigit), name.dropLast(40).last == "-"
-      else { return false }
-      return names.contains(String(name.dropLast(41)))
-    }
     var result: [LocalFile] = []
     func bytes(_ path: URL) throws -> Int64 {
       let attributes = try files.attributesOfItem(atPath: path.path)
@@ -326,18 +318,16 @@ extension ModelStore {
       for path in try files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
         if path.lastPathComponent == "Incomplete" {
           for retained in try files.contentsOfDirectory(at: path, includingPropertiesForKeys: nil)
-          where owned(retained.lastPathComponent) {
+          where supported.contains(retained.lastPathComponent) {
             result.append(
               LocalFile(
                 id: retained, name: retained.lastPathComponent, category: "Retained download",
                 bytes: try bytes(retained)))
           }
-        } else if owned(path.lastPathComponent) {
+        } else if supported.contains(path.lastPathComponent) {
           result.append(
             LocalFile(
-              id: path, name: path.lastPathComponent,
-              category: supported.contains(path.lastPathComponent)
-                ? "Installed and generated" : "Obsolete",
+              id: path, name: path.lastPathComponent, category: "Installed and generated",
               bytes: try bytes(path)))
         }
       }
@@ -348,7 +338,7 @@ extension ModelStore {
       let resolved = URL(fileURLWithPath: target, relativeTo: link.deletingLastPathComponent())
         .standardizedFileURL
       guard resolved.path.hasPrefix(root.standardizedFileURL.path + "/"),
-        owned(resolved.lastPathComponent)
+        supported.contains(resolved.lastPathComponent)
       else { continue }
       result.append(
         LocalFile(
