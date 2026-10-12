@@ -23,13 +23,7 @@ final class KokoroModel: Sendable {
       FileManager.default.fileExists(atPath: directory.appending(path: $0.path).path)
     }) else { throw ProviderError.failed("The installed speech models are incomplete. Open Settings to prepare them.") }
     // FluidAudio appends this repository name and ANE to the supplied directory.
-    let repository = directory.appending(path: "kokoro-82m-coreml")
-    try linkFolder(at: repository, to: directory, modelName: KokoroManifests.english.name)
-    guard repository.resolvingSymlinksInPath().standardizedFileURL.path
-      == directory.resolvingSymlinksInPath().standardizedFileURL.path
-    else {
-      throw ProviderError.failed("The speech model folder contains a conflicting kokoro-82m-coreml directory. Resolve that folder conflict before preparing speech.")
-    }
+    try link(directory.appending(path: "kokoro-82m-coreml"), to: directory)
     try convertVoicePacks(in: directory)
 
     let store = KokoroAneModelStore(directory: directory)

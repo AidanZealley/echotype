@@ -72,8 +72,8 @@ final class ModelStore: Sendable {
     } ? .installed(directory) : .missing
   }
 
-  /// Joins one store-owned verification, recovery and download task per manifest.
-  /// Caller cancellation is handled by the lifecycle, which knows which features still need it.
+  /// Joins one store-owned verification and download task per manifest. Cancel it with
+  /// `cancel(_:)`.
   @discardableResult func start(_ manifest: ModelManifest) -> Task<Void, Never> {
     let id = manifest.directoryName
     return book.withLock { book in
@@ -87,10 +87,12 @@ final class ModelStore: Sendable {
         await previous?.value
         do {
           try Task.checkCancellation()
-          try recoverInstalled(manifest)
-          try Task.checkCancellation()
-          if case .installed = stateOnDisk(manifest) {
-          } else {
+          // A damaged install is deleted and downloaded again.
+          let installed = installedDirectory(manifest)
+          if FileManager.default.fileExists(atPath: installed.path), (try? verifyInstalled(manifest)) == nil {
+            try FileManager.default.removeItem(at: installed)
+          }
+          if !FileManager.default.fileExists(atPath: installed.path) {
             try await download(manifest, generation: generation)
           }
           finish(id, generation: generation, with: nil)
@@ -103,41 +105,6 @@ final class ModelStore: Sendable {
       book.tasks[id] = Download(generation: generation, task: task)
       book.notify()
       return task
-    }
-  }
-
-  private func stateOnDisk(_ manifest: ModelManifest) -> ModelState {
-    let directory = installedDirectory(manifest)
-    return manifest.files.allSatisfy {
-      (try? FileManager.default.attributesOfItem(atPath: directory.appending(path: $0.path).path)[
-        .size] as? Int64) == $0.size
-    } ? .installed(directory) : .missing
-  }
-
-  private func recoverInstalled(_ manifest: ModelManifest) throws {
-    let directory = installedDirectory(manifest)
-    guard FileManager.default.fileExists(atPath: directory.path) else { return }
-    do {
-      try verifyInstalled(manifest)
-      return
-    } catch {
-      // Keep each extant manifest file, including an incomplete installed set. The download
-      // loop verifies these individually and fetches only missing or invalid files.
-      let incomplete = incompleteDirectory(manifest)
-      try FileManager.default.createDirectory(at: incomplete, withIntermediateDirectories: true)
-      for file in manifest.files {
-        let source = directory.appending(path: file.path)
-        let destination = incomplete.appending(path: file.path)
-        guard FileManager.default.fileExists(atPath: source.path) else { continue }
-        if FileManager.default.fileExists(atPath: destination.path) {
-          if (try? verify(destination, against: file)) != nil { continue }
-          try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.createDirectory(
-          at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try FileManager.default.moveItem(at: source, to: destination)
-      }
-      try FileManager.default.removeItem(at: directory)
     }
   }
 
@@ -195,7 +162,7 @@ final class ModelStore: Sendable {
     for file in manifest.files {
       try Task.checkCancellation()
       let destination = incomplete.appending(path: file.path)
-      // Recovered and retained files must verify before reuse.
+      // Retained files must verify before reuse.
       if (try? verify(destination, against: file)) == nil {
         try? FileManager.default.removeItem(at: destination)
         let partial = destination.appendingPathExtension("part")

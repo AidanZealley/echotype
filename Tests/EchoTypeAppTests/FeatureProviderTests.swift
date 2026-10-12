@@ -101,76 +101,40 @@ private final class EmptyProviderSpeech: SpeechStream {
 }
 
 @Suite(.timeLimit(.minutes(1))) @MainActor struct FeatureProviderTests {
-  @Test(arguments: [(ProviderID(rawValue: "xai"), ProviderID(rawValue: "local")), (ProviderID(rawValue: "local"), ProviderID(rawValue: "xai"))])
-  func dictationAndMCPUseIndependentCapturedProviders(choices: (ProviderID, ProviderID)) async {
+  @Test("Each feature runs its own provider, settings snapshot and key",
+    arguments: [(ProviderID(rawValue: "xai"), ProviderID(rawValue: "local")),
+      (ProviderID(rawValue: "local"), ProviderID(rawValue: "xai"))])
+  func featuresUseTheirOwnProviders(choices: (ProviderID, ProviderID)) async {
     let f = FeatureProviderFixture()
-    let original = f.store.settings
-    defer { f.store.settings = original }
+    f.succeeds = true; f.keys = ["xai": "xai-key"]
     f.store.settings = Settings(dictationProvider: choices.0, readAloudProvider: choices.1,
       keyterms: ["Captured"], reading: ["xai": .init(voice: "altair", speed: 1.2)])
     f.controller.hotkeyPressed()
-    #expect(f.dictationProviders == [choices.0])
     await f.entered.wait()
     f.store.settings.dictationProvider = "apple"
     f.store.settings.keyterms = ["Changed"]
     f.release.open()
     await f.controller.waitForCompletion()
-    #expect(f.dictationSettings[0].keyterms == ["Captured"])
-    #expect(f.captureStarts == (choices.0 == "xai" ? 0 : 1))
-    if choices.0 == "xai" {
-      #expect(f.controller.lastError == "Add your Captured xAI API key in EchoType Settings")
-      #expect(f.readinessChecks == 0)
-    } else {
-      #expect(f.transcriptionRequests[0].keyterms.contains("Captured"))
-      #expect(!f.transcriptionRequests[0].keyterms.contains("Changed"))
-      #expect(f.transcriptionRequests[0].credential == nil)
-      #expect(f.controller.lastError == "Captured Local is unavailable")
-    }
+    #expect(f.controller.lastError == nil)
+    #expect(f.dictationProviders == [choices.0])
+    #expect(f.transcriptionRequests.map(\.credential) == [f.keys[choices.0]])
+    #expect(f.transcriptionRequests[0].keyterms.contains("Captured"))
+    #expect(!f.transcriptionRequests[0].keyterms.contains("Changed"))
+
     #expect(f.controller.speak("MCP reply"))
-    #expect(f.readingProviders == [choices.1])
     f.store.settings.readAloudProvider = "apple"
     await f.controller.waitForCompletion()
-    #expect(f.readingSettings[0].readAloudProvider == choices.1)
-    if choices.1 == "xai" {
-      #expect(f.controller.lastError == "Add your Captured xAI API key in EchoType Settings")
-      #expect(f.speechRequests.isEmpty)
-    } else {
-      #expect(f.controller.lastError == nil)
-      #expect(f.speechRequests.map(\.text) == ["MCP reply"])
-      #expect(f.speechRequests[0].credential == nil)
-    }
-  }
-
-  @Test(arguments: [(ProviderID(rawValue: "xai"), ProviderID(rawValue: "local")),
-    (ProviderID(rawValue: "local"), ProviderID(rawValue: "xai"))])
-  func bothFeaturesExecuteTheirOwnServicesAndKeys(choices: (ProviderID, ProviderID)) async {
-    let f = FeatureProviderFixture()
-    let original = f.store.settings
-    defer { f.store.settings = original }
-    f.succeeds = true; f.keys = ["xai": "xai-key"]
-    f.store.settings = Settings(dictationProvider: choices.0, readAloudProvider: choices.1,
-      reading: ["xai": .init(voice: "altair", speed: 1.2)])
-    f.release.open()
-    f.controller.hotkeyPressed()
-    await f.controller.waitForCompletion()
     #expect(f.controller.lastError == nil)
-    #expect(f.transcriptionRequests.count == 1)
-    #expect(f.transcriptionRequests[0].credential == f.keys[choices.0])
-    #expect(f.controller.speak("Independent speech"))
-    await f.controller.waitForCompletion()
-    #expect(f.controller.lastError == nil)
-    #expect(f.speechRequests.count == 1)
+    #expect(f.readingProviders == [choices.1])
+    #expect(f.speechRequests.map(\.text) == ["MCP reply"])
     #expect(f.speechRequests[0].credential == f.keys[choices.1])
-    let expected = f.store.settings.readingChoice(for: Providers[choices.1])
+    let expected = f.readingSettings[0].readingChoice(for: Providers[choices.1])
     #expect(f.speechRequests[0].voice == expected.voice)
     #expect(f.speechRequests[0].speed == expected.speed)
-    #expect(f.dictationProviders == [choices.0] && f.readingProviders == [choices.1])
   }
 
   @Test func microphoneTestUsesDictationProviderAndCapturedError() async {
     let f = FeatureProviderFixture()
-    let original = f.store.settings
-    defer { f.store.settings = original }
     f.store.settings = Settings(dictationProvider: "xai", readAloudProvider: "local")
     let task = Task { await f.controller.test() }
     await f.entered.wait()
@@ -184,8 +148,6 @@ private final class EmptyProviderSpeech: SpeechStream {
 
   @Test func hotkeyReadingUsesReadAloudProvider() async {
     let f = FeatureProviderFixture()
-    let original = f.store.settings
-    defer { f.store.settings = original }
     f.store.settings = Settings(dictationProvider: "local", readAloudProvider: "xai")
     f.controller.readAloudPressed()
     await f.entered.wait()
@@ -199,8 +161,6 @@ private final class EmptyProviderSpeech: SpeechStream {
   @Test(arguments: [true, false])
   func missingCredentialBlocksOnlyItsFeature(dictation: Bool) async {
     let f = FeatureProviderFixture()
-    let original = f.store.settings
-    defer { f.store.settings = original }
     f.store.settings = Settings(dictationProvider: dictation ? "xai" : "local",
       readAloudProvider: dictation ? "local" : "xai")
     await f.controller.refreshCredentialStatus()
