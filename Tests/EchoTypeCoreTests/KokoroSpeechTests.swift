@@ -25,16 +25,24 @@ import Testing
   @Test("Synthesis runs at most one utterance ahead of what has been pulled")
   func boundedReadAhead() async throws {
     let started = Mutex(0)
+    let second = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
     let stream = KokoroSpeech(text: "One. Two. Three. Four.") { _ in
-      started.withLock { $0 += 1 }
+      if started.withLock({ $0 += 1; return $0 }) == 2 {
+        second.continuation.yield()
+        for await _ in release.stream { break }
+      }
       return SpeechAudio(sampleRate: 1000, samples: [Float](repeating: 0, count: 300))
     }
     let first = try await stream.next()
     #expect(first?.samples.count == 100)
-    for _ in 0..<1000 { await Task.yield() }
-    #expect(started.withLock { $0 } <= 2)
+    // Taking the first chunk starts the second utterance. The rest of the first starts nothing.
+    for await _ in second.stream { break }
+    _ = try await stream.next(); _ = try await stream.next()
+    #expect(started.withLock { $0 } == 2)
+    release.continuation.finish()
 
-    var chunks = 1
+    var chunks = 3
     while try await stream.next() != nil { chunks += 1 }
     #expect(chunks == 12)
     #expect(started.withLock { $0 } == 4)

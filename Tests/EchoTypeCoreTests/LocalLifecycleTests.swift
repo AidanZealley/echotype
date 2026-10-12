@@ -168,7 +168,7 @@ private struct NeverSpeech: SpeechStream {
     #expect(voice.check().status == .unavailable)
   }
 
-  @Test("Explicit setup cancellation rejects late completion without cancelling its caller")
+  @Test("Cancelling setup rejects late completion and keeps verified files")
   func setupCancellation() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -181,13 +181,11 @@ private struct NeverSpeech: SpeechStream {
       return { _ in NeverSpeech() }
     }
     let lifecycle = LocalLifecycle(store: store, transcription: nil, cleanup: nil, voice: voice)
-    let attempt = Task { () -> Bool in
-      do { try await lifecycle.controls.install([.readAloud]); return true } catch { return false }
-    }
+    let attempt = Task { try await lifecycle.controls.install(.readAloud) }
     for await _ in entered.stream { break }
-    lifecycle.controls.cancel([.readAloud])
+    attempt.cancel()
     release.continuation.finish()
-    #expect(await attempt.value == false)
+    await #expect(throws: (any Error).self) { try await attempt.value }
     #expect(voice.loaded == nil)
     #expect(voice.check().status != .ready)
     guard case .installed = store.state(of: fixture()) else { Issue.record("Verified files were not retained"); return }
@@ -220,44 +218,32 @@ private struct NeverSpeech: SpeechStream {
     #expect(store.state(of: dictation) == .missing)
   }
 
-  @Test("Switching away during setup releases the runtime after setup and operation leases settle")
+  @Test("Switching away during setup releases the runtime once setup ends")
   func selectionDuringSetup() async throws {
-    for withOperation in [false, true] {
-      let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-      defer { try? FileManager.default.removeItem(at: root) }
-      let manifest = fixture("speech")
-      let store = ModelStore(root: root, source: .init { _, destination, _ in try Data([1, 2, 3]).write(to: destination) })
-      let entered = AsyncStream.makeStream(of: Void.self)
-      let release = AsyncStream.makeStream(of: Void.self)
-      let voice = LocalModel<KokoroModel.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in
-        entered.continuation.yield()
-        for await _ in release.stream { break }
-        return { _ in NeverSpeech() }
-      }
-      let lifecycle = LocalLifecycle(store: store, transcription: nil, cleanup: nil, voice: voice)
-      lifecycle.controls.select([.readAloud])
-      if withOperation { try await store.install(manifest) }
-      var operation = withOperation ? Task { try await lifecycle.prepare(.readAloud) } : nil
-      if withOperation { for await _ in entered.stream { break } }
-      let setup = Task { try await lifecycle.controls.install([.readAloud]) }
-      if withOperation {
-        let files = try lifecycle.controls.inventory()
-        while lifecycle.controls.removalBlock(files)?.hasPrefix("Cancel setup") != true { await Task.yield() }
-      } else { for await _ in entered.stream { break } }
-      lifecycle.controls.select([])
-      release.continuation.finish()
-      var lease = try await operation?.value
-      operation = nil
-      try await setup.value
-      if withOperation { #expect(voice.loaded != nil); #expect(lease != nil) }
-      lease = nil
-      #expect(voice.loaded == nil)
-      #expect(voice.check().status == .waiting)
-      guard case .installed = store.state(of: manifest) else { Issue.record("Switching providers removed installed files"); continue }
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let manifest = fixture("speech")
+    let store = ModelStore(root: root, source: .init { _, destination, _ in try Data([1, 2, 3]).write(to: destination) })
+    let entered = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+    let voice = LocalModel<KokoroModel.Speak>(manifests: [manifest], loadingMessage: "Loading", store: store) { _ in
+      entered.continuation.yield()
+      for await _ in release.stream { break }
+      return { _ in NeverSpeech() }
     }
+    let lifecycle = LocalLifecycle(store: store, transcription: nil, cleanup: nil, voice: voice)
+    lifecycle.controls.select([.readAloud])
+    let setup = Task { try await lifecycle.controls.install(.readAloud) }
+    for await _ in entered.stream { break }
+    lifecycle.controls.select([])
+    release.continuation.finish()
+    try await setup.value
+    #expect(voice.loaded == nil)
+    #expect(voice.check().status == .waiting)
+    guard case .installed = store.state(of: manifest) else { Issue.record("Switching providers removed installed files"); return }
   }
 
-  @Test("Explicit setup prepares only its requested feature and installed reload never fetches")
+  @Test("Setup prepares only its requested feature and installed reloads never fetch")
   func featureIsolation() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -272,20 +258,22 @@ private struct NeverSpeech: SpeechStream {
       speechLoads.withLock { $0 += 1 }; return { _ in NeverSpeech() }
     }
     let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
-    try await lifecycle.controls.install([.readAloud])
+    try await lifecycle.controls.install(.readAloud)
     #expect(speechLoads.withLock { $0 } == 1)
     #expect(dictationLoads.withLock { $0 } == 0)
     #expect(fetches.withLock { $0 } == 1)
-    #expect(voice.check().status == .ready)
+    // Read Aloud is not selected, so setup releases what it loaded.
+    #expect(voice.loaded == nil)
     lifecycle.controls.select([.readAloud])
     var lease: RuntimeLease? = try await lifecycle.prepare(.readAloud)
+    #expect(speechLoads.withLock { $0 } == 2)
     lifecycle.controls.select([])
     #expect(voice.loaded != nil)
     #expect(lease != nil)
     lease = nil
     #expect(voice.loaded == nil)
     lease = try await lifecycle.prepare(.readAloud)
-    #expect(speechLoads.withLock { $0 } == 2)
+    #expect(speechLoads.withLock { $0 } == 3)
     #expect(fetches.withLock { $0 } == 1)
     lease = nil
   }
@@ -312,151 +300,4 @@ private struct NeverSpeech: SpeechStream {
     #expect(try Data(contentsOf: unrelated.appending(path: "keep")).count == 17)
     #expect(try Data(contentsOf: root.appending(path: "unrelated-notes.txt")) == Data([9]))
   }
-  @Test("Overlapping feature downloads join one asset and cancelling Dictation retains Read Aloud")
-  func overlappingSetupCancellation() async throws {
-    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: root) }
-    let shared = fixture("shared"), speech = fixture("speech")
-    let entered = AsyncStream.makeStream(of: Void.self)
-    let release = AsyncStream.makeStream(of: Void.self)
-    let fetches = Mutex(0), dictationLoads = Mutex(0)
-    let store = ModelStore(root: root, source: .init { _, destination, _ in
-      fetches.withLock { $0 += 1 }
-      if destination.path.contains(shared.directoryName) {
-        entered.continuation.yield()
-        for await _ in release.stream { break }
-      }
-      try Data([1, 2, 3]).write(to: destination)
-    })
-    let transcriber = LocalModel<ParakeetModel.Start>(manifests: [shared], loadingMessage: "Loading", store: store) { _ in
-      dictationLoads.withLock { $0 += 1 }
-      return { _ in throw ProviderError.unavailable }
-    }
-    let voice = LocalModel<KokoroModel.Speak>(manifests: [shared, speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
-    let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
-    let dictation = Task { () -> Bool in
-      do { try await lifecycle.controls.install([.dictation]); return true } catch { return false }
-    }
-    for await _ in entered.stream { break }
-    let reading = Task { try await lifecycle.controls.install([.readAloud]) }
-    let speechFile = LocalFile(id: root.appending(path: speech.directoryName), name: "speech", category: "Installed", bytes: 3)
-    while lifecycle.controls.removalBlock([speechFile])?.hasPrefix("Cancel setup") != true { await Task.yield() }
-    lifecycle.controls.cancel([.dictation])
-    release.continuation.finish()
-    #expect(await dictation.value == false)
-    try await reading.value
-    #expect(fetches.withLock { $0 } == 2)
-    #expect(dictationLoads.withLock { $0 } == 0)
-    #expect(transcriber.check().status != .ready)
-    #expect(voice.check().status == .ready)
-    try store.verifyInstalled(shared)
-    try store.verifyInstalled(speech)
-  }
-
-  @Test("Read Aloud admitted after Dictation cancellation drains the shared writer before retrying")
-  func cancelledSharedWriterAdmission() async throws {
-    for cancelReading in [false, true] {
-      let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-      defer { try? FileManager.default.removeItem(at: root) }
-      let shared = fixture("shared"), speech = fixture("speech")
-      let entered = AsyncStream.makeStream(of: Void.self)
-      let readingEntered = AsyncStream.makeStream(of: Void.self)
-      let held = Mutex<CheckedContinuation<Void, Never>?>(nil)
-      let writers = Mutex((fetches: 0, active: 0, maximum: 0))
-      let dictationLoads = Mutex(0), speechLoads = Mutex(0)
-      let store = ModelStore(root: root, source: .init { _, destination, _ in
-        if destination.path.contains(shared.directoryName) {
-          let attempt = writers.withLock {
-            $0.fetches += 1
-            $0.active += 1
-            $0.maximum = max($0.maximum, $0.active)
-            return $0.fetches
-          }
-          defer { writers.withLock { $0.active -= 1 } }
-          if attempt == 1 {
-            // Checked continuation deliberately ignores task cancellation until the test drains it.
-            await withCheckedContinuation { continuation in
-              held.withLock { $0 = continuation }
-              entered.continuation.yield()
-            }
-          }
-          try Data([1, 2, 3]).write(to: destination)
-        } else {
-          try Data([1, 2, 3]).write(to: destination)
-          readingEntered.continuation.yield()
-        }
-      })
-      let transcriber = LocalModel<ParakeetModel.Start>(manifests: [shared], loadingMessage: "Loading", store: store) { _ in
-        dictationLoads.withLock { $0 += 1 }
-        return { _ in throw ProviderError.unavailable }
-      }
-      let voice = LocalModel<KokoroModel.Speak>(manifests: [shared, speech], loadingMessage: "Loading", store: store) { _ in
-        speechLoads.withLock { $0 += 1 }
-        return { _ in NeverSpeech() }
-      }
-      let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
-      let dictation = Task { () -> Bool in
-        do { try await lifecycle.controls.install([.dictation]); return true } catch { return false }
-      }
-      for await _ in entered.stream { break }
-      lifecycle.controls.cancel([.dictation])
-      let reading = Task { () -> Bool in
-        do { try await lifecycle.controls.install([.readAloud]); return true } catch { return false }
-      }
-      // This independent speech fetch proves Read Aloud admission while the shared writer is held.
-      for await _ in readingEntered.stream { break }
-      #expect(writers.withLock { $0.fetches } == 1)
-      #expect(writers.withLock { $0.active } == 1)
-      let retained = [LocalFile(
-        id: root.appending(path: "Incomplete/" + shared.directoryName),
-        name: "shared", category: "Retained download", bytes: 0)]
-      #expect(throws: (any Error).self) { try store.remove(retained, manifests: [shared, speech]) }
-      if cancelReading { lifecycle.controls.cancel([.readAloud]) }
-      held.withLock { $0?.resume(); $0 = nil }
-      #expect(await dictation.value == false)
-      #expect(await reading.value == !cancelReading)
-      #expect(writers.withLock { $0.maximum } == 1)
-      #expect(writers.withLock { $0.fetches } == (cancelReading ? 1 : 2))
-      #expect(dictationLoads.withLock { $0 } == 0)
-      #expect(speechLoads.withLock { $0 } == (cancelReading ? 0 : 1))
-      #expect(transcriber.check().status != .ready)
-      if cancelReading {
-        #expect(store.state(of: shared) == .missing)
-        #expect(voice.check().status != .ready)
-      } else {
-        try store.verifyInstalled(shared)
-        try store.verifyInstalled(speech)
-        #expect(voice.check().status == .ready)
-      }
-    }
-  }
-
-  @Test("A suspended Dictation download does not prevent Read Aloud finishing")
-  func concurrentIndependentSetup() async throws {
-    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: root) }
-    let dictationManifest = fixture("dictation"), speech = fixture("speech")
-    let entered = AsyncStream.makeStream(of: Void.self)
-    let release = AsyncStream.makeStream(of: Void.self)
-    let store = ModelStore(root: root, source: .init { _, destination, _ in
-      if destination.path.contains(dictationManifest.directoryName) {
-        entered.continuation.yield()
-        for await _ in release.stream { break }
-      }
-      try Data([1, 2, 3]).write(to: destination)
-    })
-    let transcriber = LocalModel<ParakeetModel.Start>(manifests: [dictationManifest], loadingMessage: "Loading", store: store) { _ in { _ in throw ProviderError.unavailable } }
-    let voice = LocalModel<KokoroModel.Speak>(manifests: [speech], loadingMessage: "Loading", store: store) { _ in { _ in NeverSpeech() } }
-    let lifecycle = LocalLifecycle(store: store, transcription: transcriber, cleanup: nil, voice: voice)
-    let dictation = Task { try? await lifecycle.controls.install([.dictation]) }
-    for await _ in entered.stream { break }
-    try await lifecycle.controls.install([.readAloud])
-    #expect(voice.check().status == .ready)
-    #expect(transcriber.check().status != .ready)
-    lifecycle.controls.cancel([.dictation])
-    release.continuation.finish()
-    await dictation.value
-    #expect(voice.check().status == .ready)
-  }
-
 }

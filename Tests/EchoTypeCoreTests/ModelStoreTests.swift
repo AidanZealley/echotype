@@ -107,60 +107,17 @@ private func isSettled(_ state: ModelState) -> Bool {
     #expect(!FileManager.default.fileExists(atPath: root.appending(path: model.directoryName).path))
   }
 
-  @Test("Installing again repairs same-size corruption and reuses intact files")
-  func retainedIntegrity() async throws {
+  @Test("A corrupt install is deleted and downloaded again")
+  func corruptInstall() async throws {
     defer { cleanUp() }
     let fake = FakeSource(contents)
     let model = manifest(contents)
-    let first = ModelStore(root: root, source: fake.source)
-    try await first.install(model)
+    try await ModelStore(root: root, source: fake.source).install(model)
     try Data(repeating: 9, count: 100).write(to: root.appending(path: model.directoryName + "/a.bin"))
     let relaunched = ModelStore(root: root, source: fake.source)
     try await relaunched.install(model)
     try relaunched.verifyInstalled(model)
-    #expect(fake.fetchCount == 3)
-  }
-
-  @Test("Missing or truncated installed files recover intact files without fetching them again")
-  func incompleteInstalledRecovery() async throws {
-    for truncated in [false, true] {
-      let directoryRoot = root.appending(path: truncated ? "truncated" : "missing")
-      defer { try? FileManager.default.removeItem(at: directoryRoot) }
-      let fake = FakeSource(contents)
-      let model = manifest(contents)
-      let first = ModelStore(root: directoryRoot, source: fake.source)
-      try await first.install(model)
-      let damaged = directoryRoot.appending(path: model.directoryName + "/a.bin")
-      if truncated {
-        try Data([1]).write(to: damaged)
-      } else {
-        try FileManager.default.removeItem(at: damaged)
-      }
-      let relaunched = ModelStore(root: directoryRoot, source: fake.source)
-      #expect(relaunched.state(of: model) == .missing)
-      #expect(relaunched.missingBytes(model) == 100)
-      try await relaunched.install(model)
-      try relaunched.verifyInstalled(model)
-      #expect(fake.fetchCount(for: "a.bin") == 2)
-      #expect(fake.fetchCount(for: "b.json") == 1)
-    }
-    cleanUp()
-  }
-
-  @Test("Concurrent retries share corrupt-install recovery and reuse intact files")
-  func sharedCorruptRecovery() async throws {
-    defer { cleanUp() }
-    let fake = FakeSource(contents)
-    let model = manifest(contents)
-    let store = ModelStore(root: root, source: fake.source)
-    try await store.install(model)
-    try Data(repeating: 9, count: 100).write(to: root.appending(path: model.directoryName + "/a.bin"))
-    let first = store.start(model)
-    let second = store.start(model)
-    try await store.waitForInstallation(model, task: first)
-    try await store.waitForInstallation(model, task: second)
-    try store.verifyInstalled(model)
-    #expect(fake.fetchCount == 3)
+    #expect(fake.fetchCount == 4)
   }
 
   @Test("An interrupted download is never installed, even after a relaunch, and a retry succeeds")

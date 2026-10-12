@@ -6,70 +6,62 @@ import Testing
 @testable import EchoTypeCore
 
 @Suite @MainActor struct LocalInstallationTests {
-  @Test("Page setup tracks both features independently and cancellation preserves the other task")
-  func independentTasks() async {
+  private func installation(
+    install: @escaping @Sendable (ProviderFeature) async throws -> Void,
+    files initial: [LocalFile] = []
+  ) -> LocalInstallation {
+    let files = Mutex(initial)
+    return LocalInstallation(controls: LocalSetup(
+      requirements: { _ in [] }, install: install, inventory: { files.withLock { $0 } },
+      remove: { removed in files.withLock { $0.removeAll { removed.contains($0) } } },
+      removalBlock: { _ in nil }, select: { _ in }, availableBytes: { nil }))
+  }
+
+  @Test("Features install one at a time in order, and cancel removes a waiting one or stops the running one")
+  func queue() async {
     let entered = AsyncStream.makeStream(of: ProviderFeature.self)
     let dictation = AsyncStream.makeStream(of: Void.self)
     let reading = AsyncStream.makeStream(of: Void.self)
-    let cancellations = Mutex<Set<ProviderFeature>>([])
-    let controls = LocalSetup(
-      requirements: { _ in [] },
-      install: { features in
-        let feature = features.first!
-        entered.continuation.yield(feature)
-        let stream = feature == .dictation ? dictation.stream : reading.stream
-        for await _ in stream { break }
-      }, cancel: { features in cancellations.withLock { $0.formUnion(features) } },
-      inventory: { [] },
-      remove: { _ in }, removalBlock: { _ in nil }, select: { _ in }, availableBytes: { nil })
-    let installation = LocalInstallation(controls: controls)
+    let installation = installation { feature in
+      entered.continuation.yield(feature)
+      for await _ in feature == .dictation ? dictation.stream : reading.stream { break }
+      try Task.checkCancellation()
+    }
     var entries = entered.stream.makeAsyncIterator()
-    installation.start([.dictation])
+    installation.start(.dictation)
     #expect(await entries.next() == .dictation)
-    installation.start([.readAloud])
-    #expect(await entries.next() == .readAloud)
-    #expect(installation.requested == [.dictation, .readAloud])
+    installation.start(.readAloud)
+    installation.start(.readAloud)
+    #expect(installation.queue == [.dictation, .readAloud])
+    installation.cancel(.readAloud)
+    #expect(installation.queue == [.dictation])
+    installation.start(.readAloud)
     installation.cancel(.dictation)
-    dictation.continuation.finish()
-    while installation.requested.contains(.dictation) { await Task.yield() }
-    #expect(installation.requested == [.readAloud])
-    #expect(cancellations.withLock { $0 } == [.dictation])
+    #expect(await entries.next() == .readAloud)
+    #expect(installation.queue == [.readAloud])
+    let worker = installation.worker
     reading.continuation.finish()
-    while installation.running { await Task.yield() }
-    #expect(installation.messages[.dictation]?.hasPrefix("Cancelled") == true)
+    await worker?.value
+    #expect(installation.queue.isEmpty)
+    #expect(installation.messages[.dictation] == "Cancelled.")
     #expect(installation.messages[.readAloud] == nil)
   }
 
-  @Test("Successful setup leaves readiness to report status and preserves another feature's failure")
-  func successUsesReadiness() async {
+  @Test("A failed setup keeps its message while another feature installs and files are removed")
+  func failure() async {
     let file = LocalFile(
       id: URL(fileURLWithPath: "/test/dictation"), name: "Dictation models",
       category: "Installed", bytes: 1, features: [.dictation])
-    let files = Mutex([file])
     let error = ProviderError.failed("Speech preparation failed.")
-    let controls = LocalSetup(
-      requirements: { _ in [] },
-      install: { features in
-        if features.contains(.readAloud) { throw error }
-      }, cancel: { _ in }, inventory: { files.withLock { $0 } },
-      remove: { removed in files.withLock { $0.removeAll { removed.contains($0) } } },
-      removalBlock: { _ in nil }, select: { _ in }, availableBytes: { nil })
-    let installation = LocalInstallation(controls: controls)
-    await installation.refreshFiles()
-    installation.start([.readAloud])
-    while installation.running { await Task.yield() }
-    let failure = installation.messages[.readAloud]
-    #expect(failure == error.localizedDescription)
-
-    installation.start([.dictation])
-    while installation.running { await Task.yield() }
+    let installation = installation(install: { if $0 == .readAloud { throw error } }, files: [file])
+    installation.start(.readAloud)
+    installation.start(.dictation)
+    await installation.worker?.value
+    #expect(installation.messages[.readAloud] == error.localizedDescription)
     #expect(installation.messages[.dictation] == nil)
-    #expect(installation.messages[.readAloud] == failure)
     #expect(installation.files == [file])
-
     await installation.remove([file])
     #expect(installation.files.isEmpty)
-    #expect(installation.messages[.dictation] == nil)
-    #expect(installation.messages[.readAloud] == failure)
+    #expect(installation.messages[.readAloud] == error.localizedDescription)
   }
 }

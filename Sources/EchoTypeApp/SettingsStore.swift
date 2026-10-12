@@ -49,15 +49,17 @@ import Observation
 }
 
 /// Setup survives navigation between Settings pages. No work starts in its initializer.
+/// Features install one at a time, in the order they were requested.
 @MainActor @Observable final class LocalInstallation {
   var readiness: ServiceReadiness?
   var files: [LocalFile] = []
-  var requested: Set<ProviderFeature> = []
-  var running: Bool { !requested.isEmpty }
+  /// Features waiting to install. The first is installing.
+  private(set) var queue: [ProviderFeature] = []
   var message: String?
   var messages: [ProviderFeature: String] = [:]
-  @ObservationIgnored private var tasks: [ProviderFeature: Task<Void, Never>] = [:]
-  @ObservationIgnored private var generations: [ProviderFeature: UUID] = [:]
+  /// Installs the queue, then ends. Tests await it.
+  @ObservationIgnored private(set) var worker: Task<Void, Never>?
+  @ObservationIgnored private var current: Task<Void, any Error>?
   private let controls: LocalSetup
 
   init(controls: LocalSetup = Provider.local.localSetup!) { self.controls = controls }
@@ -69,41 +71,29 @@ import Observation
     }
   }
 
-  func start(_ features: Set<ProviderFeature>) {
-    for feature in features where !requested.contains(feature) {
-      let id = UUID()
-      generations[feature] = id
-      requested.insert(feature)
-      messages[feature] = nil
-      let controls = controls
-      tasks[feature] = Task {
-        do {
-          try await controls.install([feature])
-        } catch {
-          if generations[feature] == id { messages[feature] = error.localizedDescription }
-        }
-        guard generations[feature] == id else { return }
-        requested.remove(feature)
-        tasks[feature] = nil
-        await refreshFiles()
-      }
-    }
+  func start(_ feature: ProviderFeature) {
+    guard !queue.contains(feature) else { return }
+    messages[feature] = nil
+    queue.append(feature)
+    if worker == nil { worker = Task { await work(); worker = nil } }
   }
 
   func cancel(_ feature: ProviderFeature) {
-    guard requested.contains(feature) else { return }
-    let id = UUID()
-    generations[feature] = id
-    let task = tasks[feature]
-    task?.cancel()
-    controls.cancel([feature])
-    messages[feature] = "Cancelling. Verified downloads will be retained for retry."
-    Task {
-      await task?.value
-      guard generations[feature] == id else { return }
-      requested.remove(feature)
-      tasks[feature] = nil
-      messages[feature] = "Cancelled. Retained files can be reused or removed."
+    if queue.first == feature, let current { current.cancel() } else { queue.removeAll { $0 == feature } }
+  }
+
+  private func work() async {
+    while let feature = queue.first {
+      let controls = controls
+      let task = Task { try await controls.install(feature) }
+      current = task
+      do { try await task.value } catch is CancellationError {
+        messages[feature] = "Cancelled."
+      } catch {
+        messages[feature] = task.isCancelled ? "Cancelled." : error.localizedDescription
+      }
+      current = nil
+      queue.removeFirst()
       await refreshFiles()
     }
   }

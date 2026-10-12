@@ -105,7 +105,6 @@ final class LocalModel<Loaded: Sendable>: Sendable {
     notify()
   }
 
-  func release() { cancel() }
   var preparing: Bool { state.withLock { $0.task != nil } }
 
   func changes() -> AsyncStream<Void> {
@@ -132,32 +131,20 @@ final class LocalModel<Loaded: Sendable>: Sendable {
   }
 }
 
-/// Connects a runtime's fixed path to verified models. Conflicting folders and foreign
-/// links stay intact for the loader's conflict guard. Only links to this model's
-/// revision directories in EchoType's managed store may be replaced.
-func linkFolder(at link: URL, to directory: URL, modelName: String,
-  ownedRoot: URL = ModelStore.defaultRoot) throws {
+/// Points a runtime's fixed path at a model directory. A link into EchoType's store, such as
+/// one to an earlier revision, is replaced. Anything else there belongs to another install, so
+/// it is left alone and loading fails.
+func link(_ link: URL, to directory: URL, store: URL = ModelStore.defaultRoot) throws {
   let files = FileManager.default
-  let destination = directory.resolvingSymlinksInPath().standardizedFileURL
-  func target() -> URL? {
-    guard let path = try? files.destinationOfSymbolicLink(atPath: link.path) else { return nil }
-    return URL(fileURLWithPath: path, relativeTo: link.deletingLastPathComponent())
-      .resolvingSymlinksInPath().standardizedFileURL
-  }
-  func pointsAtStore() -> Bool { target() == destination }
-  if let existing = target() {
-    guard existing != destination else { return }
-    let name = existing.lastPathComponent
-    let revision = name.dropFirst(modelName.count + 1)
-    guard existing.deletingLastPathComponent() == ownedRoot.resolvingSymlinksInPath().standardizedFileURL,
-      name.hasPrefix(modelName + "-"), revision.count == 40, revision.allSatisfy(\.isHexDigit)
-    else { return }
+  if let path = try? files.destinationOfSymbolicLink(atPath: link.path) {
+    let target = URL(fileURLWithPath: path, relativeTo: link.deletingLastPathComponent())
+    if target.resolvingSymlinksInPath().path == directory.resolvingSymlinksInPath().path { return }
+    guard target.deletingLastPathComponent().resolvingSymlinksInPath().path == store.resolvingSymlinksInPath().path
+    else { throw ProviderError.failed("\(link.path) belongs to another app. Move it and try again.") }
     try files.removeItem(at: link)
-  } else if (try? files.attributesOfItem(atPath: link.path)) != nil {
-    return
+  } else if files.fileExists(atPath: link.path) {
+    throw ProviderError.failed("\(link.path) belongs to another app. Move it and try again.")
   }
   try files.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
-  do {
-    try files.createSymbolicLink(at: link, withDestinationURL: directory)
-  } catch where pointsAtStore() {}
+  try files.createSymbolicLink(at: link, withDestinationURL: directory)
 }

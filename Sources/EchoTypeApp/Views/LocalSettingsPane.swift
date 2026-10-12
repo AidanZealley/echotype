@@ -44,11 +44,13 @@ struct LocalFeatureSection: View {
       feature == .dictation ? installation.readiness?.transcription : installation.readiness?.voice
     let cleanup = feature == .dictation ? installation.readiness?.cleanup : nil
     let ready = status?.status == .ready && (cleanup == nil || cleanup?.status == .ready)
-    let running = installation.requested.contains(feature)
+    let queued = installation.queue.contains(feature)
+    let waitingFor = queued && installation.queue.first != feature ? installation.queue.first : nil
     Section(feature.title + " models") {
       LabeledContent(
         "Status",
-        value: running ? "Setting up" : ready ? "Ready" : installed ? "Installed" : "Needs download"
+        value: waitingFor.map { "Waiting for \($0.title) setup" }
+          ?? (queued ? "Setting up" : ready ? "Ready" : installed ? "Installed" : "Needs download")
       )
       ForEach(requirements) { requirement in
         VStack(alignment: .leading, spacing: 6) {
@@ -84,11 +86,11 @@ struct LocalFeatureSection: View {
       if let message = installation.messages[feature] { Text(message).textSelection(.enabled) }
       HStack {
         Spacer()
-        if running {
-          ProgressView().controlSize(.small)
+        if queued {
+          if waitingFor == nil { ProgressView().controlSize(.small) }
           Button("Cancel") { installation.cancel(feature) }
         } else if !ready {
-          Button(installed ? "Prepare / Retry" : "Download") { installation.start([feature]) }
+          Button(installed ? "Prepare / Retry" : "Download") { installation.start(feature) }
             .disabled(setup.availableBytes().map { $0 < total } == true)
         }
       }

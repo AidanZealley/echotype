@@ -36,8 +36,9 @@ public struct LocalFile: Identifiable, Sendable, Hashable {
 /// Explicit setup and storage controls. Reporting and operation preparation use separate APIs.
 public struct LocalSetup: Sendable {
   public var requirements: @Sendable (Set<ProviderFeature>) -> [LocalRequirement]
-  public var install: @Sendable (Set<ProviderFeature>) async throws -> Void
-  public var cancel: @Sendable (Set<ProviderFeature>) -> Void
+  /// Downloads and loads one feature. The caller runs one at a time; cancelling its task
+  /// stops the download and the load, keeping verified files for a retry.
+  public var install: @Sendable (ProviderFeature) async throws -> Void
   public var inventory: @Sendable () throws -> [LocalFile]
   public var remove: @Sendable ([LocalFile]) throws -> Void
   public var removalBlock: @Sendable ([LocalFile]) -> String?
@@ -49,11 +50,7 @@ final class LocalLifecycle: Sendable {
   private struct State {
     var selected: Set<ProviderFeature> = []
     var operations: [ProviderFeature: Int] = [:]
-    var setup: Set<ProviderFeature> = []
-    var setupGenerations: [ProviderFeature: UUID] = [:]
-    var releaseAfterSetup: Set<ProviderFeature> = []
-    var removing = false
-    var removingFeatures: Set<ProviderFeature> = []
+    var setup: ProviderFeature?
   }
   private let state = Mutex(State())
   private let store: ModelStore
@@ -77,7 +74,7 @@ final class LocalLifecycle: Sendable {
       guard let self, cleanup?.loaded != nil,
         state.withLock({ $0.operations[.dictation, default: 0] == 0 })
       else { return }
-      cleanup?.release()
+      cleanup?.cancel()
     }
     memoryPressure.activate()
   }
@@ -94,12 +91,7 @@ final class LocalLifecycle: Sendable {
   }
 
   func prepare(_ feature: ProviderFeature) async throws -> RuntimeLease {
-    try state.withLock {
-      guard !$0.removing || !$0.removingFeatures.contains(feature) else {
-        throw ProviderError.failed("Models are being removed. Retry after removal finishes.")
-      }
-      $0.operations[feature, default: 0] += 1
-    }
+    state.withLock { $0.operations[feature, default: 0] += 1 }
     store.signal()
     let lease = RuntimeLease { [self] in
       state.withLock { $0.operations[feature, default: 0] -= 1 }
@@ -124,16 +116,19 @@ final class LocalLifecycle: Sendable {
 
   private func releaseUnused(_ state: inout State, features: Set<ProviderFeature>) {
     for feature in features
-    where !state.selected.contains(feature) && !state.setup.contains(feature)
+    where !state.selected.contains(feature) && state.setup != feature
       && state.operations[feature, default: 0] == 0
     {
-      if feature == .dictation {
-        transcription?.release()
-        cleanup?.release()
-      } else {
-        voice?.release()
-      }
-      state.releaseAfterSetup.remove(feature)
+      release(feature)
+    }
+  }
+
+  private func release(_ feature: ProviderFeature) {
+    if feature == .dictation {
+      transcription?.cancel()
+      cleanup?.cancel()
+    } else {
+      voice?.cancel()
     }
   }
 
@@ -157,8 +152,7 @@ final class LocalLifecycle: Sendable {
 
   private func removalBlock(_ files: [LocalFile], state: State) -> String? {
     let affected = affectedFeatures(files)
-    if state.removing { return "Wait for the current removal to finish." }
-    if !state.setup.isDisjoint(with: affected) {
+    if let setup = state.setup, affected.contains(setup) {
       return "Cancel setup and wait for it to finish before removing these files."
     }
     for feature in affected {
@@ -174,23 +168,12 @@ final class LocalLifecycle: Sendable {
     return nil
   }
 
-  private func checkSetup(_ generation: UUID, features: Set<ProviderFeature>) throws {
-    try Task.checkCancellation()
-    guard
-      state.withLock({ state in features.allSatisfy { state.setupGenerations[$0] == generation } })
-    else { throw CancellationError() }
-  }
-
-  private func prepareSetup<Loaded>(
-    _ model: LocalModel<Loaded>?, generation: UUID,
-    features: Set<ProviderFeature>
-  ) async throws {
+  /// Starting the load and setup's cancellation take the same lock, so a cancelled setup never
+  /// starts a load that would outlive it.
+  private func load<Loaded>(_ model: LocalModel<Loaded>?) async throws {
     guard let model else { return }
-    try Task.checkCancellation()
-    try state.withLock { state in
-      guard features.allSatisfy({ state.setupGenerations[$0] == generation }) else {
-        throw CancellationError()
-      }
+    try state.withLock { _ in
+      try Task.checkCancellation()
       try model.beginPreparation(retrying: true)
     }
     try await model.waitForPreparation()
@@ -220,65 +203,36 @@ final class LocalLifecycle: Sendable {
             license: manifest.license)
         }
       },
-      install: { [self] features in
-        guard !features.isEmpty else { return }
-        let requested = manifests(features)
-        let generation = UUID()
-        let downloads = try state.withLock {
-          guard !$0.removing || $0.removingFeatures.isDisjoint(with: features),
-            $0.setup.isDisjoint(with: features)
-          else { throw ProviderError.failed("Wait for this feature's setup or removal to finish.") }
+      install: { [self] feature in
+        let requested = manifests([feature])
+        try state.withLock {
+          guard $0.setup == nil else { throw ProviderError.failed("Wait for the current setup to finish.") }
           let missing = requested.reduce(Int64(0)) { $0 + store.missingBytes($1) }
           if let free = store.availableBytes(), free < missing {
             throw ProviderError.failed(
               "Not enough disk space. Free \(ByteCountFormatter.string(fromByteCount: missing - free, countStyle: .file)) and retry."
             )
           }
-          $0.setup.formUnion(features)
-          for feature in features { $0.setupGenerations[feature] = generation }
-          return requested.map { store.start($0) }
+          $0.setup = feature
         }
         defer {
           state.withLock {
-            $0.setup.subtract(features)
-            for feature in features { $0.setupGenerations[feature] = nil }
-            releaseUnused(&$0, features: $0.releaseAfterSetup)
+            $0.setup = nil
+            releaseUnused(&$0, features: [feature])
           }
           store.signal()
         }
         try await withTaskCancellationHandler {
-          for (manifest, task) in zip(requested, downloads) {
-            try checkSetup(generation, features: features)
-            try await store.waitForInstallation(manifest, task: task)
+          for manifest in requested { try await store.install(manifest) }
+          if feature == .dictation {
+            try await load(transcription)
+            try await load(cleanup)
+          } else {
+            try await load(voice)
           }
-          for feature in ProviderFeature.allCases where features.contains(feature) {
-            try checkSetup(generation, features: features)
-            if feature == .dictation {
-              try await prepareSetup(transcription, generation: generation, features: features)
-              try await prepareSetup(cleanup, generation: generation, features: features)
-            } else {
-              try await prepareSetup(voice, generation: generation, features: features)
-            }
-          }
-          try checkSetup(generation, features: features)
         } onCancel: {
-          controls.cancel(features)
-        }
-      },
-      cancel: { [self] features in
-        state.withLock {
-          for feature in features { $0.setupGenerations[feature] = nil }
-          let retained = Set(manifests(Set($0.setupGenerations.keys)).map(\.directoryName))
-          for manifest in manifests(features) where !retained.contains(manifest.directoryName) {
-            store.cancel(manifest)
-          }
-          if features.contains(.dictation), $0.operations[.dictation, default: 0] == 0 {
-            transcription?.cancel()
-            cleanup?.cancel()
-          }
-          if features.contains(.readAloud), $0.operations[.readAloud, default: 0] == 0 {
-            voice?.cancel()
-          }
+          for manifest in requested { store.cancel(manifest) }
+          state.withLock { if $0.operations[feature, default: 0] == 0 { release(feature) } }
         }
       },
       inventory: { [self] in
@@ -289,30 +243,15 @@ final class LocalLifecycle: Sendable {
         }
       },
       remove: { [self] files in
-        let affected = affectedFeatures(files)
         try state.withLock {
           if let reason = removalBlock(files, state: $0) { throw ProviderError.failed(reason) }
-          $0.removing = true
-          $0.removingFeatures = affected
-          if affected.contains(.dictation) {
-            transcription?.release()
-            cleanup?.release()
-          }
-          if affected.contains(.readAloud) { voice?.release() }
+          for feature in affectedFeatures(files) { release(feature) }
+          try store.remove(files, manifests: manifests(Set(ProviderFeature.allCases)))
         }
-        defer {
-          state.withLock {
-            $0.removing = false
-            $0.removingFeatures = []
-          }
-        }
-        try store.remove(files, manifests: manifests(Set(ProviderFeature.allCases)))
       }, removalBlock: { [self] files in state.withLock { removalBlock(files, state: $0) } },
       select: { [self] selected in
         let added = state.withLock {
           let added = selected.subtracting($0.selected)
-          $0.releaseAfterSetup.formUnion($0.selected.subtracting(selected).intersection($0.setup))
-          $0.releaseAfterSetup.subtract(selected)
           $0.selected = selected
           releaseUnused(&$0, features: Set(ProviderFeature.allCases))
           return added
