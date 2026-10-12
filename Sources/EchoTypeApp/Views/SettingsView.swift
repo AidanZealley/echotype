@@ -644,7 +644,7 @@ private struct KeytermsTab: View {
             Spacer()
             Text(
               verbatim:
-                "\(store.settings.keyterms.count) of \(Providers[store.settings.dictationProvider].transcription.keytermLimit - 1) keyterms used"
+                "\(store.settings.keyterms.count) of \(Providers[store.settings.dictationProvider].transcription.keytermLimit) keyterms used"
             )
             .monospacedDigit()
           }

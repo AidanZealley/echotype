@@ -6,7 +6,9 @@ import Synchronization
 
 /// The loaded Parakeet Unified runtime, shared by every session: the streaming recogniser, the
 /// voice activity model that marks utterances and, for keyterm boosting, the CTC spotting model.
-/// Sessions share the weights and nothing else: each starts from a reset recogniser.
+/// Sessions share the weights and nothing else: each starts from a reset recogniser. The CTC
+/// model always loads with the rest, so every session behaves the same, but it boosts only a
+/// session with saved keyterms, since boosting slows finalising.
 final class ParakeetModel: Sendable {
   typealias Start = @Sendable (TranscriptionRequest) async throws -> any LiveTranscriber
   static let sampleRate = 16_000
@@ -14,7 +16,7 @@ final class ParakeetModel: Sendable {
 
   let asr: StreamingUnifiedAsrManager
   let vad: VadManager
-  /// Nil when keyterm boosting is off.
+  /// Nil when keyterm boosting is unavailable.
   private let ctc: CtcModels?
   private let session = Mutex<ParakeetTranscriber?>(nil)
 
@@ -47,8 +49,7 @@ final class ParakeetModel: Sendable {
       phaseStart = ProcessInfo.processInfo.systemUptime
       // Keyterm boosting reads the CTC model's `tokenizer.json` from FluidAudio's own cache
       // folder, whichever way the model was loaded, so that folder points at the store's copy.
-      let tokenizerCache = CtcModels.defaultCacheDirectory()
-      try link(tokenizerCache, to: keywordSpotting)
+      try link(CtcModels.defaultCacheDirectory(), to: keywordSpotting)
       ctc = try await CtcModels.loadDirect(from: keywordSpotting)
       logLoadPhase("ctc-load", since: phaseStart)
     }
@@ -65,7 +66,9 @@ final class ParakeetModel: Sendable {
       await previous.waitForClose()
     }
     var boosting: VocabularyBoostingSession?
-    if let ctc { boosting = try await Self.boosting(request.keyterms, models: ctc) }
+    if !request.keyterms.isEmpty, let ctc {
+      boosting = try await Self.boosting(request.keyterms, models: ctc)
+    }
     let transcriber = ParakeetTranscriber(model: self, boosting: boosting)
     session.withLock { $0 = transcriber }
     return transcriber
@@ -91,9 +94,10 @@ final class ParakeetModel: Sendable {
     Self.logLoadPhase("vad-warm", since: phaseStart)
     if let ctc {
       phaseStart = ProcessInfo.processInfo.systemUptime
-      let word = TokenTiming(token: " echo", tokenId: 0, startTime: 0.2, endTime: 0.6, confidence: 1)
-      let boosting = try await Self.boosting(["EchoType"], models: ctc)
-      _ = await boosting.rescore(text: " echo", tokenTimings: [word], audioSamples: silence)
+      // Any word compiles the model; this one is not a keyterm.
+      let word = TokenTiming(token: " warm", tokenId: 0, startTime: 0.2, endTime: 0.6, confidence: 1)
+      let boosting = try await Self.boosting(["warm"], models: ctc)
+      _ = await boosting.rescore(text: " warm", tokenTimings: [word], audioSamples: silence)
       Self.logLoadPhase("ctc-warm", since: phaseStart)
     }
   }
