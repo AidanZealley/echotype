@@ -4,96 +4,608 @@ import EchoTypeCore
 import ServiceManagement
 import SwiftUI
 
+/// A Settings page.
+enum Pane: Hashable {
+  case dictation, readAloud, provider(ProviderID), general, keyterms, agents, about
+
+  var title: String {
+    switch self {
+    case .dictation: "Dictation"
+    case .readAloud: "Read Aloud"
+    case .provider(let id): Providers[id].name
+    case .general: "General"
+    case .keyterms: "Keyterms"
+    case .agents: "Agents"
+    case .about: "About"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .dictation: "mic"
+    case .readAloud: "speaker.wave.2"
+    case .provider(let id): Providers[id].setup == nil ? "network" : "desktopcomputer"
+    case .general: "gearshape"
+    case .keyterms: "character.book.closed"
+    case .agents: "terminal"
+    case .about: "info.circle"
+    }
+  }
+
+  /// Providers with something to configure: a key or files to install.
+  static var providers: [Pane] {
+    Providers.all.filter { $0.credential != .none || $0.setup != nil }.map { .provider($0.id) }
+  }
+}
+
 /// The settings window: a page per concern. The hotkeys apply at once; the rest apply from the
 /// next dictation or reading.
 struct SettingsView: View {
   @Bindable var store: SettingsStore
   /// Nil in the overlay demo, which has no controller.
   let controller: DictationController?
-
-  @State private var destination = "dictation"
+  @State private var pane: Pane? = .dictation
 
   var body: some View {
-    SettingsSplitView(title: destinationTitle) {
-      List(selection: $destination) {
-        Section("Features") {
-          Label("Dictation", systemImage: "mic").tag("dictation")
-          Label("Read Aloud", systemImage: "speaker.wave.2").tag("reading")
-        }
-        Section("Providers") {
-          ForEach(Providers.all) { provider in
-            Label(
-              provider.name, systemImage: provider.id == "local" ? "desktopcomputer" : "network"
-            )
-            .tag(provider.id.rawValue)
-          }
-        }
-        Section("App") {
-          Label("General", systemImage: "gearshape").tag("general")
-          Label("Keyterms", systemImage: "character.book.closed").tag("keyterms")
-          Label("Agents", systemImage: "terminal").tag("agents")
-          Label("About", systemImage: "info.circle").tag("about")
-        }
+    NavigationSplitView {
+      List(selection: $pane) {
+        Section { row(.dictation); row(.readAloud) }
+        Section { ForEach(Pane.providers, id: \.self, content: row) }
+        Section { row(.general); row(.keyterms); row(.agents); row(.about) }
       }
-      .listStyle(.sidebar)
-      .scrollContentBackground(.hidden)
+      .toolbar(removing: .sidebarToggle)
+      .navigationSplitViewColumnWidth(180)
     } detail: {
       Group {
-          switch destination {
-          case "dictation": DictationSettings(store: store, controller: controller)
-          case "reading": ReadAloudTab(store: store, controller: controller)
-          case "general": GeneralTab(store: store)
-          case "keyterms": KeytermsTab(store: store)
-          case "agents": AgentsTab()
-          case "about": AboutTab()
-          case "local": LocalSettingsPane(store: store)
-          default:
-            let provider = Providers[ProviderID(rawValue: destination)]
-            Form {
-              Section("Provider") {
-                Text(provider.summary).foregroundStyle(.secondary)
-                ProviderControls(
-                  provider: provider, settings: store.settings, offersTest: false,
-                  controller: controller
-                )
-                .id(provider.id)
-              }
-              if provider.credential == .none {
-                Section("Permissions") {
-                  Text(
-                    "No API key is required. Availability depends on this Mac's installed voices, language and permissions."
-                  )
-                  .foregroundStyle(.secondary)
-                  PermissionsRow()
-                }
-              }
-            }.settingsForm()
-          }
+        switch pane ?? .dictation {
+        case .dictation: DictationPage(store: store, controller: controller, pane: $pane)
+        case .readAloud: ReadAloudPage(store: store, controller: controller, pane: $pane)
+        case .provider(let id): ProviderPage(provider: Providers[id], store: store, controller: controller)
+        case .general: GeneralPage()
+        case .keyterms: KeytermsPage(store: store)
+        case .agents: AgentsPage()
+        case .about: AboutPage()
+        }
       }
-      .scrollContentBackground(.hidden)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(.regularMaterial)
+      .formStyle(.grouped)
+      .navigationTitle((pane ?? .dictation).title)
     }
-    .frame(minWidth: 790, minHeight: 590)
-    .ignoresSafeArea()
   }
 
-  private var destinationTitle: String {
-    switch destination {
-    case "dictation": "Dictation"
-    case "reading": "Read Aloud"
-    case "general": "General"
-    case "keyterms": "Keyterms"
-    case "agents": "Agents"
-    case "about": "About"
-    default: Providers[ProviderID(rawValue: destination)].name
+  private func row(_ pane: Pane) -> some View {
+    Label(pane.title, systemImage: pane.systemImage).tag(pane)
+  }
+}
+
+// MARK: Features
+
+private struct DictationPage: View {
+  @Bindable var store: SettingsStore
+  let controller: DictationController?
+  @Binding var pane: Pane?
+  @State private var readiness: ServiceReadiness?
+  @State private var testing = false
+  @State private var outcome: DictationController.TestOutcome?
+  private var provider: Provider { Providers[store.settings.dictationProvider] }
+
+  var body: some View {
+    Form {
+      ProviderPicker(selection: $store.settings.dictationProvider)
+      Section("Status") {
+        CredentialRow(provider: provider, missing: controller?.dictationHasCredential == false, pane: $pane)
+        ServiceRow(title: "Transcription", state: readiness?.transcription, provider: provider, pane: $pane)
+        if provider.cleanup != nil {
+          ServiceRow(title: "Cleanup", state: readiness?.cleanup, provider: provider, pane: $pane)
+        }
+      }
+      Section("Input") {
+        Picker("Hotkey", selection: $store.settings.hotkey) {
+          ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { Text(verbatim: $0.label).tag($0) }
+        }
+        InputRow(store: store)
+        Picker("Language", selection: Binding(
+          get: { store.settings.language(for: provider) }, set: { store.settings.language = $0 })
+        ) {
+          ForEach(provider.languages, id: \.self) { Text(verbatim: $0.name).tag($0.tag) }
+        }
+        Toggle(isOn: $store.settings.sendReplyRequests) {
+          Text("Send reply requests")
+          Text("Ending with a request like “reply with EchoType” sends the message.")
+        }
+      }
+      if let controller {
+        Section {
+          LabeledContent("Microphone") {
+            Button(testing ? "Testing…" : "Test") {
+              testing = true
+              Task {
+                outcome = await controller.test()
+                testing = false
+              }
+            }
+            .disabled(testing || !controller.isIdle || controller.dictationHasCredential == false)
+          }
+        } footer: {
+          switch outcome {
+          case .heard(let text): Text(text).textSelection(.enabled)
+          case .heardNothing: Text("Nothing was heard.")
+          case .failed(let error): Label(error, systemImage: "exclamationmark.triangle.fill")
+          case nil: Text("Records five seconds and shows what was heard.")
+          }
+        }
+      }
     }
+    .task(id: Followed(settings: store.settings, provider: provider)) {
+      readiness = nil
+      await provider.readiness.follow(ReadinessRequest(settings: store.settings, provider: provider)) {
+        readiness = $0
+      }
+    }
+  }
+}
+
+private struct ReadAloudPage: View {
+  @Bindable var store: SettingsStore
+  let controller: DictationController?
+  @Binding var pane: Pane?
+  @State private var voice: ServiceState?
+  private var provider: Provider { Providers[store.settings.readAloudProvider] }
+  private var reading: Binding<EchoTypeCore.Settings.Reading> {
+    Binding(
+      get: { store.settings.readingChoice(for: provider) },
+      set: { store.settings.reading[provider.id.rawValue] = $0 })
+  }
+
+  var body: some View {
+    Form {
+      ProviderPicker(selection: $store.settings.readAloudProvider)
+      Section("Status") {
+        CredentialRow(provider: provider, missing: controller?.readAloudHasCredential == false, pane: $pane)
+        ServiceRow(title: "Speech", state: voice, provider: provider, pane: $pane)
+      }
+      Section("Reading") {
+        Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
+          ForEach(EchoTypeCore.Settings.Hotkey.readAloudPresets, id: \.self) {
+            Text(verbatim: $0.label).tag($0)
+          }
+        }
+        Picker("Voice", selection: reading.voice) {
+          ForEach(provider.voice.voices) { Text(verbatim: $0.name).tag($0.id) }
+        }
+        // A fixed rate has no choice to make and cannot supply a Slider's non-empty range.
+        let range = provider.voice.speedRange
+        if range.lowerBound < range.upperBound {
+          Slider(value: reading.speed, in: range, step: 0.1) {
+            Text("Speed")
+          } minimumValueLabel: {
+            Text(verbatim: speed(range.lowerBound))
+          } maximumValueLabel: {
+            Text(verbatim: speed(range.upperBound))
+          }
+        }
+      }
+    }
+    .task(id: Followed(settings: store.settings, provider: provider)) {
+      voice = nil
+      await provider.readiness.follow(ReadinessRequest(settings: store.settings, provider: provider)) {
+        voice = $0.voice
+      }
+    }
+  }
+
+  private func speed(_ value: Double) -> String {
+    value.formatted(.number.precision(.fractionLength(0...1))) + "×"
+  }
+}
+
+/// The feature's provider, with the selected one's summary underneath.
+private struct ProviderPicker: View {
+  @Binding var selection: ProviderID
+
+  var body: some View {
+    Section {
+      Picker("Provider", selection: $selection) {
+        ForEach(Providers.all) { Text(verbatim: $0.name).tag($0.id) }
+      }
+    } footer: {
+      Text(Providers[selection].summary)
+    }
+  }
+}
+
+/// What a page follows. Changes when the provider, language or voice does, which restarts the
+/// following.
+private struct Followed: Hashable {
+  var provider: ProviderID
+  var request: ReadinessRequest
+
+  init(settings: EchoTypeCore.Settings, provider: Provider) {
+    self.provider = provider.id
+    request = ReadinessRequest(settings: settings, provider: provider)
+  }
+}
+
+/// Shown only when the provider's key is missing.
+private struct CredentialRow: View {
+  let provider: Provider
+  let missing: Bool
+  @Binding var pane: Pane?
+
+  var body: some View {
+    if missing {
+      LabeledContent {
+        Button("Set Up…") { pane = .provider(provider.id) }
+      } label: {
+        Text("API key")
+        Label("Add your \(provider.name) API key.", systemImage: "exclamationmark.triangle.fill")
+      }
+    }
+  }
+}
+
+/// One service's status. A provider with setup links to its page until the service is ready.
+private struct ServiceRow: View {
+  let title: String
+  let state: ServiceState?
+  let provider: Provider
+  @Binding var pane: Pane?
+
+  var body: some View {
+    LabeledContent {
+      if let fix = state?.fix {
+        Button("Open…") { NSWorkspace.shared.open(fix) }
+      } else if provider.setup != nil, let state, state.status != .ready {
+        Button("Set Up…") { pane = .provider(provider.id) }
+      } else {
+        switch state?.status {
+        case .ready: Text("Ready")
+        case .waiting, nil: ProgressView().controlSize(.small)
+        case .unavailable: Text("Unavailable")
+        }
+      }
+    } label: {
+      Text(title)
+      if let message = state?.message {
+        if state?.status == .unavailable {
+          Label(message, systemImage: "exclamationmark.triangle.fill")
+        } else {
+          Text(message)
+        }
+      }
+    }
+  }
+}
+
+// MARK: Providers
+
+/// A provider's key and setup, whichever it has.
+private struct ProviderPage: View {
+  let provider: Provider
+  let store: SettingsStore
+  let controller: DictationController?
+
+  var body: some View {
+    Form {
+      Section {
+        if case .apiKey = provider.credential {
+          APIKeyRow(provider: provider, settings: store.settings, controller: controller)
+            .id(provider.id)
+        }
+      } footer: {
+        Text(provider.summary)
+      }
+      if let state = store.setups[provider.id] {
+        SetupSections(state: state)
+          .task(id: provider.id) {
+            await state.follow(ReadinessRequest(settings: store.settings, provider: provider))
+          }
+      }
+    }
+  }
+}
+
+/// The provider's key. A saved key is shown masked, never in an editable field. Every Keychain
+/// call runs off the main actor with the buttons disabled until it finishes, so two writes
+/// cannot race.
+private struct APIKeyRow: View {
+  let provider: Provider
+  let settings: EchoTypeCore.Settings
+  let controller: DictationController?
+  /// What the Keychain holds. Nil when there is no key.
+  @State private var savedKey: String?
+  @State private var loaded = false
+  @State private var draft = ""
+  /// Replace was clicked, so the field shows even though a key is saved.
+  @State private var replacing = false
+  @State private var confirmingRemove = false
+  @State private var writing = false
+  @State private var writeError: String?
+
+  var body: some View {
+    Group {
+      if !loaded {
+        LabeledContent("API key") { ProgressView().controlSize(.small) }
+      } else if let savedKey, !replacing {
+        LabeledContent("API key", value: Self.masked(savedKey))
+        LabeledContent {
+          HStack {
+            Button("Replace") { draft = ""; replacing = true }
+            Button("Remove…") { confirmingRemove = true }
+          }
+        } label: {
+          if let writeError { Label(writeError, systemImage: "exclamationmark.triangle.fill") }
+        }
+        .disabled(writing)
+      } else {
+        TextField("API key", text: $draft, prompt: Text(verbatim: placeholder))
+          .onSubmit { Task { await save() } }
+          .disabled(writing)
+        LabeledContent {
+          HStack {
+            if replacing { Button("Cancel") { replacing = false; writeError = nil } }
+            Button("Save") { Task { await save() } }
+              .disabled(writing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          }
+        } label: {
+          if let writeError { Label(writeError, systemImage: "exclamationmark.triangle.fill") }
+        }
+      }
+    }
+    .task {
+      let id = provider.id
+      savedKey = await Task.detached { Keychain.key(for: id) }.value
+      loaded = true
+    }
+    .confirmationDialog("Remove the API key?", isPresented: $confirmingRemove) {
+      Button("Remove", role: .destructive) { Task { await remove() } }
+    } message: {
+      let affected = [
+        settings.dictationProvider == provider.id ? "Dictation" : nil,
+        settings.readAloudProvider == provider.id ? "Read Aloud" : nil,
+      ].compactMap { $0 }
+      Text(
+        affected.isEmpty
+          ? "This removes the saved key for \(provider.name)."
+          : "\(affected.joined(separator: " and ")) will need a new \(provider.name) API key.")
+    }
+  }
+
+  private var placeholder: String {
+    if case .apiKey(let placeholder) = provider.credential { placeholder } else { "" }
+  }
+
+  /// `key-••••••••a3F9`: enough to tell keys apart without showing one.
+  private static func masked(_ key: String) -> String {
+    let prefix = key.firstIndex(of: "-").map { String(key[...$0]) } ?? ""
+    guard key.count - prefix.count > 8 else { return String(repeating: "•", count: 8) }
+    return prefix + String(repeating: "•", count: 8) + key.suffix(4)
+  }
+
+  private func save() async {
+    let key = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !key.isEmpty, !writing else { return }
+    let id = provider.id
+    guard await write("Couldn't save the key.", { Keychain.save(key, for: id) }) else { return }
+    savedKey = key
+    await controller?.refreshCredentialStatus(clearError: true)
+    draft = ""
+    replacing = false
+  }
+
+  private func remove() async {
+    let id = provider.id
+    guard await write("Couldn't remove the key.", { Keychain.remove(for: id) }) else { return }
+    savedKey = nil
+    await controller?.refreshCredentialStatus(clearError: true)
+  }
+
+  private func write(_ failure: String, _ operation: @escaping @Sendable () -> Bool) async -> Bool {
+    writing = true
+    defer { writing = false }
+    let succeeded = await Task.detached(operation: operation).value
+    writeError = succeeded ? nil : failure
+    return succeeded
+  }
+}
+
+// MARK: App
+
+private struct GeneralPage: View {
+  var body: some View {
+    Form {
+      Section("Startup") { LaunchAtLoginRow() }
+      Section("Permissions") { PermissionRows() }
+    }
+  }
+}
+
+private struct KeytermsPage: View {
+  @Bindable var store: SettingsStore
+
+  var body: some View {
+    let limit = Providers[store.settings.dictationProvider].transcription.keytermLimit
+    Form {
+      Section {
+        VStack(alignment: .leading, spacing: 8) {
+          LabeledContent {
+            Text("\(store.settings.keyterms.count) of \(limit)").monospacedDigit()
+          } label: {
+            Text("Vocabulary")
+            Text("Names and terms that dictation should spell exactly as you write them.")
+          }
+          KeytermField(terms: $store.settings.keyterms)
+        }
+      }
+    }
+    // A click outside the field ends editing, which macOS does not do on its own.
+    .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+  }
+}
+
+/// Looks and acts like one input: each term is a removable chip, Return adds what was typed and
+/// Backspace in the empty field removes the last term. Clicking anywhere in it starts typing.
+private struct KeytermField: View {
+  @Binding var terms: [String]
+  @State private var draft = ""
+  @State private var editing = false
+  @State private var focus = TermInput.Focus()
+
+  var body: some View {
+    FlowLayout(spacing: 6) {
+      ForEach(terms, id: \.self) { term in
+        HStack(spacing: 4) {
+          Text(term)
+          Button("Remove \(term)", systemImage: "xmark") { terms.removeAll { $0 == term } }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .imageScale(.small)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(.quaternary, in: .capsule)
+      }
+      TermInput(text: $draft, editing: $editing, focus: focus, onSubmit: add) {
+        if !terms.isEmpty { terms.removeLast() }
+      }
+      .frame(minWidth: 80)
+    }
+    .padding(6)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(.rect)
+    .onTapGesture { focus.start() }
+    .overlay {
+      RoundedRectangle(cornerRadius: 6)
+        .strokeBorder(editing ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: editing ? 2 : 1)
+    }
+  }
+
+  private func add() {
+    let term = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    draft = ""
+    guard !term.isEmpty, !terms.contains(where: { $0.caseInsensitiveCompare(term) == .orderedSame })
+    else { return }
+    terms.append(term)
+  }
+}
+
+/// A borderless text field that reports Return and Backspace when empty, and stops editing on
+/// Escape. SwiftUI's key handling never sees Backspace, because AppKit's field editor takes it
+/// first.
+private struct TermInput: NSViewRepresentable {
+  /// Lets the surrounding view start editing the field.
+  final class Focus {
+    weak var field: NSTextField?
+    func start() { field?.window?.makeFirstResponder(field) }
+  }
+
+  @Binding var text: String
+  @Binding var editing: Bool
+  let focus: Focus
+  let onSubmit: () -> Void
+  let onDeleteEmpty: () -> Void
+
+  /// Reports focus as soon as it is clicked, before any typing.
+  final class Field: NSTextField {
+    var onFocus: () -> Void = {}
+    override func becomeFirstResponder() -> Bool {
+      let became = super.becomeFirstResponder()
+      if became { onFocus() }
+      return became
+    }
+  }
+
+  func makeNSView(context: Context) -> NSTextField {
+    let field = Field()
+    field.onFocus = { [coordinator = context.coordinator] in coordinator.input.editing = true }
+    field.isBordered = false
+    field.drawsBackground = false
+    field.focusRingType = .none
+    field.delegate = context.coordinator
+    focus.field = field
+    return field
+  }
+
+  func updateNSView(_ field: NSTextField, context: Context) {
+    context.coordinator.input = self
+    if field.stringValue != text { field.stringValue = text }
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator(input: self) }
+
+  final class Coordinator: NSObject, NSTextFieldDelegate {
+    var input: TermInput
+    init(input: TermInput) { self.input = input }
+
+    func controlTextDidChange(_ notification: Notification) {
+      input.text = (notification.object as? NSTextField)?.stringValue ?? ""
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) { input.editing = false }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+      switch selector {
+      case #selector(NSResponder.insertNewline(_:)):
+        input.onSubmit()
+        return true
+      case #selector(NSResponder.cancelOperation(_:)):
+        control.window?.makeFirstResponder(nil)
+        return true
+      case #selector(NSResponder.deleteBackward(_:)) where textView.string.isEmpty:
+        input.onDeleteEmpty()
+        return true
+      default:
+        return false
+      }
+    }
+  }
+}
+
+/// Places views in rows, starting a new row when the next one would not fit.
+private struct FlowLayout: Layout {
+  var spacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let rows = arrange(subviews, width: proposal.width ?? .infinity)
+    return CGSize(width: proposal.width ?? rows.width, height: rows.height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    for (subview, origin) in zip(subviews, arrange(subviews, width: bounds.width).origins) {
+      subview.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+    }
+  }
+
+  /// Each view's origin, centred vertically in its row.
+  private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], width: CGFloat, height: CGFloat) {
+    let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+    var origins: [CGPoint] = []
+    var row: Range<Int> = 0..<0
+    var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+    func endRow() {
+      for index in row { origins[index].y = y + (rowHeight - sizes[index].height) / 2 }
+    }
+    for (index, size) in sizes.enumerated() {
+      if x > 0, x + size.width > width {
+        endRow()
+        x = 0
+        y += rowHeight + spacing
+        rowHeight = 0
+        row = index..<index
+      }
+      origins.append(CGPoint(x: x, y: y))
+      row = row.lowerBound..<(index + 1)
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+      widest = max(widest, x - spacing)
+    }
+    endRow()
+    return (origins, widest, y + rowHeight)
   }
 }
 
 /// Commands and optional agent instructions to copy. EchoType never edits another tool's config
 /// or runs its CLI. The commands name the running app, so they stay right if it moves.
-private struct AgentsTab: View {
+private struct AgentsPage: View {
   private static let agentInstructions = """
     ## EchoType
 
@@ -113,565 +625,52 @@ private struct AgentsTab: View {
 
   var body: some View {
     Form {
-      Section("Connect an agent") {
-        Text(
-          "Connect an agent to EchoType so it can read replies aloud. Run the command once in a terminal, then start a new agent session."
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        command(
-          "Claude Code", "claude mcp add --scope user echotype -- \(app) --mcp",
-          remove: "claude mcp remove echotype")
-        command(
-          "Codex", "codex mcp add echotype -- \(app) --mcp", remove: "codex mcp remove echotype")
+      Section {
+        command("Claude Code", "claude mcp add --scope user echotype -- \(app) --mcp")
+        command("Codex", "codex mcp add echotype -- \(app) --mcp")
+      } header: {
+        Text("Connect an agent")
+      } footer: {
+        Text("Run a command once in a terminal, then start a new agent session. If the agent is already connected, remove EchoType from it first.")
       }
-      Section("Agent instructions") {
-        VStack(alignment: .leading, spacing: 6) {
-          HStack {
-            Text("Optional agent instructions")
-            Spacer()
-            Button("Copy", systemImage: "doc.on.doc") {
-              NSPasteboard.general.clearContents()
-              NSPasteboard.general.setString(Self.agentInstructions, forType: .string)
-            }
-          }
-          Text("Paste into your agent's instructions, such as AGENTS.md.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-          Text(verbatim: Self.agentInstructions)
-            .font(.caption)
-            .textSelection(.enabled)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
-        }
+      Section {
+        LabeledContent("Agent instructions") { copy(Self.agentInstructions) }
+      } footer: {
+        Text("Optional. Paste them into your agent's instructions, such as AGENTS.md.")
       }
     }
-    .settingsForm()
   }
 
-  private func command(_ name: String, _ add: String, remove: String) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack {
-        Text(name)
-        Spacer()
-        Button("Copy", systemImage: "doc.on.doc") {
-          NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(add, forType: .string)
-        }
-      }
-      Text(verbatim: add)
-        .font(.caption.monospaced())
-        .textSelection(.enabled)
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
-      Text(verbatim: "Already connected? Run \(remove) first.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
+  private func command(_ name: String, _ text: String) -> some View {
+    LabeledContent {
+      copy(text)
+    } label: {
+      Text(name)
+      Text(verbatim: text).textSelection(.enabled)
+    }
+  }
+
+  private func copy(_ text: String) -> some View {
+    Button("Copy") {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(text, forType: .string)
     }
   }
 }
 
-private struct AboutTab: View {
-  private let releases = URL(string: "https://github.com/AidanZealley/echotype/releases/latest")!
-
+private struct AboutPage: View {
   var body: some View {
     Form {
-      Section("EchoType") {
-        LabeledContent("Installed version") {
-          Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
-        }
-      }
-      Section("Updates") {
-        Link("View latest release on GitHub", destination: releases)
-        Text(
-          "Compare the version on GitHub with this one. To update, quit EchoType, download the DMG, and replace EchoType.app in Applications."
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      }
-      Section("Links") {
+      Section {
+        LabeledContent(
+          "Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+        Link("Latest release", destination: URL(string: "https://github.com/AidanZealley/echotype/releases/latest")!)
         Link("Source code", destination: URL(string: "https://github.com/AidanZealley/echotype")!)
-        Link(
-          "Report an issue",
-          destination: URL(string: "https://github.com/AidanZealley/echotype/issues")!)
-      }
-    }.settingsForm()
-  }
-}
-
-private struct GeneralTab: View {
-  @Bindable var store: SettingsStore
-
-  var body: some View {
-    Form {
-      Section("Startup") { LaunchAtLoginRow() }
-      Section("Permissions") { PermissionsRow() }
-    }
-    .settingsForm()
-  }
-}
-
-private struct DictationSettings: View {
-  @Bindable var store: SettingsStore
-  let controller: DictationController?
-  @State private var readiness: ServiceReadiness?
-  @State private var testing = false
-  @State private var outcome: DictationController.TestOutcome?
-  private var provider: Provider { Providers[store.settings.dictationProvider] }
-  var body: some View {
-    Form {
-      Section("Provider") {
-        Picker("Provider", selection: $store.settings.dictationProvider) {
-          ForEach(Providers.all) { Text($0.name).tag($0.id) }
-        }
-        Text(provider.summary).foregroundStyle(.secondary)
-        if controller?.dictationHasCredential == false {
-          Text("Add your \(provider.name) API key on its provider page.").foregroundStyle(.red)
-        }
-        if let readiness {
-          LabeledContent("Transcription") { ServiceNote(state: readiness.transcription) }
-          if let cleanup = readiness.cleanup {
-            LabeledContent("Cleanup") { ServiceNote(state: cleanup) }
-          }
-        }
-      }
-      Section("Input") {
-        Picker("Hotkey", selection: $store.settings.hotkey) {
-          ForEach(EchoTypeCore.Settings.Hotkey.presets, id: \.self) { hotkey in
-            Text(verbatim: hotkey.label).tag(hotkey)
-          }
-        }
-        InputRow(store: store)
-        Picker(
-          "Language",
-          selection: Binding(
-            get: { store.settings.language(for: provider) },
-            set: { store.settings.language = $0 }
-          )
-        ) {
-          ForEach(provider.languages, id: \.self) { language in
-            Text(verbatim: language.name).tag(language.tag)
-          }
-        }
-      }
-      Section("Replies") {
-        VStack(alignment: .leading) {
-          Toggle("Send reply requests", isOn: $store.settings.sendReplyRequests)
-          Text("Ending with a request like “reply with EchoType” sends the message")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-
-      }
-      if let controller {
-        Section("Microphone test") {
-          Button(testing ? "Testing…" : "Test microphone") {
-            testing = true
-            Task {
-              outcome = await controller.test()
-              testing = false
-            }
-          }.disabled(testing || !controller.isIdle || controller.dictationHasCredential == false)
-          switch outcome {
-          case .heard(let text): Text(text).textSelection(.enabled)
-          case .heardNothing: Text("Nothing was heard")
-          case .failed(let error): Text(error).foregroundStyle(.red)
-          case nil: EmptyView()
-          }
-        }
-      }
-      if provider.id == "local" {
-        LocalFeatureSection(feature: .dictation, installation: store.localInstallation)
-        LocalNotices()
-      }
-    }.settingsForm()
-      .task(id: provider.id) {
-        if provider.id == "local" { await store.localInstallation.follow() }
-      }
-      .task(id: Followed(settings: store.settings, provider: provider)) {
-        await provider.readiness.follow(
-          ReadinessRequest(settings: store.settings, provider: provider)
-        ) { readiness = $0 }
-      }
-  }
-}
-
-private struct ReadAloudTab: View {
-  @Bindable var store: SettingsStore
-  let controller: DictationController?
-  /// The voice service's state for the current settings, followed while this tab is open. Nil
-  /// until the first check answers.
-  @State private var voiceState: ServiceState?
-
-  private var provider: Provider { Providers[store.settings.readAloudProvider] }
-  private var reading: Binding<EchoTypeCore.Settings.Reading> {
-    Binding(
-      get: { store.settings.readingChoice(for: provider) },
-      set: { store.settings.reading[provider.id.rawValue] = $0 })
-  }
-
-  var body: some View {
-    Form {
-      Section("Provider") {
-        Picker("Provider", selection: $store.settings.readAloudProvider) {
-          ForEach(Providers.all) { Text(verbatim: $0.name).tag($0.id) }
-        }
-        Text(provider.summary).foregroundStyle(.secondary)
-        if let voiceState { LabeledContent("Speech") { ServiceNote(state: voiceState) } }
-        if controller?.readAloudHasCredential == false {
-          Text("Add your \(provider.name) API key on its provider page.").foregroundStyle(.red)
-        }
-      }
-      Section("Reading") {
-        Picker("Hotkey", selection: $store.settings.readAloudHotkey) {
-          ForEach(EchoTypeCore.Settings.Hotkey.readAloudPresets, id: \.self) { hotkey in
-            Text(verbatim: hotkey.label).tag(hotkey)
-          }
-        }
-        if !provider.voice.voices.isEmpty {
-          Picker("Voice", selection: reading.voice) {
-            ForEach(provider.voice.voices) { voice in
-              Text(verbatim: voice.name).tag(voice.id)
-            }
-          }
-        }
-        // A fixed rate has no choice to make and cannot supply a Slider's non-empty range.
-        if provider.voice.speedRange.lowerBound < provider.voice.speedRange.upperBound {
-          LabeledContent("Speed") {
-            HStack {
-              Slider(value: reading.speed, in: provider.voice.speedRange, step: 0.1)
-              Text(reading.wrappedValue.speed, format: .number.precision(.fractionLength(1)))
-                .monospacedDigit()
-                .frame(width: 28, alignment: .trailing)
-            }
-          }
-        }
-      }
-      if provider.id == "local" {
-        LocalFeatureSection(feature: .readAloud, installation: store.localInstallation)
-        LocalNotices()
+        Link("Report an issue", destination: URL(string: "https://github.com/AidanZealley/echotype/issues")!)
+      } footer: {
+        Text("To update, quit EchoType and replace it in Applications with the latest release.")
       }
     }
-    .settingsForm()
-    .task(id: provider.id) { if provider.id == "local" { await store.localInstallation.follow() } }
-    .task(id: Followed(settings: store.settings, provider: provider)) {
-      voiceState = nil
-      let followed = Followed(settings: store.settings, provider: provider)
-      await provider.readiness.follow(followed.request) { voiceState = $0.voice }
-    }
-  }
-}
-
-/// What a tab follows. Changes when the provider, language or voice does, which restarts the
-/// following.
-private struct Followed: Hashable {
-  var provider: ProviderID
-  var request: ReadinessRequest
-
-  init(settings: EchoTypeCore.Settings, provider: Provider) {
-    self.provider = provider.id
-    request = ReadinessRequest(settings: settings, provider: provider)
-  }
-}
-
-/// A service's message, red when unavailable, with an Open button when the provider says where
-/// to fix it. Nothing for a state without a message.
-private struct ServiceNote: View {
-  let state: ServiceState
-
-  var body: some View {
-    if let message = state.message {
-      HStack(alignment: .firstTextBaseline) {
-        Text(verbatim: message)
-          .font(.caption)
-          .foregroundStyle(state.status == .unavailable ? Color.red : Color.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-        Spacer(minLength: 8)
-        if let fix = state.fix {
-          Button("Open") { NSWorkspace.shared.open(fix) }
-        }
-      }
-    } else {
-      Text(state.status == .ready ? "Ready" : state.status == .waiting ? "Waiting" : "Unavailable")
-        .foregroundStyle(.secondary)
-    }
-  }
-}
-
-extension EchoTypeCore.Settings.Hotkey {
-  /// The label for one of the dictation or read-aloud presets.
-  fileprivate var label: String {
-    switch self {
-    case .controlOptionD: "⌃⌥D"
-    case .optionS: "⌥S"
-    case .controlOptionS: "⌃⌥S"
-    default: "⌥D"
-    }
-  }
-}
-
-/// The selected provider's key. A saved key is shown masked, never in an editable field. Save,
-/// Replace and Remove are explicit, and every Keychain call runs off the main actor with the
-/// buttons disabled until it finishes, so two writes cannot race.
-///
-/// Test runs a five second session through the controller with the saved key and shows what it
-/// heard.
-private struct ProviderControls: View {
-  let provider: Provider
-  let settings: EchoTypeCore.Settings
-  let offersTest: Bool
-  let controller: DictationController?
-  /// What the Keychain holds. Nil when there is no key.
-  @State private var savedKey: String?
-  @State private var loaded = false
-  @State private var draft = ""
-  /// Replace was clicked, so the field shows even though a key is saved.
-  @State private var replacing = false
-  @State private var revealed = false
-  /// The width the key has to fill, which sets how many bullets the masked key shows.
-  @State private var keyWidth: CGFloat = 0
-  @State private var confirmingRemove = false
-  @State private var writing = false
-  @State private var writeError: String?
-  @State private var testing = false
-  @State private var testOutcome: DictationController.TestOutcome?
-
-  private var placeholder: String {
-    if case .apiKey(let placeholder) = provider.credential { placeholder } else { "" }
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if case .apiKey = provider.credential {
-        Text(verbatim: "\(provider.name) API key")
-        if !loaded {
-          ProgressView().controlSize(.small)
-        } else if let savedKey, !replacing {
-          saved(savedKey)
-        } else {
-          entry
-        }
-      }
-      if offersTest, let controller {
-        HStack {
-          Spacer()
-          Button(testing ? "Testing…" : "Test") {
-            Task { await test(controller) }
-          }
-          .disabled(
-            testing || writing || !loaded || !controller.isIdle
-              || !provider.credential.isSatisfied(by: savedKey))
-        }
-      }
-      messages
-    }
-    .task {
-      if case .apiKey = provider.credential {
-        let id = provider.id
-        let key = await Task.detached { Keychain.key(for: id) }.value
-        guard !Task.isCancelled else { return }
-        savedKey = key
-      }
-      loaded = true
-    }
-    .confirmationDialog("Remove the API key?", isPresented: $confirmingRemove) {
-      Button("Remove", role: .destructive) { Task { await remove() } }
-    } message: {
-      let affected = [
-        settings.dictationProvider == provider.id ? "Dictation" : nil,
-        settings.readAloudProvider == provider.id ? "Read Aloud" : nil,
-      ].compactMap { $0 }
-      Text(
-        affected.isEmpty
-          ? "This removes the saved key for \(provider.name)."
-          : "\(affected.joined(separator: " and ")) will need a new \(provider.name) API key.")
-    }
-  }
-
-  private func saved(_ key: String) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(verbatim: revealed ? key : Self.masked(key, width: keyWidth))
-          .font(.body.monospaced())
-          .textSelection(.enabled)
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .onGeometryChange(for: CGFloat.self, of: \.size.width) { keyWidth = $0 }
-        Button(revealed ? "Hide key" : "Show key", systemImage: revealed ? "eye.slash" : "eye") {
-          revealed.toggle()
-        }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .help(revealed ? "Hide key" : "Show key")
-      }
-      HStack {
-        Spacer()
-        Button("Replace") {
-          draft = ""
-          replacing = true
-        }
-        Button("Remove", role: .destructive) { confirmingRemove = true }
-      }
-      .disabled(writing || testing)
-    }
-  }
-
-  /// Wraps rather than scrolling sideways, so the whole key is visible while pasting it. That
-  /// means it is not masked, which a secure field would need.
-  private var entry: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      TextField(
-        "\(provider.name) API key", text: $draft, prompt: Text(verbatim: placeholder),
-        axis: .vertical
-      )
-      .labelsHidden()
-      .font(.body.monospaced())
-      .lineLimit(2...4)
-      .onSubmit { Task { await save() } }
-      .disabled(writing || testing)
-      HStack {
-        Spacer()
-        if replacing {
-          Button("Cancel") {
-            replacing = false
-            writeError = nil
-          }
-        }
-        Button("Save") { Task { await save() } }
-          .keyboardShortcut(.defaultAction)
-          .disabled(
-            writing || testing || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      }
-    }
-  }
-
-  @ViewBuilder private var messages: some View {
-    if let writeError {
-      Text(writeError)
-        .font(.caption)
-        .foregroundStyle(.red)
-    }
-    switch testOutcome {
-    case .heard(let text):
-      Text(text)
-        .font(.caption)
-        .textSelection(.enabled)
-    case .heardNothing:
-      Text("Nothing was heard")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    case .failed(let error):
-      Text(error)
-        .font(.caption)
-        .foregroundStyle(.red)
-    case nil:
-      EmptyView()
-    }
-  }
-
-  /// `key-••••…••••a3F9`: enough to tell keys apart without showing one. The bullets fill one
-  /// line of `width`, up to the key's own length.
-  private static func masked(_ key: String, width: CGFloat) -> String {
-    let prefix = key.firstIndex(of: "-").map { key[...$0] } ?? ""
-    let hidden = key.count - prefix.count - 4
-    let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-    let fitting = Int(width / ("•" as NSString).size(withAttributes: [.font: font]).width)
-    let bullets = String(repeating: "•", count: max(8, min(hidden, fitting - prefix.count - 4)))
-    guard hidden >= 4 else { return bullets }
-    return "\(prefix)\(bullets)\(key.suffix(4))"
-  }
-
-  private func test(_ controller: DictationController) async {
-    testing = true
-    defer { testing = false }
-    testOutcome = nil
-    testOutcome = await controller.test()
-  }
-
-  private func save() async {
-    let key = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !key.isEmpty, !writing else { return }
-    let id = provider.id
-    guard await write("Couldn't save the key", { Keychain.save(key, for: id) }) else { return }
-    savedKey = key
-    await controller?.refreshCredentialStatus(clearError: true)
-    draft = ""
-    replacing = false
-    revealed = false
-  }
-
-  private func remove() async {
-    let id = provider.id
-    guard await write("Couldn't remove the key", { Keychain.remove(for: id) }) else { return }
-    savedKey = nil
-    await controller?.refreshCredentialStatus(clearError: true)
-    revealed = false
-  }
-
-  /// Runs a Keychain write off the main actor and reports a failure under the key.
-  private func write(_ failure: String, _ operation: @escaping @Sendable () -> Bool) async -> Bool {
-    writing = true
-    defer { writing = false }
-    let succeeded = await Task.detached(operation: operation).value
-    writeError = succeeded ? nil : failure
-    if succeeded { testOutcome = nil }
-    return succeeded
-  }
-}
-
-/// The editor holds its own text while the user types, so adding a separator does not rewrite
-/// the text around the cursor.
-private struct KeytermsTab: View {
-  let store: SettingsStore
-  @State private var text: String
-  @FocusState private var editorFocused: Bool
-
-  init(store: SettingsStore) {
-    self.store = store
-    _text = State(initialValue: store.settings.keyterms.joined(separator: ", "))
-  }
-
-  var body: some View {
-    Form {
-      Section("Vocabulary") {
-        VStack(alignment: .leading, spacing: 8) {
-          HStack {
-            Text("Separate with commas")
-            Spacer()
-            Text(
-              verbatim:
-                "\(store.settings.keyterms.count) of \(Providers[store.settings.dictationProvider].transcription.keytermLimit) keyterms used"
-            )
-            .monospacedDigit()
-          }
-          .foregroundStyle(.secondary)
-          TextEditor(text: $text)
-            .focused($editorFocused)
-            .font(.body)
-            .scrollContentBackground(.hidden)
-            // The text view already insets each line by a few points horizontally.
-            .padding(.vertical, 8)
-            .padding(.horizontal, 4)
-            .background(Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: 6))
-            .overlay(
-              RoundedRectangle(cornerRadius: 6).stroke(
-                editorFocused ? Color.accentColor : Color(nsColor: .separatorColor),
-                lineWidth: editorFocused ? 2 : 1)
-            )
-            .frame(height: 180)
-            .onChange(of: text) {
-              store.settings.keyterms = text.split { $0 == "," || $0.isNewline }
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            }
-        }
-      }
-    }
-    .settingsForm()
   }
 }
 
@@ -708,33 +707,22 @@ private struct LaunchAtLoginRow: View {
   @State private var pending = false
 
   var body: some View {
-    VStack(alignment: .leading) {
-      Toggle(
-        "Launch at login",
-        isOn: Binding(
-          get: { status == .enabled || status == .requiresApproval },
-          set: { enabled in Task { await set(enabled) } }
-        )
-      )
-      .disabled(status == nil || pending)
-      if status == .requiresApproval {
-        HStack {
-          Text("Allow EchoType in Login Items")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-          Spacer()
-          Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
-        }
-      }
+    Toggle(isOn: Binding(
+      get: { status == .enabled || status == .requiresApproval },
+      set: { enabled in Task { await set(enabled) } })
+    ) {
+      Text("Launch at login")
       if let error {
-        Text(error)
-          .font(.caption)
-          .foregroundStyle(.red)
+        Label(error, systemImage: "exclamationmark.triangle.fill")
+      } else if status == .requiresApproval {
+        Text("Allow EchoType in System Settings > General > Login Items.")
       }
     }
+    .disabled(status == nil || pending)
     .task { await refresh() }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in Task { await refresh() } }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      Task { await refresh() }
+    }
   }
 
   private func refresh() async {
@@ -761,7 +749,7 @@ private struct LaunchAtLoginRow: View {
 /// Whether each permission is granted, read when the window appears and whenever the app
 /// becomes active, so coming back from System Settings shows the change. The rows never ask for
 /// a permission: the first dictation asks for the microphone, and launch asks for the other.
-private struct PermissionsRow: View {
+private struct PermissionRows: View {
   @State private var microphone = false
   @State private var deviceControl = false
 
@@ -771,33 +759,39 @@ private struct PermissionsRow: View {
       row("Device Control and Data Access", granted: deviceControl, pane: "Privacy_Accessibility")
     }
     .onAppear(perform: refresh)
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in refresh() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      refresh()
+    }
   }
 
   private func row(_ title: String, granted: Bool, pane: String) -> some View {
-    LabeledContent {
-      HStack {
-        Text(granted ? "Granted" : "Not granted").foregroundStyle(.secondary)
-        Button("Open System Settings") {
+    LabeledContent(title) {
+      if granted {
+        Label("Granted", systemImage: "checkmark.circle.fill")
+      } else {
+        Button("Open System Settings…") {
           NSWorkspace.shared.open(
             URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
         }
       }
-    } label: {
-      VStack(alignment: .leading) {
-        Text(title)
-        Text(granted ? "Granted" : "Not granted")
-          .font(.caption)
-          .foregroundStyle(granted ? .secondary : Color.red)
-      }
-
     }
   }
 
   private func refresh() {
     microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     deviceControl = AXIsProcessTrusted()
+  }
+}
+
+extension EchoTypeCore.Settings.Hotkey {
+  /// The label for one of the dictation or read-aloud presets.
+  fileprivate var label: String {
+    switch self {
+    case .controlOptionD: "⌃⌥D"
+    case .optionS: "⌥S"
+    case .controlOptionS: "⌃⌥S"
+    default: "⌥D"
+    }
   }
 }
 
@@ -815,12 +809,5 @@ extension Readiness {
     }
     await report()
     for await _ in changes { await report() }
-  }
-}
-
-/// The same native grouped rows and scrolling behavior on every Settings page.
-extension View {
-  func settingsForm() -> some View {
-    self.formStyle(.grouped).font(.body)
   }
 }

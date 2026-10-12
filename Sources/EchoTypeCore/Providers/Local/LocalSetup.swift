@@ -1,51 +1,6 @@
 import Foundation
 import Synchronization
 
-public enum ProviderFeature: String, CaseIterable, Identifiable, Sendable, Hashable {
-  case dictation, readAloud
-  public var id: String { rawValue }
-  public var title: String { self == .dictation ? "Dictation" : "Read Aloud" }
-}
-
-/// Keeps a prepared feature alive until its operation has finished teardown.
-public final class RuntimeLease: Sendable {
-  private let end: @Sendable () -> Void
-  public init(end: @escaping @Sendable () -> Void = {}) { self.end = end }
-  deinit { end() }
-}
-
-public struct LocalRequirement: Identifiable, Sendable {
-  public var id: String
-  public var name: String
-  public var purpose: String
-  public var bytes: Int64
-  public var missingBytes: Int64
-  public var installed: Bool
-  public var source: URL
-  public var license: String
-}
-
-public struct LocalFile: Identifiable, Sendable, Hashable {
-  public var id: URL
-  public var name: String
-  public var category: String
-  public var bytes: Int64
-  public var features: Set<ProviderFeature> = []
-}
-
-/// Explicit setup and storage controls. Reporting and operation preparation use separate APIs.
-public struct LocalSetup: Sendable {
-  public var requirements: @Sendable (Set<ProviderFeature>) -> [LocalRequirement]
-  /// Downloads and loads one feature. The caller runs one at a time; cancelling its task
-  /// stops the download and the load, keeping verified files for a retry.
-  public var install: @Sendable (ProviderFeature) async throws -> Void
-  public var inventory: @Sendable () throws -> [LocalFile]
-  public var remove: @Sendable ([LocalFile]) throws -> Void
-  public var removalBlock: @Sendable ([LocalFile]) -> String?
-  public var select: @Sendable (Set<ProviderFeature>) -> Void
-  public var availableBytes: @Sendable () -> Int64?
-}
-
 final class LocalLifecycle: Sendable {
   private struct State {
     var selected: Set<ProviderFeature> = []
@@ -132,7 +87,7 @@ final class LocalLifecycle: Sendable {
     }
   }
 
-  private func affectedFeatures(_ files: [LocalFile]) -> Set<ProviderFeature> {
+  private func affectedFeatures(_ files: [InstalledFile]) -> Set<ProviderFeature> {
     return Set(
       ProviderFeature.allCases.filter { feature in
         let names = Set(manifests([feature]).map(\.directoryName))
@@ -150,7 +105,7 @@ final class LocalLifecycle: Sendable {
       })
   }
 
-  private func removalBlock(_ files: [LocalFile], state: State) -> String? {
+  private func removalBlock(_ files: [InstalledFile], state: State) -> String? {
     let affected = affectedFeatures(files)
     if let setup = state.setup, affected.contains(setup) {
       return "Cancel setup and wait for it to finish before removing these files."
@@ -179,8 +134,8 @@ final class LocalLifecycle: Sendable {
     try await model.waitForPreparation()
   }
 
-  var controls: LocalSetup {
-    LocalSetup(
+  var controls: ProviderSetup {
+    ProviderSetup(
       requirements: { [self] features in
         manifests(features).map { manifest in
           let installed: Bool
@@ -189,12 +144,12 @@ final class LocalLifecycle: Sendable {
           } else {
             installed = false
           }
-          return LocalRequirement(
+          return SetupRequirement(
             id: manifest.directoryName, name: manifest.name,
             purpose: [
-              transcription?.manifests.contains(manifest) == true ? "Dictation transcription" : nil,
-              cleanup?.manifests.contains(manifest) == true ? "Dictation cleanup" : nil,
-              voice?.manifests.contains(manifest) == true ? "Read Aloud" : nil,
+              transcription?.manifests.contains(manifest) == true ? "Transcription" : nil,
+              cleanup?.manifests.contains(manifest) == true ? "Cleanup" : nil,
+              voice?.manifests.contains(manifest) == true ? "Speech" : nil,
             ].compactMap { $0 }.joined(separator: " and "),
             bytes: manifest.totalBytes, missingBytes: installed ? 0 : store.missingBytes(manifest),
             installed: installed,
@@ -234,6 +189,19 @@ final class LocalLifecycle: Sendable {
           for manifest in requested { store.cancel(manifest) }
           state.withLock { if $0.operations[feature, default: 0] == 0 { release(feature) } }
         }
+      },
+      progress: { [self] feature in
+        let manifests = manifests([feature])
+        var downloading = false
+        let done = manifests.reduce(Int64(0)) { total, manifest in
+          switch store.state(of: manifest) {
+          case .installed: return total + manifest.totalBytes
+          case .downloading(let bytes, _): downloading = true; return total + bytes
+          default: return total
+          }
+        }
+        let total = manifests.reduce(Int64(0)) { $0 + $1.totalBytes }
+        return downloading && total > 0 ? Double(done) / Double(total) : nil
       },
       inventory: { [self] in
         try store.inventory(manifests: manifests(Set(ProviderFeature.allCases))).map { file in

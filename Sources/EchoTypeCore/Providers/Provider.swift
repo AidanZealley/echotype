@@ -22,12 +22,14 @@ public struct Provider: Identifiable, Sendable {
   public var cleanup: CleanupService?
   /// Whether this Mac can use the services now. `.always` when only the credential gates them.
   public var readiness: Readiness
-  public var localSetup: LocalSetup?
+  /// Explicit installation, for a provider whose services need files downloaded first. Settings
+  /// shows it for any provider that has it.
+  public var setup: ProviderSetup?
 
   public init(
     id: ProviderID, name: String, summary: String, credential: Credential,
     languages: [Language], transcription: TranscriptionService, voice: VoiceService, cleanup: CleanupService?,
-    readiness: Readiness = .always, localSetup: LocalSetup? = nil
+    readiness: Readiness = .always, setup: ProviderSetup? = nil
   ) {
     self.id = id
     self.name = name
@@ -38,7 +40,7 @@ public struct Provider: Identifiable, Sendable {
     self.voice = voice
     self.cleanup = cleanup
     self.readiness = readiness
-    self.localSetup = localSetup
+    self.setup = setup
   }
 }
 
@@ -411,4 +413,54 @@ public struct CleanupRequest: Equatable, Sendable {
     self.final = final
     self.credential = credential
   }
+}
+
+// MARK: Setup
+
+public enum ProviderFeature: String, CaseIterable, Identifiable, Sendable, Hashable {
+  case dictation, readAloud
+  public var id: String { rawValue }
+  public var title: String { self == .dictation ? "Dictation" : "Read Aloud" }
+}
+
+/// Keeps a prepared feature alive until its operation has finished teardown.
+public final class RuntimeLease: Sendable {
+  private let end: @Sendable () -> Void
+  public init(end: @escaping @Sendable () -> Void = {}) { self.end = end }
+  deinit { end() }
+}
+
+public struct SetupRequirement: Identifiable, Sendable {
+  public var id: String
+  public var name: String
+  public var purpose: String
+  public var bytes: Int64
+  public var missingBytes: Int64
+  public var installed: Bool
+  public var source: URL
+  public var license: String
+}
+
+public struct InstalledFile: Identifiable, Sendable, Hashable {
+  public var id: URL
+  public var name: String
+  public var category: String
+  public var bytes: Int64
+  public var features: Set<ProviderFeature> = []
+}
+
+/// Explicit setup and storage controls. Reporting and operation preparation use separate APIs.
+/// `select` tells the provider which features it serves, so it can load or release them.
+public struct ProviderSetup: Sendable {
+  public var requirements: @Sendable (Set<ProviderFeature>) -> [SetupRequirement]
+  /// Downloads and loads one feature. The caller runs one at a time; cancelling its task
+  /// stops the download and the load, keeping verified files for a retry.
+  public var install: @Sendable (ProviderFeature) async throws -> Void
+  /// The fraction of a feature's download done, or nil when nothing is downloading.
+  public var progress: @Sendable (ProviderFeature) -> Double?
+  public var inventory: @Sendable () throws -> [InstalledFile]
+  public var remove: @Sendable ([InstalledFile]) throws -> Void
+  public var removalBlock: @Sendable ([InstalledFile]) -> String?
+  public var select: @Sendable (Set<ProviderFeature>) -> Void
+  public var availableBytes: @Sendable () -> Int64?
 }

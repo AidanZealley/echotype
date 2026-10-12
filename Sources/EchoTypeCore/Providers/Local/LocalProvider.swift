@@ -39,7 +39,7 @@ enum LocalProvider {
             cleanup: reviser.check())
         },
         changes: { merged([transcriber.changes(), reviser.changes(), speaker.changes()]) },
-        prepare: { try await lifecycle.prepare($0) }), localSetup: lifecycle.controls)
+        prepare: { try await lifecycle.prepare($0) }), setup: lifecycle.controls)
   }
 
   /// One stream that yields when any of `streams` does.
