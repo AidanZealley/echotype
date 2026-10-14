@@ -83,13 +83,16 @@ enum DestinationVerification: String {
     guard let frontmost = NSWorkspace.shared.frontmostApplication else { return nil }
     let pid = frontmost.processIdentifier
     let application = AXUIElementCreateApplication(pid)
-    // Electron can hide its focused web field until an assistive client enables its tree.
-    // Request that support where offered, then apply the same destination identity checks.
-    if let manualAccessibility = attribute("AXManualAccessibility", of: application),
-      CFEqual(manualAccessibility, kCFBooleanFalse),
+    // Web-backed apps can hide their focused field until an assistive client enables
+    // their tree. Prefer Electron's switch, falling back to the one ChatGPT exposes.
+    let manualAccessibility = attribute("AXManualAccessibility", of: application)
+    let activationAttribute = manualAccessibility != nil
+      ? "AXManualAccessibility" : "AXEnhancedUserInterface"
+    if let enabled = manualAccessibility ?? attribute(activationAttribute, of: application),
+      CFEqual(enabled, kCFBooleanFalse),
       accessibilityActivation.shouldRequest(for: pid, at: ProcessInfo.processInfo.systemUptime)
     {
-      _ = AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+      _ = AXUIElementSetAttributeValue(application, activationAttribute as CFString, kCFBooleanTrue)
     }
     guard let window = element(kAXFocusedWindowAttribute, of: application),
       let target = element(kAXFocusedUIElementAttribute, of: application),
